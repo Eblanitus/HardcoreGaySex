@@ -377,22 +377,24 @@ namespace FrostMelee.Content.Weapons
             fireDustCooldown = 2;
 
             Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
-            // Язычок: рождается на клинке (гуще у острия) и поднимается выше
-            float t = Main.rand.NextFloat(0.1f, 1f);
+            // Язычок: рождается на клинке (гуще у острия) и поднимается выше.
+            // Размер и яркость держим скромными: крупные синие кляксы мылили картинку
+            // в туман — резкие языки теперь рисует сам слой огня (IceArcFx/SwordFireSystem).
+            float t = Main.rand.NextFloat(0.22f, 1f);
             Vector2 at = Vector2.Lerp(butt, tip, t);
             Dust tongue = Dust.NewDustPerfect(at, DustID.BlueTorch,
                 dir * Main.rand.NextFloat(0.3f, 0.7f) + new Vector2(0f, Main.rand.NextFloat(-0.9f, -0.45f)),
-                130, default, Main.rand.NextFloat(1.0f, 1.5f));
+                130, default, Main.rand.NextFloat(0.75f, 1.15f));
             tongue.noGravity = true;
             // Вспышка на острие
             Dust tipFlame = Dust.NewDustPerfect(tip, DustID.BlueTorch,
-                new Vector2(Player.direction * 0.2f, -0.6f), 110, default, 1.7f);
+                new Vector2(Player.direction * 0.2f, -0.6f), 110, default, 1.25f);
             tipFlame.noGravity = true;
-            // Мягкое холодное сияние вокруг горящего клинка
+            // Мягкое холодное сияние вокруг горящего клинка (полупрозрачное, не пятно)
             Dust aura = Dust.NewDustPerfect(Vector2.Lerp(butt, tip, 0.6f),
-                DustID.BlueTorch, new Vector2(Player.direction * 0.1f, -0.2f), 160, default, 1.7f);
+                DustID.BlueTorch, new Vector2(Player.direction * 0.1f, -0.2f), 160, default, 1.0f);
             aura.noGravity = true;
-            aura.alpha = 120;
+            aura.alpha = 165;
             Lighting.AddLight(Vector2.Lerp(butt, tip, 0.6f), FireLight.R / 255f, FireLight.G / 255f, FireLight.B / 255f);
         }
 

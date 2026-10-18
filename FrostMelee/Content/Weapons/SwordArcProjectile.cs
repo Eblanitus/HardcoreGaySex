@@ -538,28 +538,12 @@ namespace FrostMelee.Content.Weapons
                 IceArcFx.DrawFlameSpots(wedgeTip, Projectile.rotation, Projectile.ai[0] >= 0f ? 1 : -1,
                     LineTexOuter * lineScale, Projectile.localAI[0], lerpTime * 1.4f);
             // Огонь на самом клинке: пока идёт взмах, ванилла рисует меч по
-            // itemLocation/itemRotation — по их концам пускаем холодное пламя.
+            // itemLocation/itemRotation — по их концам пускаем один общий передний
+            // слой (ядро + языки по кромке), тот же, что у тычка и «встречи».
+            // Задний ореол вокруг силуэта рисует SwordFireSystem.
             if (Fire && glow != null && !glow.IsDisposed &&
-                GetBladeLine(owner, out Vector2 bladeButt, out Vector2 bladeTip)) {
-                Vector2 bladeDir = (bladeTip - bladeButt).SafeNormalize(Vector2.UnitX);
-                float bladeLen = (bladeTip - bladeButt).Length();
-                for (int i = 0; i < 3; i++) {
-                    float t = 0.3f + 0.35f * i;
-                    Vector2 pos = Vector2.Lerp(bladeButt, bladeTip, t)
-                        + bladeDir.RotatedBy(MathHelper.PiOver2) * 6f * (float)Math.Sin(Projectile.localAI[0] * 7f + i * 2.1f);
-                    float breathe = 0.75f + 0.25f * (float)Math.Sin(Projectile.localAI[0] * 9f + i * 1.8f);
-                    Vector2 flameOrigin = glow.Size() / 2f;
-                    float flameSize = (24f + 26f * t) * breathe;
-                    Main.EntitySpriteDraw(glow, pos - Main.screenPosition, null,
-                        IceArcFx.Additive(IceArcFx.FireEdge, 0.85f * (0.55f + 0.45f * lerpTime) * breathe),
-                        bladeDir.ToRotation(), flameOrigin,
-                        new Vector2(flameSize * 1.5f / glow.Width, flameSize * 0.6f / glow.Height),
-                        SpriteEffects.None, 0f);
-                    Main.EntitySpriteDraw(glow, pos - Main.screenPosition, null,
-                        IceArcFx.Additive(IceArcFx.FireCore, (0.5f + 0.5f * lerpTime) * breathe),
-                        0f, flameOrigin, flameSize * 0.45f / glow.Width, SpriteEffects.None, 0f);
-                }
-            }
+                GetBladeLine(owner, out Vector2 bladeButt, out Vector2 bladeTip))
+                IceArcFx.DrawBladeFireLine(bladeButt, bladeTip, 0.45f + 0.55f * lerpTime);
             if (glow != null && !glow.IsDisposed)
                 DrawSwoosh(owner, glow, percentageOfLife, maxAnim);
 
