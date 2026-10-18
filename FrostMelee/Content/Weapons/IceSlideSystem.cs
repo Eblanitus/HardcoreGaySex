@@ -30,11 +30,7 @@ namespace FrostMelee.Content.Weapons
 
             float along = Vector2.Dot(player.velocity, dir);
             if (along < MinSpeed) return false;
-            if (!player.onGround && !player.slippy) {
-                // В воздухе скольжения нет — только по земле/льду
-                // но разрешаем если уже скользим
-                if (player.velocity.Y != 0 && System.Math.Abs(player.velocity.Y) > 0.5f) return false;
-            }
+            if (player.velocity.Y != 0 && System.Math.Abs(player.velocity.Y) > 0.5f) return false;
 
             // Включаем скольжение
             player.slippy = true; // ванильный флаг льда — уменьшает трение
