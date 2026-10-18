@@ -26,15 +26,15 @@ namespace FrostMelee.Content.Weapons
     //                     по документации tModLoader это единственный хук, где
     //                     эта запись применяется к движению того же кадра.
     //
-    // Визуал: пока скользим, вытянутый вперёд меч «намораживает» дорожку —
-    // глянцевая полоса (IceSlideDeco) теперь живёт несколько секунд и тает
-    // в конце жизни: видно, где ты проехал, и лёд не исчезает мгновенно.
+    // Визуал: пока скользим, вытянутый вперёд меч «намораживает» слой льда на
+    // поверхности блоков (IceSheetSystem: отметки на сетке тайлов, рисуются
+    // в PostDrawTiles поверх любых блоков, освещаются светом мира, живут
+    // 4 секунды и тают). Плюс ледяная крошка из-под ног.
     public class IceSlidePlayer : ModPlayer
     {
         public bool Sliding;
 
         private int coastTicks;
-        private int decalTimer;
         private int fastTicks;
 
         public override void PostUpdateRunSpeeds()
@@ -116,16 +116,14 @@ namespace FrostMelee.Content.Weapons
             if (System.Math.Abs(Player.velocity.X) < IceSlideSystem.VisualMinSpeed)
                 return;
 
-            // Глянец скользкой дорожки: каждые 3 тика, чуть впереди по ходу.
-            // Полоса живёт несколько секунд (LifeTicks в IceSlideDeco).
-            decalTimer--;
-            if (decalTimer <= 0)
-            {
-                decalTimer = 3;
-                Vector2 pos = Player.Bottom + new Vector2(Player.direction * Main.rand.NextFloat(6f, 22f), -2f);
-                Projectile.NewProjectile(Player.GetSource_FromThis(), pos, Vector2.Zero,
-                    ModContent.ProjectileType<IceSlideDeco>(), 0, 0f, Player.whoAmI);
-            }
+            // Ледяной слой на сетке тайлов: отметки под ногами и чуть по ходу.
+            // IceSheetSystem нарисует их в PostDrawTiles поверх любых блоков,
+            // но до игрока — слой лежит на поверхности, а не висит над ней.
+            int y = (int)((Player.Bottom.Y + 2f) / 16f);
+            int x0 = (int)((Player.Left.X - 2f) / 16f);
+            int x1 = (int)((Player.Right.X + 2f) / 16f);
+            for (int x = x0; x <= x1; x++)
+                IceSheetSystem.MarkSurface(x, y);
 
             // Ледяная крошка из-под ног
             if (Main.rand.NextBool(3))
