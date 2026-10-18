@@ -6,16 +6,39 @@ namespace FrostMelee.Content.Weapons
 {
     // Скольжение в режиме копья с ледяным клинком.
     // Появляется только когда игрок уже разогнался, а не просто постоял с копьём.
+    //
+    // ВАЖНО: этот класс — только ПРОВЕРКА («можно ли скользить»), без побочных
+    // эффектов. Сам эффект выставляет IceSlidePlayer из PostUpdateRunSpeeds.
+    //
+    // Почему не здесь: ванильный Player.Update каждый кадр пересчитывает поля
+    // движения. Порядок такой (номера строк ванильного Player.cs):
+    //   ~14652  ResetEffects()            — статы движения сбрасываются к базовым
+    //   ~18280  ResetFloorFlags()         — slippy = false, затем выставляется из тайла под ногами
+    //   ~20594  PostUpdateRunSpeeds()     — ЕДИНСТВЕННАЯ точка, где запись ещё что-то меняет
+    //   ~20594  HorizontalMovement()      — здесь maxRunSpeed / runAcceleration / slippy расходуются
+    //   ~21811  PostUpdate()              — скорость уже потрачена
+    // Документация tModLoader по Player.maxRunSpeed и Player.runAcceleration:
+    //   «should only be modified in ModPlayer.PostUpdateRunSpeeds, ModItem.HorizontalWingSpeeds,
+    //    or ExtraJump.UpdateHorizontalSpeeds(Player) to correctly function».
+    // Запись из PostUpdate() стиралась следующим ResetEffects() и до движения не доезжала.
     public static class IceSlideSystem
     {
-        // Порог скорости, ниже которого скольжения нет (px/тик)
+        // Порог скорости, ниже которого скольжения нет (px/тик).
+        // Осознанно выше базового бега (maxRunSpeed = 3f): без ботинок или маунта
+        // разогнаться до него нельзя, а на низкой скорости скольжение бессмысленно.
+        // Для справки, accRunSpeed ванильной обуви: Hermes Boots = 6f, Lightning Boots = 6.75f.
         public const float MinSpeed = 4f;
-        // Сколько силы скольжения: трение ближе к 1 = скользит дольше
-        public const float SlideFriction = 0.985f;
-        // Макс доп скорость от скольжения
+
+        // Насколько поднимается потолок скорости на время скольжения.
         public const float SlideBoost = 1.15f;
 
-        public static bool TrySlide(Player player, SwordPlayer sp)
+        // Больше не используется: «трение» скольжения даёт ванильный флаг slippy.
+        // Оставлен, чтобы не ломать ссылки; можно удалить.
+        public const float SlideFriction = 0.985f;
+
+        // Проверка: разогнался ли игрок вдоль выставленного копья.
+        // Ничего не меняет — только отвечает да/нет.
+        public static bool CanSlide(Player player, SwordPlayer sp)
         {
             if (!sp.HoldingSword || player.HeldItem.type != ItemID.IceBlade) return false;
             if (!sp.SpearMode) return false;
@@ -30,21 +53,15 @@ namespace FrostMelee.Content.Weapons
 
             float along = Vector2.Dot(player.velocity, dir);
             if (along < MinSpeed) return false;
-            if (player.velocity.Y != 0 && System.Math.Abs(player.velocity.Y) > 0.5f) return false;
 
-            // Включаем скольжение
-            player.slippy = true; // ванильный флаг льда — уменьшает трение
-            player.maxRunSpeed *= SlideBoost;
-            player.runAcceleration *= 1.05f;
-
-            // Визуал: крошка льда из-под ног
-            if (Main.rand.NextBool(3)) {
-                Vector2 foot = player.Bottom + new Vector2(Main.rand.NextFloat(-6f, 6f), -2f);
-                Dust d = Dust.NewDustPerfect(foot, DustID.SnowflakeIce, new Vector2(player.velocity.X * 0.1f, -0.4f), 120, default, 0.9f);
-                d.noGravity = true;
-            }
+            // Скользим только по ровной траектории — в прыжке и на склоне не работает
+            if (System.Math.Abs(player.velocity.Y) > 0.5f) return false;
 
             return true;
         }
+
+        // Совместимость со старым вызовом в SwordPlayer.PostUpdate().
+        // Побочных эффектов больше нет — они переехали в IceSlidePlayer.
+        public static bool TrySlide(Player player, SwordPlayer sp) => CanSlide(player, sp);
     }
 }
