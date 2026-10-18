@@ -8,6 +8,8 @@ Projectiles: {
 	// AmarokYoyoProjectile.DisplayName: Amarok Yoyo Projectile
 	// AmarokShardProjectile.DisplayName: Amarok Shard Projectile
 	// IceWaveProjectile.DisplayName: Ice Wave Projectile
+	// IceSlideDeco.DisplayName: Ice Slide Deco
+	// IceSheetDrawer.DisplayName: Ice Sheet Drawer
 }
 
 Stance: {
