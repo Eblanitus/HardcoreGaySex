@@ -174,6 +174,9 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            if ((int)Projectile.ai[2] == ItemID.IceBlade) {
+                Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish();
+            }
         }
 
         public override bool PreDraw(ref Color lightColor)
@@ -197,6 +200,11 @@ namespace FrostMelee.Content.Projectiles
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
+            if (itemType == ItemID.IceBlade) {
+                float mix = Content.Weapons.IceBladeVisual.Mix(Main.player[Projectile.owner], itemType);
+                Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, SickleSprite.Get(itemType), Projectile.rotation, flipped, lightColor, 1f, mix);
+                return false;
+            }
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor, Projectile.rotation, origin, 1f, effects, 0f);
             return false;

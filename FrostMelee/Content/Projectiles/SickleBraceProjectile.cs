@@ -392,6 +392,10 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            int braceItem = (int)Projectile.ai[2];
+            if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+            }
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
 
@@ -440,6 +444,17 @@ namespace FrostMelee.Content.Projectiles
             int itemType = (int)Projectile.ai[2];
             if (itemType <= 0)
                 return true;
+            // Ледяной клинок: кроссфейд Rough <-> Ice_Blade по полировке, как у копья но наоборот
+            if (itemType == ItemID.IceBlade) {
+                SickleSprite.Geometry g = SickleSprite.Get(itemType);
+                bool fl = Projectile.spriteDirection == -1;
+                Vector2 dp = Projectile.Center - SpearDir * (g.Length * 0.5f);
+                float mix = Content.Weapons.IceBladeVisual.Mix(Main.player[Projectile.owner], itemType);
+                Texture2D t = SickleTextures.Normal(itemType);
+                Content.Weapons.IceBladeVisual.DrawBlend(t, dp, g, Projectile.rotation, fl, lightColor, 1f, mix);
+                return false;
+            }
+
             Texture2D texture = SickleTextures.Normal(itemType);
             if (texture == null || texture.IsDisposed)
                 return true;

@@ -58,6 +58,7 @@ namespace FrostMelee
                 TextureAssets.Item[pair.Key] = pair.Value;
             originalTextures.Clear();
             Content.SickleTextures.Unload();
+            Content.Weapons.IceBladeVisual.Unload();
             // Кэш геометрии спрайтов снимаем при выгрузке (ссылки на ассеты)
             Content.SickleSprite.ClearCache();
         }
@@ -83,6 +84,7 @@ namespace FrostMelee
             // (SickleSprite.MeasureSword) и Weapon Out Lite. Один слот на всё:
             // инвентарь, взмах, тычки/встреча/бросок и геометрия дуги.
             TryOverride(ItemID.IceBlade, "FrostMelee/Items/Ice_Blade");
+            Content.Weapons.IceBladeVisual.RegisterClean(TextureAssets.Item[ItemID.IceBlade]);
             TryOverride(ItemID.Frostbrand, "FrostMelee/Items/Frostbrand");
         }
 

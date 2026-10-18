@@ -72,6 +72,59 @@ namespace FrostMelee.Content.Weapons
         public bool HoldingSword =>
             !Player.HeldItem.IsAir && SwordTypes.IsSword(Player.HeldItem);
 
+        // === Полировка ледяного клинка (только IceBlade) — наоборот копью ===
+        // Копьё замораживается, клинок размораживается и точится.
+        // Визуал как у копья (кроссфейд Rough -> Ice_Blade), по той же механике.
+        // Теряет леденистость ~10с боем, заледеневает ~30с без боя.
+        public float IceFrost = 1f; // 1 = весь в инее (Rough), 0 = отполирован
+        public float IceFrostShown = 1f;
+        private const float IceFrostShownEase = 0.08f;
+        public const int IceThawTicks = 600;   // 10 сек до 1->0 боем (если бить)
+        public const int IceFreezeTicks = 1800; // 30 сек до 0->1 в покое
+        public const float IcePolishPerHit = 0.07f; // ~14 попаданий до полной полировки
+        private int iceHitCooldown; // чтобы не точить несколько раз за один взмах по толпе
+        private int iceIdleTicks; // тиков без попаданий до заледенения
+
+        public void AddPolish()
+        {
+            if (Player.whoAmI != Main.myPlayer || Player.HeldItem.type != ItemID.IceBlade) return;
+            if (iceHitCooldown > 0) return;
+            IceFrost = MathHelper.Clamp(IceFrost - IcePolishPerHit, 0f, 1f);
+            iceHitCooldown = 10; // 10 тиков кулдаун между полировками (защита от мультихита дуги)
+            iceIdleTicks = 0;
+        }
+
+        private void UpdateIceFrost()
+        {
+            if (Player.whoAmI != Main.myPlayer) return;
+
+            if (iceHitCooldown > 0) iceHitCooldown--;
+
+            // Плавный визуал
+            IceFrostShown += (IceFrost - IceFrostShown) * IceFrostShownEase;
+            if (System.Math.Abs(IceFrost - IceFrostShown) < 0.002f) IceFrostShown = IceFrost;
+
+            bool holdingIceBlade = HoldingSword && Player.HeldItem.type == ItemID.IceBlade;
+            if (!holdingIceBlade) {
+                // вне рук — медленно заледеневает обратно
+                if (IceFrost < 1f) IceFrost = MathHelper.Clamp(IceFrost + 1f / IceFreezeTicks, 0f, 1f);
+                IceBladeVisual.UpdateView(IceFrostShown);
+                return;
+            }
+            if (Player.dead) {
+                IceFrost = 1f;
+                IceFrostShown = 1f;
+                IceBladeVisual.UpdateView(IceFrostShown);
+                return;
+            }
+            // В бою точим только попаданиями (AddPolish). В покое — заледеневает.
+            iceIdleTicks++;
+            if (iceIdleTicks > 60) {
+                if (IceFrost < 1f) IceFrost = MathHelper.Clamp(IceFrost + 1f / IceFreezeTicks, 0f, 1f);
+            }
+            IceBladeVisual.UpdateView(IceFrostShown);
+        }
+
         // Каденс тычков = эффективный каденс свинга × стихия (у меча резкие тычки)
         private int StabInterval(Item held)
         {
@@ -81,6 +134,9 @@ namespace FrostMelee.Content.Weapons
 
         public override void PreUpdate()
         {
+            // Полировка/заледенение — каждый тик, даже вне ввода
+            UpdateIceFrost();
+
             // Логика ввода — только для локального игрока
             if (Player.whoAmI != Main.myPlayer)
                 return;
@@ -231,12 +287,18 @@ namespace FrostMelee.Content.Weapons
             prevLmb = lmb;
         }
 
+        public bool TryGetSpearDir(out float angle) => TryGetSpearAngle(out angle);
+
         public override void PostUpdate()
         {
             // Поза и разворот — только для локального игрока, именно PostUpdate:
             // ванилла каждый тик перебивает руки в PlayerFrame и разворот в движении.
             if (Player.whoAmI != Main.myPlayer)
                 return;
+            // Скольжение на льду — только когда уже разогнался с копьём, а не постоял
+            if (SpearMode) {
+                IceSlideSystem.TrySlide(Player, this);
+            }
             // Повторно: PostUpdate Weapon Out может идти раньше нашего PreUpdate
             HideFromWeaponOut();
             PoseItemVisible = false;
@@ -435,7 +497,7 @@ namespace FrostMelee.Content.Weapons
         }
 
         // Угол выставленного меча из активного снаряда (ai[1] задаётся при спавне)
-        private bool TryGetSpearAngle(out float angle)
+        public bool TryGetSpearAngle(out float angle)
         {
             if (IsMyProjectile(spearProj, ModContent.ProjectileType<SickleBraceProjectile>()))
             {

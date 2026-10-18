@@ -470,6 +470,9 @@ namespace FrostMelee.Content.Weapons
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
+            if (SwordItem == ItemID.IceBlade) {
+                Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish();
+            }
         }
 
         public override void OnHitPlayer(Player target, Player.HurtInfo info) {

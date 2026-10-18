@@ -386,6 +386,10 @@ namespace FrostMelee.Content.Projectiles
             Projectile.friendly = false;
             Projectile.tileCollide = false;
             Projectile.netUpdate = true;
+            // Волна льда по поверхности от броска ледяного клинка (маленькая, т.к. не убийство)
+            if ((int)Projectile.ai[2] == ItemID.IceBlade && Projectile.owner == Main.myPlayer) {
+                SpawnIceWave((int)Projectile.ai[2], false);
+            }
             return true;
         }
 
@@ -427,6 +431,27 @@ namespace FrostMelee.Content.Projectiles
         public override void OnKill(int timeLeft)
         {
             CloseFrostTrail();
+        }
+
+        private void SpawnIceWave(int itemType, bool isKill)
+        {
+            if (itemType != ItemID.IceBlade) return;
+            // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
+            int dir = Projectile.velocity.X >= 0 ? 1 : -1;
+            if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
+            // Спавним волну чуть выше земли, она сама прилипнет к поверхности
+            Vector2 spawn = Projectile.Center;
+            // Найти землю под собой для спавна волны
+            for (int i = 0; i < 12; i++) {
+                Point p = (spawn + new Vector2(0, i * 4)).ToTileCoordinates();
+                if (WorldGen.SolidTile(p.X, p.Y)) { spawn.Y = p.Y * 16 - 8; break; }
+            }
+            Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
+                ModContent.ProjectileType<IceWaveProjectile>(), Math.Max(1, Projectile.damage / 3), 1f, Projectile.owner, isKill ? 1f : 0f, dir);
+            if (isKill) {
+                // звук усиления
+                SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.7f }, spawn);
+            }
         }
 
         // Добитый броском враг оставляет большую долгую зону инея (FrostZoneSystem.Spawn);
@@ -615,6 +640,15 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            int thrownItem = (int)Projectile.ai[2];
+            if (Weapons.SwordTypes.IsSwordId(thrownItem) && thrownItem == ItemID.IceBlade) {
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+                // Волна льда по поверхности — маленькая на попадании
+                if (Projectile.owner == Main.myPlayer) {
+                    bool isKill = target.life <= 0;
+                    SpawnIceWave(thrownItem, isKill);
+                }
+            }
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);
 
@@ -755,6 +789,12 @@ namespace FrostMelee.Content.Projectiles
             Vector2 center = VisualCenter(geo);
             float scale = Projectile.scale;
             Vector2 butt = center - axis * (geo.Length * 0.5f * scale);
+
+            if (itemType == ItemID.IceBlade) {
+                float mix = Content.Weapons.IceBladeVisual.Mix(Main.player[Projectile.owner], itemType);
+                Content.Weapons.IceBladeVisual.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale, mix);
+                return false;
+            }
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
