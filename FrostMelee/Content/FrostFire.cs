@@ -21,24 +21,26 @@ namespace FrostMelee.Content
         private static readonly Color IceTail = new Color(130, 215, 255);
         private static readonly Color IceEdge = new Color(45, 120, 240);
 
-        // Спрайт огня (Textures/Effects/FrostFlame.png, 96×192, три языка вверх)
+        // Пиксель-арт текстуры (point sampling в игре, поэтому без градиентов):
+        // FrostFlame.png 32×64 — язык огня (белое ядро, голубь, синяя кромка);
+        // FrostSpark.png 8×8 — искра-ромб
         private static Texture2D flameTex;
-        private static bool flameTried;
-        private static Texture2D FlameTex
+        private static Texture2D sparkTex;
+        private static bool texTried;
+        private static Texture2D FlameTex => Load(ref flameTex);
+        private static Texture2D SparkTex => Load(ref sparkTex);
+
+        private static Texture2D Load(ref Texture2D slot)
         {
-            get
+            if (!texTried && !Main.dedServ)
             {
-                if (!flameTried && !Main.dedServ)
-                {
-                    flameTried = true;
-                    try
-                    {
-                        flameTex = ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/FrostFlame").Value;
-                    }
-                    catch { flameTex = null; }
-                }
-                return (flameTex == null || flameTex.IsDisposed) ? null : flameTex;
+                texTried = true;
+                try { flameTex = ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/FrostFlame").Value; }
+                catch { flameTex = null; }
+                try { sparkTex = ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/FrostSpark").Value; }
+                catch { sparkTex = null; }
             }
+            return (slot == null || slot.IsDisposed) ? null : slot;
         }
 
         // Сколько пикселей пламени выходит за остриё (0 — зарядов нет)
@@ -116,7 +118,6 @@ namespace FrostMelee.Content
             // Пульс — огонь живой, яркость дышит
             float pulse = 0.92f + 0.16f * (float)Math.Sin(time * 5.3);
             float power = (0.60f + 0.40f * h) * pulse;
-            Vector2 centerOrigin = flame != null ? flame.Size() / 2f : Vector2.Zero;
             // Низ языка = точка привязки: основание стоит на лезвии, тело тянет к острию
             Vector2 baseOrigin = flame != null ? new Vector2(flame.Width * 0.5f, flame.Height) : Vector2.Zero;
 
@@ -153,13 +154,11 @@ namespace FrostMelee.Content
                 float hgt = length * (0.55f + 0.35f * h) * (1.15f - 0.45f * s) * (0.92f + 0.08f * wob);
                 float wid = (14f + 16f * h) * (0.75f + 0.35f * s);
                 float r = flameRot + wob * 0.18f;
-                // тёмно-синий ореол → голубое тело → узкое белое ядро
-                Add(flame, pos, A(IceEdge, 0.50f * power), r,
-                    new Vector2(wid * 1.5f / flame.Width, hgt * 1.08f / flame.Height), baseOrigin);
-                Add(flame, pos, A(IceCore, 0.85f * power), r,
+                // синий ореол шире → сам пиксельный язык (в нём уже ядро и кромка)
+                Add(flame, pos, A(IceEdge, 0.45f * power), r,
+                    new Vector2(wid * 1.45f / flame.Width, hgt * 1.05f / flame.Height), baseOrigin);
+                Add(flame, pos, A(Color.White, 0.95f * power), r,
                     new Vector2(wid / flame.Width, hgt / flame.Height), baseOrigin);
-                Add(flame, pos, A(Color.White, 0.55f * power), r,
-                    new Vector2(wid * 0.5f / flame.Width, hgt * 0.72f / flame.Height), baseOrigin);
             }
 
             // 3) Грива за остриём — та часть огня, что даёт длину.
@@ -178,12 +177,10 @@ namespace FrostMelee.Content
                 float hgt = plumeH * sideH[k] * (0.90f + 0.10f * wob);
                 float wid = (15f + 16f * h) * sideH[k];
                 float r = rot + MathHelper.PiOver2 + sideAngle[k] + wob * 0.14f;
-                Add(flame, pos, A(IceEdge, 0.52f * power), r,
-                    new Vector2(wid * 1.45f / flame.Width, hgt * 1.06f / flame.Height), baseOrigin);
-                Add(flame, pos, A(IceCore, 0.90f * power), r,
+                Add(flame, pos, A(IceEdge, 0.48f * power), r,
+                    new Vector2(wid * 1.4f / flame.Width, hgt * 1.04f / flame.Height), baseOrigin);
+                Add(flame, pos, A(Color.White, 0.95f * power), r,
                     new Vector2(wid / flame.Width, hgt / flame.Height), baseOrigin);
-                Add(flame, pos, A(Color.White, 0.55f * power), r,
-                    new Vector2(wid * 0.45f / flame.Width, hgt * 0.65f / flame.Height), baseOrigin);
             }
 
             // 4) Искры: поднимаются от клинка вверх, гаснут
@@ -196,10 +193,11 @@ namespace FrostMelee.Content
                 Vector2 pos = at
                     + normal * ((float)Math.Sin(seed * 5f) * (2f + 3f * h))
                     + new Vector2(0f, -life * (14f + 22f * h));
-                float size = (6f + 5f * h) * (1f - life * 0.6f);
-                if (glow != null)
-                    Add(glow, pos, A(i % 2 == 0 ? IceCore : IceTail, 0.80f * (1f - life) * power), 0f,
-                        new Vector2(size / glow.Width, size / glow.Height), glow.Size() / 2f);
+                float size = (7f + 6f * h) * (1f - life * 0.55f);
+                Texture2D spark = SparkTex;
+                if (spark != null)
+                    Add(spark, pos, A(Color.White, 0.95f * (1f - life) * power), time * 0.7f,
+                        new Vector2(size / spark.Width, size / spark.Height), spark.Size() / 2f);
             }
         }
     }
