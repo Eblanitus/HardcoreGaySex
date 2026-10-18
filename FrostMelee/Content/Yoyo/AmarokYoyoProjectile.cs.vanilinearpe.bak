@@ -1,0 +1,476 @@
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Terraria;
+using Terraria.Audio;
+using Terraria.DataStructures;
+using Terraria.GameContent;
+using Terraria.ID;
+using Terraria.ModLoader;
+
+namespace FrostMelee.Content.Yoyo
+{
+    // Своё йо-йо вместо ванильного (ЙОЙО.md):
+    // удар — отскок к игроку — вылет обратно (темп от расстояния: близко бьёт чаще),
+    // наводка по ПКМ, круг по ЛКМ+ПКМ, лёд нарастает и срывается ударом с бонусом.
+    // Перчатка/сумка: двойник рядом + противовес в цель каждый третий удар.
+    public class AmarokYoyoProjectile : ModProjectile
+    {
+        private enum State { Out, Bounce, Homing, Circle, Return }
+
+        private const float MaxRange = 260f;        // длина верёвки, px
+        private const float OutSpeed = 14f;         // как ванильный Амарок: все полёты одинаковые
+        private const float BounceSpeed = 14f;      // отскок к игроку после удара
+        private const float ReturnSpeed = 14f;     // как вылет: догон идёт наследованием скорости игрока
+        private const float HomingSpeed = 14f;
+        private const float CircleRadius = 70f;
+        private const float CircleSpeed = 0.14f;    // рад/тик
+        private const int BounceCatchDist = 42;     // долетело до рук — снова наружу
+        private const int MaxBounceTicks = 90;      // страховка от застревания
+
+        private const int GrowTicks = 25;           // тиков на одну сосульку (~6 с до полного)
+        private const int MaxChunks = 14;           // ступеней льда = кадров спрайта
+        private const int BurstShards = 10;         // осколков во взрыве полного льда
+        private const float BurstDamageMult = 0.5f; // урон осколка от удара
+        private const float BurstSpeed = 9f;
+        private const int BaseSize = 16;
+        private const int SizePerChunk = 1;         // px к ширине за сосульку
+        private const int FullSlowTicks = 60;      // тормоз с полного набора
+        private const float FrostbiteChance = 0.67f;
+        private const int FrostbiteTicks = 150;
+
+        private State CurrentState = State.Out;
+        private bool started;
+        private int chunks;
+        private int growTimer;
+        private float circleAngle;
+        private float cloneAngle;
+        private int stateTimer;
+        private int throwHits;   // попаданий за этот вылет: 1-е — двойник, 2-е и 3-е — противовесы
+
+        // Двойник от перчатки йо-йо (ai[0] == 1, в ai[1] — номер основного)
+        private bool IsClone => Projectile.ai[0] == 1f;
+
+        // Спрайт — лента льда AmarokIceStrip: 14 кадров столбиком,
+        // кадр 0 — чистое йо-йо, дальше сосулек всё больше
+        public override string Texture => "FrostMelee/Items/AmarokIceStrip";
+
+        public override void SetStaticDefaults()
+        {
+            Main.projFrames[Type] = IceFrames;
+        }
+
+        public override void SetDefaults()
+        {
+            Projectile.width = BaseSize;
+            Projectile.height = BaseSize;
+            Projectile.friendly = true;
+            Projectile.DamageType = DamageClass.Melee;
+            Projectile.penetrate = -1;
+            Projectile.tileCollide = true;
+            Projectile.ignoreWater = true;
+            Projectile.usesLocalNPCImmunity = true;
+            Projectile.localNPCHitCooldown = 10; // как ванила: не чаще 6 ударов в секунду по цели
+            // Стиль обычного йо-йо: его проверяет сумка, перчатка и противовесы.
+            // Ванильный полёт при этом пропущен (PreAI), летим полностью сами
+            Projectile.aiStyle = ProjAIStyleID.Yoyo;
+            Projectile.timeLeft = 2;
+            Projectile.netImportant = true;
+        }
+
+        // Ванильный полёт пропущен (летим сами в PostAI),
+        // а стиль 99 оставлен: по нему нас узнают сумка и противовесы
+        public override bool PreAI() => false;
+
+        // Верёвку рисуем сами: ванильные добавки выключены, чтобы не было двойной
+        public override bool PreDrawExtras() => false;
+
+        public override void PostAI()
+        {
+            Player player = Main.player[Projectile.owner];
+            AmarokPlayer mp = player.GetModPlayer<AmarokPlayer>();
+
+            // Звук выброса — один раз за вылет (двойник молчит)
+            if (!started)
+            {
+                started = true;
+                if (!IsClone)
+                    SoundEngine.PlaySound(SoundID.Item1, Projectile.Center);
+            }
+
+            // Двойник живёт своей жизнью: крутится вокруг основного
+            if (IsClone)
+            {
+                CloneAI(player);
+                Projectile.timeLeft = 2;
+                Projectile.rotation += 0.4f;
+                return;
+            }
+
+            // Оружие сменили или игрок мёртв — домой и исчезнуть
+            if (!player.active || player.dead || player.HeldItem.type != ItemID.Amarok)
+            {
+                CurrentState = State.Return;
+            }
+            else if (CurrentState != State.Return && !player.channel && !mp.HomingWanted)
+            {
+                // Отпустил ЛКМ и ПКМ свободна — рывок домой, как в игре
+                CurrentState = State.Return;
+            }
+            Projectile.timeLeft = 2;
+            stateTimer++;
+            // Домой — сквозь блоки, в бою — честный отскок
+            Projectile.tileCollide = CurrentState != State.Return;
+
+            // Лёд нарастает, пока йо-йо в бою (не возвращается). Главное и двойник копят оба
+            if (CurrentState != State.Return && chunks < MaxChunks && !Main.dedServ)
+            {
+                if (++growTimer >= GrowTicks)
+                {
+                    growTimer = 0;
+                    chunks++;
+                    ApplySize();
+                    Burst(player.Center, DustID.SnowflakeIce, 6, 1.5f);
+                }
+            }
+
+            switch (CurrentState)
+            {
+                case State.Out:
+                    // Наводка важнее точки
+                    if (mp.HoldingAmarok && mp.HomingWanted && mp.HomingValid())
+                    {
+                        CurrentState = State.Homing;
+                        stateTimer = 0;
+                        break;
+                    }
+                    if (mp.HoldingAmarok && mp.CircleActive)
+                    {
+                        CurrentState = State.Circle;
+                        stateTimer = 0;
+                        circleAngle = (Projectile.Center - player.Center).ToRotation();
+                        break;
+                    }
+                    if (!player.channel)
+                    {
+                        if (mp.HomingWanted)
+                        {
+                            // Некого бить — подтягивается к рукам и ждёт там, а не висит в воздухе
+                            Vector2 dir = (Main.MouseWorld - player.Center).SafeNormalize(Vector2.UnitX);
+                            MoveTowards(player.Center + dir * 50f, OutSpeed * 0.6f);
+                        }
+                        else
+                        {
+                            // ЛКМ отпущена, цели нет — висеть и ждать
+                            Projectile.velocity *= 0.85f;
+                        }
+                        break;
+                    }
+                    MoveTowards(CursorAnchor(player), OutSpeed);
+                    break;
+
+                case State.Homing:
+                    if (!mp.HomingWanted)
+                    {
+                        CurrentState = State.Out;
+                        stateTimer = 0;
+                        break;
+                    }
+                    if (!mp.HomingValid())
+                    {
+                        mp.ClearHoming();
+                        CurrentState = State.Out;
+                        stateTimer = 0;
+                        break;
+                    }
+                    if (mp.CircleActive)
+                    {
+                        CurrentState = State.Circle;
+                        stateTimer = 0;
+                        circleAngle = (Projectile.Center - player.Center).ToRotation();
+                        mp.ClearHoming();
+                        break;
+                    }
+                    // Поводок: цель ушла дальше верёвки — бросаем и возвращаемся к рукам
+                    if (Vector2.Distance(Main.npc[mp.HomingTarget].Center, player.Center) > AmarokPlayer.HomingRange)
+                    {
+                        mp.ClearHoming();
+                        CurrentState = State.Bounce;
+                        stateTimer = 0;
+                        break;
+                    }
+                    MoveTowards(Main.npc[mp.HomingTarget].Center, HomingSpeed);
+                    break;
+
+                case State.Circle:
+                    if (!mp.CircleActive)
+                    {
+                        CurrentState = State.Out;
+                        stateTimer = 0;
+                        break;
+                    }
+                    circleAngle += CircleSpeed;
+                    MoveTowards(player.Center + circleAngle.ToRotationVector2() * CircleRadius, ReturnSpeed);
+                    break;
+
+                case State.Bounce:
+                    // После удара — к рукам. Долетело — снова наружу
+                    ChasePlayer(player, BounceSpeed);
+                    if (Vector2.Distance(Projectile.Center, player.Center) <= BounceCatchDist || stateTimer > MaxBounceTicks)
+                    {
+                        CurrentState = State.Out;
+                        stateTimer = 0;
+                    }
+                    break;
+
+                case State.Return:
+                    // Вернули до полного накопления — лёд сброшен без взрыва
+                    if (chunks != 0)
+                    {
+                        chunks = 0;
+                        ApplySize();
+                    }
+                    ChasePlayer(player, ReturnSpeed);
+                    if (Vector2.Distance(Projectile.Center, player.Center) <= 26f)
+                    {
+                        if (Projectile.owner == Main.myPlayer)
+                            SoundEngine.PlaySound(SoundID.Grab, player.Center);
+                        Projectile.Kill();
+                        return;
+                    }
+                    break;
+            }
+
+            Projectile.rotation += 0.4f;
+        }
+
+        // Якорь точки: курсор, но не дальше верёвки
+        private Vector2 CursorAnchor(Player player)
+        {
+            Vector2 dir = (Main.MouseWorld - player.Center).SafeNormalize(Vector2.UnitX);
+            float dist = MathHelper.Min(Vector2.Distance(Main.MouseWorld, player.Center), MaxRange);
+            return player.Center + dir * dist;
+        }
+
+        // Догон игрока: наследуем его скорость + сближение.
+        // Без этого падающий/летящий игрок улетает от тормозящего у цели йо-йо
+        private void ChasePlayer(Player player, float closingSpeed)
+        {
+            Vector2 to = player.Center - Projectile.Center;
+            float d = to.Length();
+            if (d > 1f)
+                Projectile.velocity = player.velocity + to / d * closingSpeed;
+            else
+                Projectile.velocity = player.velocity;
+        }
+
+        private void MoveTowards(Vector2 anchor, float maxSpeed)
+        {
+            Vector2 to = anchor - Projectile.Center;
+            float d = to.Length();
+            if (d < 2f)
+            {
+                Projectile.velocity *= 0.6f;
+                return;
+            }
+            float sp = MathHelper.Min(maxSpeed, d * 0.25f + 2f);
+            Projectile.velocity = to / d * sp;
+        }
+
+        // Рост хитбокса от льда: центр стоит на месте
+        private void ApplySize()
+        {
+            Vector2 c = Projectile.Center;
+            Projectile.width = BaseSize + chunks * SizePerChunk;
+            Projectile.height = BaseSize + chunks * SizePerChunk;
+            Projectile.Center = c;
+        }
+
+        // Двойник от перчатки: висит рядом с основным и бьёт тем же уроном.
+        // Основного нет или перчатку сняли — исчезнуть
+        private void CloneAI(Player player)
+        {
+            Projectile.tileCollide = false;
+            int main = (int)Projectile.ai[1];
+            bool mainAlive = main >= 0 && main < Main.maxProjectiles &&
+                Main.projectile[main].active &&
+                Main.projectile[main].owner == Projectile.owner &&
+                Main.projectile[main].type == Projectile.type &&
+                Main.projectile[main].ModProjectile is AmarokYoyoProjectile y && !y.IsClone;
+            if (!mainAlive || !player.GetModPlayer<AmarokPlayer>().GloveActive())
+            {
+                Projectile.Kill();
+                return;
+            }
+            // Двойник висит вплотную к главному: встаёт на точку напрямую,
+            // быстрое мелкое вращение своим углом (круг главного не трогаем)
+            cloneAngle += 0.18f;
+            Projectile.Center = Main.projectile[main].Center + cloneAngle.ToRotationVector2() * 40f;
+            Projectile.velocity = Main.projectile[main].velocity;
+        }
+
+        // Один двойник на основное йо-йо (по первому попаданию, как ванила).
+        // Цвет противовеса — случайный из семи на каждый вылет
+        private static readonly int[] CounterweightTypes = new int[]
+        {
+            ProjectileID.BlackCounterweight, ProjectileID.BlueCounterweight, ProjectileID.GreenCounterweight,
+            ProjectileID.PurpleCounterweight, ProjectileID.RedCounterweight, ProjectileID.YellowCounterweight
+        };
+
+        private void SpawnClone(Player player)
+        {
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (p.active && p.ModProjectile is AmarokYoyoProjectile y && y.IsClone &&
+                    (int)p.ai[1] == Projectile.whoAmI)
+                    return;
+            }
+            int idx = Projectile.NewProjectile(Projectile.GetSource_FromThis(), Projectile.Center, Vector2.Zero,
+                Projectile.type, Projectile.damage, Projectile.knockBack, Projectile.owner, 1f, Projectile.whoAmI);
+            if (idx >= 0 && idx < Main.maxProjectiles)
+                Main.projectile[idx].netUpdate = true;
+        }
+
+        // Противовес в цель (тип — из надетого аксессуара, иначе случайный из семи).
+        // Урон и отброс — как ванила: весь урон йо-йо, отброс (урон+6)/2
+        private void SpawnCounterweight(Player player, NPC target)
+        {
+            int type = player.counterWeight;
+            if (type <= 0 || type >= ProjectileID.Count)
+                type = CounterweightTypes[Main.rand.Next(CounterweightTypes.Length)];
+            Vector2 dir = (target.Center - Projectile.Center).SafeNormalize(Vector2.UnitX);
+            float kb = (Projectile.knockBack + 6f) / 2f;
+            int idx = Projectile.NewProjectile(Projectile.GetSource_FromThis(), Projectile.Center, dir * 12f,
+                type, (int)(Projectile.damage * 0.8f), kb, Projectile.owner, target.whoAmI);
+            if (idx >= 0 && idx < Main.maxProjectiles)
+                Main.projectile[idx].netUpdate = true;
+        }
+
+        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
+        {
+            if (Main.rand.NextFloat() < FrostbiteChance)
+                target.AddBuff(BuffID.Frostburn2, FrostbiteTicks);
+            // Полный набор: тормоз + взрыв сосульками кругом, лёд обнуляется и растёт заново.
+            // Двойник тоже взрывается полным, но без ритма сумки и отскока
+            if (chunks >= MaxChunks)
+            {
+                target.AddBuff(BuffID.Slow, FullSlowTicks);
+                for (int i = 0; i < BurstShards; i++)
+                {
+                    // Старт с кольца вокруг цели, а не из её центра —
+                    // иначе жертва втанчивает все осколки сразу
+                    Vector2 dir = Vector2.UnitX.RotatedBy(i / (float)BurstShards * MathHelper.TwoPi);
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), target.Center + dir * 24f, dir * BurstSpeed,
+                        ModContent.ProjectileType<AmarokShardProjectile>(),
+                        (int)MathHelper.Max(1f, Projectile.damage * BurstDamageMult), 1f, Projectile.owner);
+                }
+                SoundEngine.PlaySound(SoundID.Item27, target.Center);
+                Lighting.AddLight(target.Center, new Vector3(0.5f, 1f, 1.5f));
+                Burst(target.Center, DustID.SnowflakeIce, 14, 4f);
+                chunks = 0;
+                ApplySize();
+            }
+
+            // Двойник дальше не идёт: без ритма сумки, без отскока
+            if (IsClone)
+            {
+                Burst(target.Center, DustID.Frost, 8, 2.5f);
+                return;
+            }
+
+            // Ритм сумки за вылет: 1-е попадание — двойник, 2-е и 3-е — противовесы
+            Player player = Main.player[Projectile.owner];
+            if (Projectile.owner == Main.myPlayer)
+            {
+                throwHits++;
+                AmarokPlayer yp = Main.player[Projectile.owner].GetModPlayer<AmarokPlayer>();
+                if (throwHits == 1 && yp.GloveActive())
+                    SpawnClone(player);
+                else if ((throwHits == 2 || throwHits == 3) && player.counterWeight > 0)
+                    SpawnCounterweight(player, target);
+            }
+
+            if (Projectile.owner == Main.myPlayer)
+                Main.player[Projectile.owner].GetModPlayer<AmarokPlayer>().ClearHoming();
+            Burst(target.Center, DustID.Frost, 8, 2.5f);
+
+            // После удара — отскок к игроку (кроме возврата домой)
+            if (CurrentState != State.Return)
+            {
+                CurrentState = State.Bounce;
+                stateTimer = 0;
+            }
+        }
+
+        // Основное умерло — двойников с собой
+        public override void OnKill(int timeLeft)
+        {
+            if (IsClone || Projectile.owner != Main.myPlayer)
+                return;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (p.active && p.ModProjectile is AmarokYoyoProjectile y && y.IsClone &&
+                    (int)p.ai[1] == Projectile.whoAmI)
+                    p.Kill();
+            }
+        }
+
+        public override bool OnTileCollide(Vector2 oldVelocity)
+        {
+            // Врезалось в блок — отскок и летит дальше, домой не возвращается.
+            // Домой летит сквозь всё, чтобы не застрять за стеной
+            if (CurrentState == State.Return)
+                return false;
+            if (System.Math.Abs(Projectile.velocity.X - oldVelocity.X) > 0.01f)
+                Projectile.velocity.X = -oldVelocity.X * 0.6f;
+            if (System.Math.Abs(Projectile.velocity.Y - oldVelocity.Y) > 0.01f)
+                Projectile.velocity.Y = -oldVelocity.Y * 0.6f;
+            return false;
+        }
+
+        private static void Burst(Vector2 at, int dustType, int count, float speed)
+        {
+            if (Main.dedServ)
+                return;
+            for (int i = 0; i < count; i++)
+            {
+                Dust d = Dust.NewDustPerfect(at + Main.rand.NextVector2Circular(6f, 6f), dustType,
+                    Main.rand.NextVector2Circular(speed, speed), 120, default, Main.rand.NextFloat(0.7f, 1.1f));
+                d.noGravity = true;
+            }
+        }
+
+        public override bool PreDraw(ref Color lightColor)
+        {
+            Player player = Main.player[Projectile.owner];
+
+            // Верёвка: от руки к йо-йо. У двойника своя нитка, как в игре
+            Vector2 hand = player.MountedCenter;
+            Vector2 toYoyo = Projectile.Center - hand;
+            float len = toYoyo.Length();
+            if (len > 2f)
+            {
+                Texture2D line = TextureAssets.MagicPixel.Value;
+                Main.EntitySpriteDraw(line, hand - Main.screenPosition, new Rectangle(0, 0, 1, 1),
+                    Color.White * 0.8f, toYoyo.ToRotation(), new Vector2(0f, 0.5f),
+                    new Vector2(len, 2f), SpriteEffects.None, 0f);
+            }
+
+            // Само йо-йо = кадр ленты по набранному льду (0 — без льда, последний — полный набор).
+            // Текстура грузится tModLoader'ом при загрузке мода по пути Texture
+            Texture2D strip = TextureAssets.Projectile[Type].Value;
+            if (strip == null || strip.IsDisposed)
+                return false;
+            int frameH = strip.Height / IceFrames;
+            int frame = (int)System.Math.Round(chunks * (IceFrames - 1) / (float)MaxChunks);
+            frame = Utils.Clamp(frame, 0, IceFrames - 1);
+            Rectangle src = new Rectangle(0, frame * frameH, strip.Width, frameH);
+            Main.EntitySpriteDraw(strip, Projectile.Center - Main.screenPosition, src,
+                lightColor, Projectile.rotation, new Vector2(strip.Width / 2f, frameH / 2f), 1f, SpriteEffects.None, 0f);
+            return false;
+        }
+
+        private const int IceFrames = 14;   // кадров в ленте AmarokIceStrip
+    }
+}

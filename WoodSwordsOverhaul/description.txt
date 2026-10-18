@@ -1,0 +1,11 @@
+Part of the HardcoreMelee series. Wooden swords become sticks, plus sharpened daggers.
+
+Every stick and dagger knows four moves:
+- LMB: swing. A light arc with tiny damage that shoves enemies back. Control, not DPS.
+- Tap RMB: brace as a spear. Damage grows with closing speed: run into the enemy, or let it run into you.
+- Hold RMB: quick stabs.
+- RMB + LMB: throw. No auto-return: the stick stays in soft ground or in the enemy until you walk up and pick it up.
+
+Daggers are made from sticks (one stick, one dagger, at a Work Bench) and can't be turned back. Sticks are stronger at swinging and bracing, daggers at stabbing.
+
+Compatible with Weapon Out Lite.

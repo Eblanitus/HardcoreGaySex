@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\tModLoader.targets" />
+
+  <PropertyGroup>
+    <AssemblyName>ReaperMelee</AssemblyName>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Здесь пусто, tModLoader сам найдет все .cs и .png файлы -->
+  </ItemGroup>
+</Project>

@@ -1,0 +1,1 @@
+Turns the Ice Sickle into a frost spear: swing, stabs, braced spear and a throw with no auto-return. Stabs build frost, swings spend it into rime. Part of HardcoreMelee series.

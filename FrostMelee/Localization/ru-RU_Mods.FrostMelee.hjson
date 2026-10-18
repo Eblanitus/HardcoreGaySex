@@ -1,0 +1,66 @@
+Projectiles: {
+	SickleArcProjectile.DisplayName: Дуга серпа
+	SickleStabProjectile.DisplayName: Выпад серпом
+	SickleBraceProjectile.DisplayName: Серп-копьё
+	SickleThrowProjectile.DisplayName: Бросок серпа
+	SwordArcProjectile.DisplayName: Дуга меча
+	SwordStabProjectile.DisplayName: Выпад мечом
+	// AmarokYoyoProjectile.DisplayName: Amarok Yoyo Projectile
+	// AmarokShardProjectile.DisplayName: Amarok Shard Projectile
+}
+
+Stance: {
+	Swing: Взмах
+	Stab: Тычок
+	Spear: Копьё
+	Meet: Встреча
+	Thrown: Брошено
+}
+
+ThrownTooltip: Брошено — подойди к серпу, чтобы подобрать
+ThrownTooltipSword: Брошено — подойди к мечу, чтобы подобрать
+FrozenSpearName: Замороженное копьё
+YoyoControlsTooltip:
+	'''
+	ЛКМ (держать): вести йо-йо
+	ПКМ (держать): само летит к ближайшему врагу, если не выпущено — вылетает само (ЛКМ можно отпустить)
+	ЛКМ + ПКМ (держать): круг вокруг себя
+	Удар: отскок к тебе, рядом бьёт чаще. Лёд растёт, полный взрывается сосульками.
+	'''
+
+YoyoMode: {
+	Aim: Точка
+	Homing: Наведён
+	Circle: Круг
+}
+
+ControlsTooltip:
+	'''
+	ЛКМ: взмах (дуга)
+	ПКМ (тап): выставить копьём (урон от скорости сближения)
+	ПКМ (зажать): тычки
+	ПКМ + ЛКМ: бросок (подбери, чтобы снова пользоваться)
+	'''
+SwordControlsTooltip:
+	'''
+	ЛКМ: взмах (дуга меча)
+	ПКМ (тап): держать меч на встречу (урон от скорости сближения)
+	ПКМ (зажать): тычки остриём
+	ПКМ + ЛКМ: бросок (меч остаётся — иди забери)
+	'''
+
+Configs: {
+	FrostMeleeConfig: {
+		// DisplayName: Frost Melee Config
+
+		ShowStanceIndicator: {
+			// Label: Показывать режим атаки над головой
+			// Tooltip: Отключает надпись приёма (Взмах/Тычок/Копьё/Брошено/Точка/Наведён/Круг) над персонажем.
+		}
+
+		ShowControlTooltips: {
+			// Label: Подсказки управления в описании
+			// Tooltip: Отключает списки приёмов в тултипах оружия.
+		}
+	}
+}

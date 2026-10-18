@@ -1,0 +1,24 @@
+Projectiles: {
+	SickleArcProjectile.DisplayName: Дуга серпа
+	SickleStabProjectile.DisplayName: Выпад серпом
+	SickleBraceProjectile.DisplayName: Серп-копьё
+	SickleThrowProjectile.DisplayName: Бросок серпа
+	// IceSickleSpikeProjectile.DisplayName: Ice Sickle Spike Projectile
+	// IceSickleShardProjectile.DisplayName: Ice Sickle Shard Projectile
+}
+
+Stance: {
+	Swing: Взмах
+	Stab: Тычок
+	Spear: Копьё
+	Thrown: Брошено
+}
+
+ThrownTooltip: Брошено — подойди к серпу, чтобы подобрать
+ControlsTooltip:
+	'''
+	ЛКМ: взмах (дуга)
+	ПКМ (тап): выставить копьём (урон от скорости сближения)
+	ПКМ (зажать): тычки
+	ПКМ + ЛКМ: бросок (подбери, чтобы снова пользоваться)
+	'''

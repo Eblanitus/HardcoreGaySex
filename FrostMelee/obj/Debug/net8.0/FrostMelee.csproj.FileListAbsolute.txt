@@ -1,0 +1,12 @@
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\bin\Debug\net8.0\FrostMelee.deps.json
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\bin\Debug\net8.0\FrostMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\bin\Debug\net8.0\FrostMelee.pdb
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.csproj.AssemblyReference.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.AssemblyInfoInputs.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.AssemblyInfo.cs
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.csproj.CoreCompileInputs.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\refint\FrostMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\FrostMelee.pdb
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\FrostMelee\obj\Debug\net8.0\ref\FrostMelee.dll

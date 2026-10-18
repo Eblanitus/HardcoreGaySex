@@ -1,0 +1,12 @@
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.csproj.AssemblyReference.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.AssemblyInfoInputs.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.AssemblyInfo.cs
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.csproj.CoreCompileInputs.cache
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\bin\Debug\net8.0\ReaperMelee.deps.json
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\bin\Debug\net8.0\ReaperMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\bin\Debug\net8.0\ReaperMelee.pdb
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\refint\ReaperMelee.dll
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ReaperMelee.pdb
+C:\Users\user\Documents\My Games\Terraria\tModLoader\ModSources\ReaperMelee\obj\Debug\net8.0\ref\ReaperMelee.dll

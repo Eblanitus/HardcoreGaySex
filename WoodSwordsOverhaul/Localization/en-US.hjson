@@ -1,0 +1,12 @@
+ItemName: {
+	// Override vanilla item display names: wooden swords -> sticks
+	WoodenSword: Wooden Stick
+	RichMahoganySword: Rich Mahogany Stick
+	EbonwoodSword: Ebonwood Stick
+	ShadewoodSword: Shadewood Stick
+	PearlwoodSword: Pearlwood Stick
+	BorealWoodSword: Boreal Wood Stick
+	PalmWoodSword: Palm Wood Stick
+	AshWoodSword: Ash Wood Stick
+	CactusSword: Thorny Stick
+}

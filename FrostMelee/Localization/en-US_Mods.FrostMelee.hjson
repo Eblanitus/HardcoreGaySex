@@ -1,0 +1,66 @@
+Projectiles: {
+	SickleArcProjectile.DisplayName: Sickle Arc Projectile
+	SickleStabProjectile.DisplayName: Sickle Stab Projectile
+	SickleBraceProjectile.DisplayName: Sickle Brace Projectile
+	SickleThrowProjectile.DisplayName: Sickle Throw Projectile
+	SwordArcProjectile.DisplayName: Sword Arc Projectile
+	SwordStabProjectile.DisplayName: Sword Stab Projectile
+	AmarokYoyoProjectile.DisplayName: Amarok Yoyo Projectile
+	AmarokShardProjectile.DisplayName: Amarok Shard Projectile
+}
+
+Stance: {
+	Swing: Swing
+	Stab: Stab
+	Spear: Spear
+	Meet: Meet
+	Thrown: Thrown
+}
+
+ThrownTooltip: Thrown — walk up to the sickle to pick it up
+ThrownTooltipSword: Thrown — walk up to the sword to pick it up
+FrozenSpearName: Frozen Spear
+YoyoControlsTooltip:
+	'''
+	LMB (hold): guide the yoyo
+	RMB (hold): hunts the nearest enemy by itself, throws itself if out (LMB can go)
+	LMB + RMB (hold): circle around you
+	Hit: bounces back, closer hits faster. Ice grows, full ice bursts into shards.
+	'''
+
+YoyoMode: {
+	Aim: Aim
+	Homing: Locked on
+	Circle: Circle
+}
+
+ControlsTooltip:
+	'''
+	LMB: swing (arc)
+	RMB (tap): brace as a spear (damage scales with closing speed)
+	RMB (hold): stabs
+	RMB + LMB: throw (pick it up to use again)
+	'''
+SwordControlsTooltip:
+	'''
+	LMB: swing (sword arc)
+	RMB (tap): hold the sword out (damage scales with closing speed)
+	RMB (hold): stabs
+	RMB + LMB: throw (the sword stays — go pick it up)
+	'''
+
+Configs: {
+	FrostMeleeConfig: {
+		DisplayName: Frost Melee Config
+
+		ShowStanceIndicator: {
+			Label: Показывать режим атаки над головой
+			Tooltip: Отключает надпись приёма (Взмах/Тычок/Копьё/Брошено/Точка/Наведён/Круг) над персонажем.
+		}
+
+		ShowControlTooltips: {
+			Label: Подсказки управления в описании
+			Tooltip: Отключает списки приёмов в тултипах оружия.
+		}
+	}
+}

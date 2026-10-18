@@ -1,0 +1,71 @@
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Terraria;
+using Terraria.Audio;
+using Terraria.GameContent;
+using Terraria.ID;
+using Terraria.ModLoader;
+
+namespace FrostMelee.Content.Yoyo
+{
+    // Осколок взрыва полного льда Амарока: разлетаются кругом,
+    // бьют несильно, живут секунду, сквозь стены не летят, чуть тянет вниз.
+    public class AmarokShardProjectile : ModProjectile
+    {
+        public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.FrostShard;
+
+        public override void SetDefaults()
+        {
+            Projectile.width = 10;
+            Projectile.height = 10;
+            Projectile.friendly = true;
+            Projectile.DamageType = DamageClass.Melee;
+            Projectile.penetrate = 1;
+            Projectile.tileCollide = true;
+            Projectile.ignoreWater = true;
+            Projectile.timeLeft = 70;
+            Projectile.aiStyle = -1;
+        }
+
+        public override void AI()
+        {
+            Projectile.velocity.Y = MathHelper.Min(Projectile.velocity.Y + 0.12f, 9f);
+            Projectile.rotation += 0.5f * (Projectile.velocity.X >= 0f ? 1f : -1f);
+            Lighting.AddLight(Projectile.Center, new Vector3(0.4f, 0.8f, 1.2f) * 0.6f);
+            if (Main.rand.NextBool(3))
+            {
+                Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.Frost,
+                    Main.rand.NextVector2Circular(0.5f, 0.5f), 120, default, 0.8f);
+                d.noGravity = true;
+            }
+        }
+
+        public override bool OnTileCollide(Vector2 oldVelocity)        {
+            SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.4f }, Projectile.Center);
+            for (int i = 0; i < 4; i++)
+            {
+                Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.Frost,
+                    Main.rand.NextVector2Circular(2f, 2f), 120, default, 0.9f);
+                d.noGravity = true;
+            }
+            return true;
+        }
+
+        // Рисуем сами: маленький ромбик вдоль полёта, а не вытянутую ванильную сосульку
+        public override bool PreDraw(ref Color lightColor)
+        {
+            Texture2D pixel = TextureAssets.MagicPixel.Value;
+            if (pixel == null || pixel.IsDisposed)
+                return false;
+            Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
+            float rot = dir.ToRotation();
+            Vector2 pos = Projectile.Center - Main.screenPosition;
+            Vector2 origin = new Vector2(0.5f);
+            Main.EntitySpriteDraw(pixel, pos, new Rectangle(0, 0, 1, 1),
+                new Color(140, 210, 255), rot, origin, new Vector2(16f, 7f), SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(pixel, pos, new Rectangle(0, 0, 1, 1),
+                Color.White * 0.9f, rot, origin, new Vector2(8f, 3.5f), SpriteEffects.None, 0f);
+            return false;
+        }
+    }
+}

@@ -1,0 +1,3 @@
+displayName = Wood Swords: Overhaul
+author = RodionYartsew
+version = 2.0

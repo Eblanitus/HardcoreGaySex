@@ -1,0 +1,12 @@
+ItemName: {
+	// Override vanilla item display names: wooden swords -> sticks
+	WoodenSword: Деревянная палка
+	RichMahoganySword: Палка из красного дерева
+	EbonwoodSword: Палка из эбонитового дерева
+	ShadewoodSword: Палка из мрачного дерева
+	PearlwoodSword: Палка из жемчужного дерева
+	BorealWoodSword: Палка из северного дерева
+	PalmWoodSword: Палка из пальмового дерева
+	AshWoodSword: Палка из пепельного дерева
+	CactusSword: Колючая палка
+}

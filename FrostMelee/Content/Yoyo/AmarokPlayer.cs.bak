@@ -1,0 +1,121 @@
+using Microsoft.Xna.Framework;
+using Terraria;
+using Terraria.DataStructures;
+using Terraria.ID;
+using Terraria.ModLoader;
+
+namespace FrostMelee.Content.Yoyo
+{
+    // Кнопки Амарока (ЙОЙО.md):
+    // ЛКМ держать — направление, как в игре. Отпустил — рывок домой, если ПКМ свободна.
+    // Зажать ПКМ (ЛКМ можно отпустить) — наводка: йо-йо само летит к ближайшему врагу.
+    // ЛКМ + зажать ПКМ — круг вокруг персонажа.
+    public class AmarokPlayer : ModPlayer
+    {
+        public const float HomingRange = 260f;   // наводка не дальше верёвки: 0-260 на всех режимах
+
+        public bool CircleActive;    // круг: ЛКМ зажата (канал) + ПКМ зажата
+        public bool HomingWanted;    // наводка: ПКМ зажата, ЛКМ отпущена, йо-йо выпущено
+        public int HomingTarget = -1;
+
+        public bool HoldingAmarok =>
+            !Player.HeldItem.IsAir && Player.HeldItem.type == ItemID.Amarok;
+
+        // Перчатка надета напрямую или сумкой (сумка флаг может не ставить — смотрим вещи).
+        // Слоты 3..9 — рабочие аксессуары, дальше (10+) — внешний вид, не считается
+        public bool GloveActive()
+        {
+            if (Player.yoyoGlove)
+                return true;
+            for (int i = 3; i <= 9 && i < Player.armor.Length; i++)
+            {
+                int type = Player.armor[i].type;
+                if (type == ItemID.YoYoGlove || type == ItemID.YoyoBag)
+                    return true;
+            }
+            return false;
+        }
+
+        public bool Deployed =>
+            Player.ownedProjectileCounts[ModContent.ProjectileType<AmarokYoyoProjectile>()] > 0;
+
+        public override void PreUpdate()
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return;
+
+            CircleActive = false;
+            HomingWanted = false;
+
+            if (!HoldingAmarok || Player.dead)
+            {
+                HomingTarget = -1;
+                return;
+            }
+
+            // Клики по окнам не должны жать кнопки
+            bool uiBlocked = Player.mouseInterface || Main.drawingPlayerChat || Main.blockMouse ||
+                Main.mapFullscreen || Main.gamePaused || Player.cursorItemIconEnabled ||
+                Main.SmartInteractShowingGenuine;
+            bool rmb = Main.mouseRight && !uiBlocked;
+
+            // Круг важнее: канал идёт (ЛКМ зажата) + ПКМ зажата
+            if (Player.channel && rmb)
+            {
+                CircleActive = true;
+            }
+            // Наводка: ПКМ зажата, ЛКМ отпущена — само охотится.
+            // Йо-йо не выпущено — вылетает и сразу охотится
+            else if (rmb && !Player.channel)
+            {
+                if (!Deployed)
+                {
+                    int ownType = ModContent.ProjectileType<AmarokYoyoProjectile>();
+                    Vector2 dir = (Main.MouseWorld - Player.Center).SafeNormalize(Vector2.UnitX);
+                    Projectile.NewProjectile(Player.GetSource_ItemUse(Player.HeldItem), Player.Center,
+                        dir * 12f, ownType, Player.GetWeaponDamage(Player.HeldItem),
+                        Player.HeldItem.knockBack, Player.whoAmI);
+                }
+                HomingWanted = true;
+                if (!HomingValid())
+                    HomingTarget = FindNearest();
+            }
+
+            if (!HomingWanted)
+                HomingTarget = -1;
+        }
+
+        // Ближайший враг, которого можно бить, в радиусе наводки от игрока
+        private int FindNearest()
+        {
+            int best = -1;
+            float bestDist = HomingRange;
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC n = Main.npc[i];
+                if (!n.active || n.friendly || n.dontTakeDamage || n.immortal || n.lifeMax <= 5)
+                    continue;
+                float d = Vector2.Distance(n.Center, Player.Center);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = i;
+                }
+            }
+            return best;
+        }
+
+        public bool HomingValid()
+        {
+            if (HomingTarget < 0 || HomingTarget >= Main.maxNPCs)
+                return false;
+            NPC n = Main.npc[HomingTarget];
+            return n.active && !n.friendly && !n.dontTakeDamage && !n.immortal;
+        }
+
+        public void ClearHoming()
+        {
+            HomingTarget = -1;
+        }
+    }
+}

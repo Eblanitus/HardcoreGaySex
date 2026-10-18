@@ -1,0 +1,69 @@
+Projectiles: {
+	// WoodSwordArcProjectile.DisplayName: Wood Sword Arc Projectile
+	// DaggerStabProjectile.DisplayName: Dagger Stab Projectile
+	// SpearBraceProjectile.DisplayName: Spear Brace Projectile
+	// StickThrowProjectile.DisplayName: Stick Throw Projectile
+	// DaggerCrescentProjectile.DisplayName: Dagger Crescent Projectile
+}
+
+Items: {
+	WoodDagger: {
+		DisplayName: Деревянная заточка
+		// Tooltip: ""
+	}
+
+	RedwoodDagger: {
+		DisplayName: Заточка из красного дерева
+		// Tooltip: ""
+	}
+
+	EbonwoodDagger: {
+		DisplayName: Заточка из эбонитового дерева
+		// Tooltip: ""
+	}
+
+	ShadewoodDagger: {
+		DisplayName: Заточка из мрачного дерева
+		// Tooltip: ""
+	}
+
+	PearlDagger: {
+		DisplayName: Заточка из жемчужного дерева
+		// Tooltip: ""
+	}
+
+	SnowDagger: {
+		DisplayName: Заточка из северного дерева
+		// Tooltip: ""
+	}
+
+	SandDagger: {
+		DisplayName: Заточка из пальмового дерева
+		// Tooltip: ""
+	}
+
+	HellDagger: {
+		DisplayName: Заточка из пепельного дерева
+		// Tooltip: ""
+	}
+
+	CactusDagger: {
+		DisplayName: Кактусовая заточка
+		// Tooltip: ""
+	}
+}
+
+Stance: {
+	Swing: Взмах
+	Dagger: Тычок
+	Spear: Копьё
+	Thrown: Брошено
+}
+
+ThrownTooltip: Брошено — подойди к палке, чтобы подобрать
+ControlsTooltip:
+	'''
+	ПКМ (тап): выставить копьём (урон от скорости сближения)
+	ПКМ (зажать): тычки
+	ПКМ + ЛКМ: бросок (подбери, чтобы снова пользоваться)
+	'''

@@ -1,0 +1,69 @@
+Projectiles: {
+	WoodSwordArcProjectile.DisplayName: Wood Sword Arc Projectile
+	DaggerStabProjectile.DisplayName: Dagger Stab Projectile
+	SpearBraceProjectile.DisplayName: Spear Brace Projectile
+	StickThrowProjectile.DisplayName: Stick Throw Projectile
+	DaggerCrescentProjectile.DisplayName: Dagger Crescent Projectile
+}
+
+Items: {
+	WoodDagger: {
+		DisplayName: Wooden Dagger
+		Tooltip: ""
+	}
+
+	RedwoodDagger: {
+		DisplayName: Rich Mahogany Dagger
+		Tooltip: ""
+	}
+
+	EbonwoodDagger: {
+		DisplayName: Ebonwood Dagger
+		Tooltip: ""
+	}
+
+	ShadewoodDagger: {
+		DisplayName: Shadewood Dagger
+		Tooltip: ""
+	}
+
+	PearlDagger: {
+		DisplayName: Pearlwood Dagger
+		Tooltip: ""
+	}
+
+	SnowDagger: {
+		DisplayName: Boreal Wood Dagger
+		Tooltip: ""
+	}
+
+	SandDagger: {
+		DisplayName: Palm Wood Dagger
+		Tooltip: ""
+	}
+
+	HellDagger: {
+		DisplayName: Ash Wood Dagger
+		Tooltip: ""
+	}
+
+	CactusDagger: {
+		DisplayName: Cactus Dagger
+		Tooltip: ""
+	}
+}
+
+Stance: {
+	Swing: Swing
+	Dagger: Stab
+	Spear: Brace
+	Thrown: Thrown
+}
+
+ThrownTooltip: Thrown — walk up to it to pick it up
+ControlsTooltip:
+	'''
+	Tap RMB: brace as a spear (damage from closing speed)
+	Hold RMB: quick stabs
+	RMB + LMB: throw (pick it up to use again)
+	'''

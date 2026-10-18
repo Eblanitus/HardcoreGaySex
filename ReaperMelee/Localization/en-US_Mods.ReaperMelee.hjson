@@ -1,0 +1,22 @@
+Projectiles: {
+	SickleArcProjectile.DisplayName: Sickle Arc Projectile
+	SickleStabProjectile.DisplayName: Sickle Stab Projectile
+	SickleBraceProjectile.DisplayName: Sickle Brace Projectile
+	SickleThrowProjectile.DisplayName: Sickle Throw Projectile
+}
+
+Stance: {
+	Swing: Swing
+	Stab: Stab
+	Spear: Spear
+	Thrown: Thrown
+}
+
+ThrownTooltip: Thrown — walk up to the sickle to pick it up
+ControlsTooltip:
+	'''
+	LMB: swing (arc)
+	RMB (tap): brace as a spear (damage scales with closing speed)
+	RMB (hold): stabs
+	RMB + LMB: throw (pick it up to use again)
+	'''
