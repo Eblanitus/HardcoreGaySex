@@ -455,7 +455,7 @@ namespace FrostMelee.Content.Weapons
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers) {
             // Ледяной клинок бьёт по горящим сильнее — из-за горения, а не радиуса
-            if (SwordItem == ItemID.IceBlade && target.HasBuff(BuffID.Frostburn2))
+            if (SwordItem == ItemID.IceBlade && FrostKindle.IsBurning(target))
                 modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Урон и отбрасывание от радиуса: клинком — как мечом, к краю дуги — до крошечных
             float edge = EdgeFactor(target.Hitbox);

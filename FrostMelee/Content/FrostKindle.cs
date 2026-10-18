@@ -14,7 +14,8 @@ namespace FrostMelee.Content
     // Меч только студит: каждый удар в морозном месте даёт стак «холода».
     // Морозно — это иней от взмаха под врагом, вода, дождь, снежный биом
     // или воткнутый в землю ледяной меч.
-    // Три стака — враг вспыхивает синим (ванильный Frostburn2).
+    // Три стака — враг вспыхивает: Ледяной клинок обычным Frostburn,
+    // Фростборн — хардмодным Frostbite (ванильный Frostburn2).
     // Вне мороза удар даёт ровно один стак, и тот гаснет за две секунды:
     // сколько ни бей, поджечь не выйдет.
     //
@@ -51,6 +52,25 @@ namespace FrostMelee.Content
         public const int FromBrace = 2;   // встреча (выставленный клинок)
         public const int FromThrow = 3;   // бросок
 
+        // Два тира горения: ранний Ледяной клинок жжёт обычным Frostburn,
+        // хардмодный Фростборн — Frostbite (ванильный Frostburn2, тикает больнее).
+        public static int BurnBuffFor(int itemType) =>
+            itemType == ItemID.Frostbrand ? BuffID.Frostburn2 : BuffID.Frostburn;
+
+        // «Горит» — любой из двух тиров
+        public static bool IsBurning(NPC npc) =>
+            npc != null && (npc.HasBuff(BuffID.Frostburn) || npc.HasBuff(BuffID.Frostburn2));
+
+        // Продлить текущее горение (какого бы тира оно ни было)
+        public static void ExtendBurn(NPC target, int ticks)
+        {
+            int idx = target.FindBuffIndex(BuffID.Frostburn2);
+            if (idx < 0)
+                idx = target.FindBuffIndex(BuffID.Frostburn);
+            if (idx >= 0)
+                target.buffTime[idx] = Math.Min(target.buffTime[idx] + ticks, BurnTicks + ticks);
+        }
+
         // Удар ледяным мечом по врагу. itemType — какой именно меч ударил,
         // source — каким приёмом (From*).
         public static void OnSwordHit(Player owner, NPC target, int itemType, int source = FromSwing)
@@ -70,7 +90,7 @@ namespace FrostMelee.Content
                 g.Chill = Math.Min(MaxChill, g.Chill + add);
                 g.ChillTime = ChillLife;
                 if (g.Chill >= MaxChill)
-                    Ignite(target, g);
+                    Ignite(target, g, BurnBuffFor(itemType));
             }
             else if (g.Chill <= 1)
             {
@@ -86,16 +106,14 @@ namespace FrostMelee.Content
 
             // Встреча: враг сам насадился на выставленный клинок — холод вспыхивает сразу
             if (source == FromBrace && cold && before > 0 && g.Chill > 0)
-                Ignite(target, g);
+                Ignite(target, g, BurnBuffFor(itemType));
 
-            if (target.HasBuff(BuffID.Frostburn2))
+            if (IsBurning(target))
             {
                 if (itemType == ItemID.IceBlade)
                 {
-                    int idx = target.FindBuffIndex(BuffID.Frostburn2);
-                    if (idx >= 0)
-                        target.buffTime[idx] = Math.Min(target.buffTime[idx] + IceBladeExtendTicks,
-                            BurnTicks + IceBladeExtendTicks);
+                    // Клинок продлевает горение — любого тира
+                    ExtendBurn(target, IceBladeExtendTicks);
                 }
                 else if (itemType == ItemID.Frostbrand)
                 {
@@ -159,10 +177,13 @@ namespace FrostMelee.Content
             return false;
         }
 
-        // Поджиг: синий ожог + вспышка искр
-        private static void Ignite(NPC npc, FrostKindleNPC g)
+        // Поджиг: синий ожог + вспышка искр. buffType — тир меча;
+        // слабый огонь не перебивает сильный: уже горящий Frostbite только продлеваем.
+        private static void Ignite(NPC npc, FrostKindleNPC g, int buffType)
         {
-            npc.AddBuff(BuffID.Frostburn2, BurnTicks);
+            if (buffType == BuffID.Frostburn && npc.HasBuff(BuffID.Frostburn2))
+                buffType = BuffID.Frostburn2;
+            npc.AddBuff(buffType, BurnTicks);
             g.Chill = 0;
             g.ChillTime = 0;
 
@@ -178,8 +199,8 @@ namespace FrostMelee.Content
             }
         }
 
-        // Умерший горящий поджигает соседей
-        public static void Spread(NPC dead)
+        // Умерший горящий поджигает соседей тем же тиром, каким горел сам
+        public static void Spread(NPC dead, int burnType)
         {
             float r2 = BurnSpreadRadius * BurnSpreadRadius;
             for (int i = 0; i < Main.maxNPCs; i++)
@@ -190,7 +211,7 @@ namespace FrostMelee.Content
                     continue;
                 if (Vector2.DistanceSquared(other.Center, dead.Center) > r2)
                     continue;
-                other.AddBuff(BuffID.Frostburn2, SpreadBurnTicks);
+                other.AddBuff(burnType, SpreadBurnTicks);
                 other.GetGlobalNPC<FrostKindleNPC>().Chill = 0;
             }
 
@@ -238,13 +259,13 @@ namespace FrostMelee.Content
     {
         public int Chill;       // 0..MaxChill
         public int ChillTime;   // сколько тиков ещё живёт набранное
-        public bool WasBurning;
+        public int BurnTier;    // 0 — не горит, 1 — Frostburn, 2 — Frostbite
 
         public override bool InstancePerEntity => true;
 
         public override void PostAI(NPC npc)
         {
-            WasBurning = npc.HasBuff(BuffID.Frostburn2);
+            BurnTier = npc.HasBuff(BuffID.Frostburn2) ? 2 : npc.HasBuff(BuffID.Frostburn) ? 1 : 0;
             if (ChillTime > 0)
             {
                 // Меч, застрявший в этом враге, не даёт холоду растаять
@@ -260,8 +281,8 @@ namespace FrostMelee.Content
 
         public override void OnKill(NPC npc)
         {
-            if (WasBurning)
-                FrostKindle.Spread(npc);
+            if (BurnTier > 0)
+                FrostKindle.Spread(npc, BurnTier == 2 ? BuffID.Frostburn2 : BuffID.Frostburn);
         }
     }
 

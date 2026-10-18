@@ -166,7 +166,7 @@ namespace FrostMelee.Content.Projectiles
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
             // Ледяной клинок бьёт по горящим сильнее
-            if ((int)Projectile.ai[2] == ItemID.IceBlade && target.HasBuff(BuffID.Frostburn2))
+            if ((int)Projectile.ai[2] == ItemID.IceBlade && FrostKindle.IsBurning(target))
                 modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Тычок меча спавнится с knockBack = 0 (SwordTypes.StabKnockbackMult).
             // Отключаем отбрасывание полностью, чтобы его не вернули бонусы

@@ -605,7 +605,7 @@ namespace FrostMelee.Content.Projectiles
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
             // Ледяной клинок бьёт по горящим сильнее — в том числе брошенный
-            if ((int)Projectile.ai[2] == ItemID.IceBlade && target.HasBuff(BuffID.Frostburn2))
+            if ((int)Projectile.ai[2] == ItemID.IceBlade && FrostKindle.IsBurning(target))
                 modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             cleanNpcHit = IsCleanHit(Projectile.velocity);
             if (!cleanNpcHit)
