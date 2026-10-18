@@ -107,7 +107,14 @@ namespace FrostMelee.Content.Weapons
                     continue;
 
                 float fade = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
-                Color c = Lighting.GetColor(kv.Key.X, kv.Key.Y) * (0.8f * fade);
+
+                // Прозрачность задаётся ЗДЕСЬ, а не альфой текстуры:
+                // какой бы ни пришла текстура из пакета, полоса не станет
+                // доской — альфа вызова draw ограничена CapAlpha.
+                // RGB берём из освещения мира и уводим в синеву: лёд, не мел.
+                Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
+                byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade);
+                Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
                 Main.spriteBatch.Draw(capTex.Value, world - Main.screenPosition, null, c,
                     0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
             }
