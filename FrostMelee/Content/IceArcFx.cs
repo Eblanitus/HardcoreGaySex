@@ -124,12 +124,22 @@ namespace FrostMelee.Content
         public static readonly Color FireTail = new Color(170, 205, 255);
         public static readonly Color FireEdge = new Color(90, 130, 255);
 
+        // Ледяная дымка: полупрозрачный синий, который ВИДЕН и на светлом фоне.
+        // Аддитивное свечение на снегу/небе не даёт ничего (белое + светлое = белое),
+        // поэтому у пламени есть нижний слой-вуаль: он подкрашивает то, что за ним.
+        // Альфа уходит в RGB и в A — обычный premultiplied AlphaBlend.
+        public static Color Veil(Color c, float alpha)
+        {
+            return c * Math.Clamp(alpha, 0f, 1f);
+        }
+
         // Один язык пламени: изогнутая СУЖАЮЩАЯСЯ лента из нескольких мазков.
+        // Три прохода: вуаль (видна на светлом фоне) → обод → раскалённое ядро.
         // Тонкая прямая линия читается как волосок или царапина, поэтому язык
         // обязательно гнётся (bend) и сходит на нет к концу (width → 0).
-        // origin — корень языка, dir — старт, length — длина, width — толщина у корня.
+        // veil может быть Color.Transparent — тогда проход пропускается.
         public static void DrawTongue(Texture2D glow, Vector2 origin, Vector2 dir, float bend,
-            float length, float width, Color rim, Color core)
+            float length, float width, Color veil, Color rim, Color core)
         {
             if (length < 3f || width < 0.6f)
                 return;
@@ -143,6 +153,8 @@ namespace FrostMelee.Content
                 Vector2 q = p + d * (length / Steps);
                 float w0 = Math.Max(0.5f, width * (1f - k / (float)Steps * 0.9f));
                 float w1 = Math.Max(0.4f, width * (1f - t1 * 0.9f));
+                if (veil.A > 0)
+                    DrawSegment(glow, p, q, w0 * 1.15f, w1 * 1.15f, veil);
                 DrawSegment(glow, p, q, w0, w1, rim);
                 DrawSegment(glow, p, q, w0 * 0.55f, w1 * 0.55f, core);
                 p = q;
@@ -189,13 +201,14 @@ namespace FrostMelee.Content
             {
                 for (int i = 0; i < 3; i++)
                 {
-                    float u = 0.55f + 0.17f * i;               // 0.55 .. 0.89
+                    float u = 0.52f + 0.18f * i;               // 0.52 .. 0.88
                     float flick = 0.55f + 0.45f * (float)Math.Sin(time * 4.7f + i * 2.4f + side * 1.7f);
-                    Vector2 at = Vector2.Lerp(root, tip, u) + normal * side * 2f;
+                    Vector2 at = Vector2.Lerp(root, tip, u) + normal * side * 3f;
                     Vector2 d = (dir * 0.72f + normal * side * 0.55f).SafeNormalize(dir);
-                    DrawTongue(glow, at, d, side * 0.35f, (9f + 7f * u) * flick * intensity, 2.8f,
-                        Additive(FireEdge, 0.26f * intensity * flick),
-                        Additive(FireCore, 0.30f * intensity * flick));
+                    DrawTongue(glow, at, d, side * 0.35f, (12f + 9f * u) * flick * intensity, 3.2f,
+                        Color.Transparent,
+                        Additive(FireEdge, 0.30f * intensity * flick),
+                        Additive(FireCore, 0.36f * intensity * flick));
                 }
             }
 

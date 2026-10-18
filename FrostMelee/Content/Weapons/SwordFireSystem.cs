@@ -27,7 +27,8 @@ namespace FrostMelee.Content.Weapons
     // взмах, стойка. Меч брошен (в руке пусто) — огня нет вообще.
     public class SwordFireSystem : ModSystem
     {
-        private const int Tongues = 5;          // языков вдоль клинка (в основном к острию)
+        private const int TonguesPerSide = 4;   // языков на каждой стороне клинка
+        private static readonly Color ColdVeil = new Color(40, 100, 225); // синяя дымка
         private const int Motes = 3;            // холодные искры вокруг клинка
         private const float HiltSkip = 0.16f;   // доля клинка от приклада, которая не горит
 
@@ -83,28 +84,34 @@ namespace FrostMelee.Content.Weapons
             Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp,
                 DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
 
-            // 1. Ореол: два мягких слоя. Спереди клинок остаётся чистым — весь объём
-            //    копится за силуэтом и выходит по краям.
-            DrawGlow(glow, mid, dir.ToRotation(), bladeLen * 1.06f, 21f * breathe,
-                IceArcFx.Additive(IceArcFx.FireTail, 0.14f * heat * breathe));
-            DrawGlow(glow, mid, dir.ToRotation(), bladeLen * 0.90f, 11f * breathe,
-                IceArcFx.Additive(IceArcFx.FireEdge, 0.13f * heat * breathe));
+            // 1. Дымка + ореол. Вуаль (AlphaBlend) нужна, чтобы пламя было видно
+            //    на светлом фоне — снег, небо, светлая земля: аддитив на белом не даёт
+            //    ничего, а синяя полупрозрачная дымка подкрашивает то, что за ней.
+            DrawGlow(glow, mid, dir.ToRotation(), bladeLen * 1.15f, 34f * breathe,
+                IceArcFx.Veil(ColdVeil, 0.13f * heat * breathe));
+            DrawGlow(glow, mid, dir.ToRotation(), bladeLen * 1.02f, 26f * breathe,
+                IceArcFx.Additive(IceArcFx.FireTail, 0.16f * heat * breathe));
+            DrawGlow(glow, mid, dir.ToRotation(), bladeLen * 0.88f, 13f * breathe,
+                IceArcFx.Additive(IceArcFx.FireEdge, 0.15f * heat * breathe));
 
-            // 2. Языки вдоль клинка: длинные, изогнутые, сужающиеся. У острия их
-            //    больше и они длиннее — глаз читает «пламя сдувает вперёд».
-            for (int i = 0; i < Tongues; i++)
+            // 2. Языки вдоль клинка: 4 с каждой стороны. Длинные, изогнутые,
+            //    сужающиеся — в отличие от прежних тонких прямых «волосков».
+            for (int side = -1; side <= 1; side += 2)
             {
-                float u = 0.44f + 0.13f * i;             // 0.44 .. 0.96
-                int side = i % 2 == 0 ? 1 : -1;
-                float ph = i * 1.9f;
-                float flick = 0.55f + 0.45f * (float)Math.Sin(time * 3.6f + ph);
-                float length = (18f + 18f * u) * (0.6f + 0.5f * flick) * heat;
-                float width = 3.6f + 2.0f * (1f - u);
-                Vector2 at = Vector2.Lerp(root, tip, u) + normal * side * 6f;
-                Vector2 d = (dir * 0.55f + normal * side * 0.70f + up * 0.30f).SafeNormalize(dir);
-                IceArcFx.DrawTongue(glow, at, d, side * 0.5f, length, width,
-                    IceArcFx.Additive(IceArcFx.FireEdge, 0.30f * heat * flick),
-                    IceArcFx.Additive(IceArcFx.FireLineCore, 0.34f * heat * flick));
+                for (int i = 0; i < TonguesPerSide; i++)
+                {
+                    float u = 0.25f + 0.22f * i;             // 0.25 .. 0.91
+                    float ph = i * 2.3f + side * 1.9f;
+                    float flick = 0.55f + 0.45f * (float)Math.Sin(time * 3.6f + ph);
+                    float length = (20f + 16f * u) * (0.65f + 0.45f * flick) * heat;
+                    float width = 4.2f + 2.2f * (1f - u);
+                    Vector2 at = Vector2.Lerp(root, tip, u) + normal * side * 7f;
+                    Vector2 d = (dir * 0.60f + normal * side * 0.65f + up * 0.25f).SafeNormalize(dir);
+                    IceArcFx.DrawTongue(glow, at, d, side * 0.45f, length, width,
+                        IceArcFx.Veil(ColdVeil, 0.16f * heat * flick),
+                        IceArcFx.Additive(IceArcFx.FireEdge, 0.34f * heat * flick),
+                        IceArcFx.Additive(IceArcFx.FireLineCore, 0.40f * heat * flick));
+                }
             }
 
             // 2b. Один язык сдувает назад у гарды — пламя не бывает односторонним
@@ -112,23 +119,27 @@ namespace FrostMelee.Content.Weapons
                 float flick = 0.5f + 0.5f * (float)Math.Sin(time * 3.1f + 4.4f);
                 Vector2 at = Vector2.Lerp(root, tip, 0.24f) - normal * 2f;
                 Vector2 d = (up * 0.5f - dir * 0.8f).SafeNormalize(-dir);
-                IceArcFx.DrawTongue(glow, at, d, -0.3f, 14f * flick * heat, 3.4f,
-                    IceArcFx.Additive(IceArcFx.FireEdge, 0.24f * heat * flick),
-                    IceArcFx.Additive(IceArcFx.FireLineCore, 0.28f * heat * flick));
+                IceArcFx.DrawTongue(glow, at, d, -0.3f, 18f * flick * heat, 3.8f,
+                    IceArcFx.Veil(ColdVeil, 0.12f * heat * flick),
+                    IceArcFx.Additive(IceArcFx.FireEdge, 0.26f * heat * flick),
+                    IceArcFx.Additive(IceArcFx.FireLineCore, 0.30f * heat * flick));
             }
 
-            // 3. Факел на острие — главный акцент: мягкое пятно + три языка вперёд
+            // 3. Факел на острие — главный акцент: дымка + пятно + три языка вперёд
             float pulse = 0.7f + 0.3f * (float)Math.Sin(time * 4.6f);
-            Vector2 tipPos = tip + dir * 3f;
+            Vector2 tipPos = tip + dir * 4f;
+            DrawGlow(glow, tipPos, dir.ToRotation(), 34f * pulse, 22f * pulse,
+                IceArcFx.Veil(ColdVeil, 0.14f * heat * pulse));
             DrawGlow(glow, tipPos, dir.ToRotation(), 26f * pulse, 15f * pulse,
-                IceArcFx.Additive(IceArcFx.FireEdge, 0.22f * heat * pulse));
+                IceArcFx.Additive(IceArcFx.FireEdge, 0.24f * heat * pulse));
             for (int i = -1; i <= 1; i++)
             {
                 float flick = 0.6f + 0.4f * (float)Math.Sin(time * 5.1f + i * 2.3f);
                 Vector2 d = dir.RotatedBy(i * 0.30f);
-                IceArcFx.DrawTongue(glow, tip + dir * 1.5f, d, i * 0.35f, (18f + 6f * flick) * heat, 4.4f,
-                    IceArcFx.Additive(IceArcFx.FireEdge, 0.30f * heat * flick),
-                    IceArcFx.Additive(IceArcFx.FireLineCore, 0.36f * heat * flick));
+                IceArcFx.DrawTongue(glow, tip + dir * 2f, d, i * 0.35f, (24f + 8f * flick) * heat, 4.8f,
+                    IceArcFx.Veil(ColdVeil, 0.14f * heat * flick),
+                    IceArcFx.Additive(IceArcFx.FireEdge, 0.32f * heat * flick),
+                    IceArcFx.Additive(IceArcFx.FireLineCore, 0.38f * heat * flick));
             }
 
             // 4. Холодные искры: мягкие точки, медленно кружат у клинка
@@ -137,13 +148,13 @@ namespace FrostMelee.Content.Weapons
                 float u = (i + 0.5f) / Motes;
                 float ph = i * 2.1f;
                 Vector2 at = Vector2.Lerp(root, tip, u)
-                    + normal * (float)Math.Sin(time * 1.9f + ph) * (5f + i)
-                    + up * (float)Math.Cos(time * 1.3f + ph) * 3f;
-                float size = 2.2f + 1.4f * (float)Math.Sin(time * 3.3f + ph);
+                    + normal * (float)Math.Sin(time * 1.9f + ph) * (7f + i * 2f)
+                    + up * (float)Math.Cos(time * 1.3f + ph) * 4f;
+                float size = 2.4f + 1.6f * (float)Math.Sin(time * 3.3f + ph);
                 if (size < 0.6f)
                     continue;
                 DrawGlow(glow, at, 0f, size * 2f, size * 2f,
-                    IceArcFx.Additive(IceArcFx.FireCore, 0.26f * heat));
+                    IceArcFx.Additive(IceArcFx.FireCore, 0.28f * heat));
             }
 
             Main.spriteBatch.End();
