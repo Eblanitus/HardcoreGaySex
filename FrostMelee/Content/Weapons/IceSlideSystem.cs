@@ -5,38 +5,45 @@ using Terraria.ID;
 namespace FrostMelee.Content.Weapons
 {
     // Скольжение в режиме копья с ледяным клинком.
-    // Появляется только когда игрок уже разогнался, а не просто постоял с копьём.
     //
-    // ВАЖНО: этот класс — только ПРОВЕРКА («можно ли скользить»), без побочных
-    // эффектов. Сам эффект выставляет IceSlidePlayer из PostUpdateRunSpeeds.
+    // Модель состояния (живёт в IceSlidePlayer):
+    //   ВКЛ  — CanSlide() вернул true: игрок разогнался вдоль выставленного копья.
+    //   ДЕРЖ — после включения эффект держится, пока игрок ДОКАТЫВАЕТСЯ:
+    //          скорость упала ниже порога включения, но ещё не почти нулевая,
+    //          стойка копья не снята и не истёк предохранитель по времени.
+    //   ВЫКЛ — докатился почти до нуля / снял стойку / умер / истёк предел.
     //
-    // Почему не здесь: ванильный Player.Update каждый кадр пересчитывает поля
-    // движения. Порядок такой (номера строк ванильного Player.cs):
-    //   ~14652  ResetEffects()            — статы движения сбрасываются к базовым
-    //   ~18280  ResetFloorFlags()         — slippy = false, затем выставляется из тайла под ногами
-    //   ~20594  PostUpdateRunSpeeds()     — ЕДИНСТВЕННАЯ точка, где запись ещё что-то меняет
-    //   ~20594  HorizontalMovement()      — здесь maxRunSpeed / runAcceleration / slippy расходуются
-    //   ~21811  PostUpdate()              — скорость уже потрачена
-    // Документация tModLoader по Player.maxRunSpeed и Player.runAcceleration:
-    //   «should only be modified in ModPlayer.PostUpdateRunSpeeds, ModItem.HorizontalWingSpeeds,
-    //    or ExtraJump.UpdateHorizontalSpeeds(Player) to correctly function».
-    // Запись из PostUpdate() стиралась следующим ResetEffects() и до движения не доезжала.
+    // Раньше эффект обрывался ровно в момент замедления (порог MinSpeed),
+    // поэтому вместо докатывания игрок резко «вставал» — скольжение исчезало.
+    //
+    // Почему эффект выставляется из двух хуков (PostUpdateRunSpeeds и PostUpdate):
+    //   PostUpdateRunSpeeds — гарантированно попадает в HorizontalMovement этого
+    //   же кадра (единственный хук, который ваниль читает до движения).
+    //   PostUpdate — точка, где эффект жил в старой версии: ваниль, похоже,
+    //   не пересчитывает slippy каждый кадр на твёрдой земле, и запись оттуда
+    //   переносится на следующий кадр. Дублируем флаг там, чтобы докатывание
+    //   не рвалось между кадрами.
     public static class IceSlideSystem
     {
-        // Порог скорости, ниже которого скольжения нет (px/тик).
-        // Осознанно выше базового бега (maxRunSpeed = 3f): без ботинок или маунта
-        // разогнаться до него нельзя, а на низкой скорости скольжение бессмысленно.
-        // Для справки, accRunSpeed ванильной обуви: Hermes Boots = 6f, Lightning Boots = 6.75f.
+        // Порог ВКЛЮЧЕНИЯ (px/тик): без ботинок или маунта разогнаться до него
+        // нельзя, а на низкой скорости скольжение бессмысленно. Осознанно.
+        // Для справки, accRunSpeed ванильной обуви: Hermes = 6f, Lightning = 6.75f.
         public const float MinSpeed = 4f;
 
-        // Насколько поднимается потолок скорости на время скольжения.
+        // Порог ДЕРЖАНИЯ: пока горизонтальная скорость выше этого, игрок
+        // докатывается по инерции вместо того чтобы мгновенно встать.
+        public const float CoastStopSpeed = 0.75f;
+
+        // Предохранитель: максимум тиков докатывания без повторного разгона.
+        public const int MaxCoastTicks = 180;
+
+        // Насколько поднимается потолок скорости, пока скользим.
         public const float SlideBoost = 1.15f;
 
         // Больше не используется: «трение» скольжения даёт ванильный флаг slippy.
-        // Оставлен, чтобы не ломать ссылки; можно удалить.
         public const float SlideFriction = 0.985f;
 
-        // Проверка: разогнался ли игрок вдоль выставленного копья.
+        // Проверка ВКЛЮЧЕНИЯ: разогнался ли игрок вдоль выставленного копья.
         // Ничего не меняет — только отвечает да/нет.
         public static bool CanSlide(Player player, SwordPlayer sp)
         {
@@ -60,8 +67,20 @@ namespace FrostMelee.Content.Weapons
             return true;
         }
 
+        // Проверка ДЕРЖАНИЯ: игрок уже не разгоняется, но ещё катится.
+        // Стойка и меч в руке обязательны: снял стойку — скольжение честно кончается.
+        public static bool StillCoasting(Player player, SwordPlayer sp)
+        {
+            if (player.dead) return false;
+            if (!sp.HoldingSword || player.HeldItem.type != ItemID.IceBlade) return false;
+            if (!sp.SpearMode) return false;
+            if (System.Math.Abs(player.velocity.X) < CoastStopSpeed) return false;
+            if (System.Math.Abs(player.velocity.Y) > 0.5f) return false;
+            return true;
+        }
+
         // Совместимость со старым вызовом в SwordPlayer.PostUpdate().
-        // Побочных эффектов больше нет — они переехали в IceSlidePlayer.
+        // Побочных эффектов нет — они в IceSlidePlayer.
         public static bool TrySlide(Player player, SwordPlayer sp) => CanSlide(player, sp);
     }
 }

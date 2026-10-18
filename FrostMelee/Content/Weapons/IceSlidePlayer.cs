@@ -5,46 +5,94 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Скольжение ледяного клинка: эффект, а не проверка.
+    // Скольжение ледяного клинка: состояние + эффект + визуал.
     //
-    // Стоит именно в PostUpdateRunSpeeds — это единственный хук, из которого
-    // запись в maxRunSpeed / runAcceleration / slippy доживает до HorizontalMovement().
-    // Из PostUpdate() (где вызов был раньше) она стиралась следующим ResetEffects().
+    // Состояние: Sliding. Включается от IceSlideSystem.CanSlide (разгон >= 4 px/тик
+    // вдоль выставленного копья). Держится, пока игрок докатывается
+    // (IceSlideSystem.StillCoasting), то есть замедление НЕ обрывает скольжение —
+    // отпускаешь клавиши и едешь до почти полной остановки, а не встаёшь мгновенно.
     //
-    // Что даёт:
-    //   slippy = true   — ванильный «игрок на льду». Без коньков runAcceleration *= 0.7f,
-    //                       с Ледовыми коньками (Ice Skates) *= 2.1f.
-    //                       То есть коньки стакаются с ледяным мечом сами, отдельного кода не нужно.
-    //   maxRunSpeed *= SlideBoost — потолок скорости выше обычного на время скольжения.
+    // Эффект выставляется из двух хуков (см. комментарий в IceSlideSystem):
+    //   PostUpdateRunSpeeds — slippy + потолок скорости, гарантированно в движение кадра;
+    //   PostUpdate          — дубль slippy, чтобы флаг пережил границу кадра.
     //
-    // Ощущение в итоге: разгоняешься медленнее, но уезжаешь дальше обычного.
+    // Визуал: пока скользим, вытянутый вперёд меч «намораживает» дорожку —
+    // под игроком и чуть впереди остаётся тающая глянцевая полоса (IceSlideDeco),
+    // плюс ледяная крошка из-под ног.
     public class IceSlidePlayer : ModPlayer
     {
-        private ulong lastSlideFrame;
+        public bool Sliding;
+
+        private int coastTicks;
+        private int decalTimer;
 
         public override void PostUpdateRunSpeeds()
         {
             if (Player.whoAmI != Main.myPlayer)
                 return;
 
-            if (!IceSlideSystem.CanSlide(Player, Player.GetModPlayer<SwordPlayer>()))
+            UpdateState();
+            if (!Sliding)
                 return;
 
             Player.slippy = true;
             Player.maxRunSpeed *= IceSlideSystem.SlideBoost;
 
-            // Раз в секунду — отметка, что скольжение действительно активно.
-            // Пишется в client.log, на экране не мешает. Убедившись, что работает, строку можно удалить.
-            if (Main.GameUpdateCount - lastSlideFrame >= 60)
-            {
-                lastSlideFrame = Main.GameUpdateCount;
-                Mod.Logger.Info($"[IceSlide] активен: maxRunSpeed={Player.maxRunSpeed:F2}, runAcceleration={Player.runAcceleration:F4}");
-            }
-
             if (Main.dedServ)
                 return;
 
-            // Визуал: ледяная крошка из-под ног
+            SpawnVisuals();
+        }
+
+        public override void PostUpdate()
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return;
+
+            // Дубль флага в старой точке выставления: на твёрдой земле ваниль,
+            // похоже, не сбрасывает slippy каждый кадр, и запись отсюда несёт
+            // скольжение через границу кадра — на ней держалось докатывание
+            // в версии до переноса.
+            if (Sliding)
+                Player.slippy = true;
+        }
+
+        private void UpdateState()
+        {
+            SwordPlayer sp = Player.GetModPlayer<SwordPlayer>();
+            bool was = Sliding;
+
+            if (IceSlideSystem.CanSlide(Player, sp))
+            {
+                Sliding = true;
+                coastTicks = IceSlideSystem.MaxCoastTicks;
+            }
+            else if (Sliding)
+            {
+                coastTicks--;
+                if (!IceSlideSystem.StillCoasting(Player, sp) || coastTicks <= 0)
+                    Sliding = false;
+            }
+
+            if (Sliding && !was)
+                Mod.Logger.Info($"[IceSlide] engage: vel={Player.velocity.Length():F2}");
+            else if (!Sliding && was)
+                Mod.Logger.Info($"[IceSlide] disengage: vel={Player.velocity.Length():F2}");
+        }
+
+        private void SpawnVisuals()
+        {
+            // Глянец скользкой дорожки: каждые 3 тика, чуть впереди по ходу
+            decalTimer--;
+            if (decalTimer <= 0)
+            {
+                decalTimer = 3;
+                Vector2 pos = Player.Bottom + new Vector2(Player.direction * Main.rand.NextFloat(6f, 22f), -2f);
+                Projectile.NewProjectile(Player.GetSource_FromThis(), pos, Vector2.Zero,
+                    ModContent.ProjectileType<IceSlideDeco>(), 0, 0f, Player.whoAmI);
+            }
+
+            // Ледяная крошка из-под ног
             if (Main.rand.NextBool(3))
             {
                 Vector2 foot = Player.Bottom + new Vector2(Main.rand.NextFloat(-6f, 6f), -2f);
