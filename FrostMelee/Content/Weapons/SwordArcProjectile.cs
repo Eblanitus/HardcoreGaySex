@@ -213,32 +213,10 @@ namespace FrostMelee.Content.Weapons
                 return;
             int dir = Projectile.ai[0] >= 0f ? 1 : -1;
             if (Fire) {
-                // Ледяной огонь: синее факельное пламя поднимается и мерцает
-                for (int i = 0; i < 3; i++) {
-                    float back = MathHelper.ToRadians(Main.rand.NextFloat(0f, 45f));
-                    float ang = IceArcFx.HeadAngleOf(Projectile.rotation, dir) - dir * back;
-                    Vector2 at = center + ang.ToRotationVector2() * radius * Main.rand.NextFloat(0.9f, 1.06f);
-                    Dust d = Dust.NewDustPerfect(at, DustID.BlueTorch,
-                        Main.rand.NextVector2Circular(0.6f, 0.3f) - new Vector2(0f, 0.7f), 100, default,
-                        Main.rand.NextFloat(1.0f, 1.6f));
-                    d.noGravity = true;
-                    d.fadeIn = 0.5f;
-                }
-                // Плюс сам клинок горит: язычки вдоль настоящего лезвия
-                if (GetBladeLine(player, out Vector2 butt, out Vector2 tip)) {
-                    Vector2 bladeDir = (tip - butt).SafeNormalize(Vector2.UnitX);
-                    for (int i = 0; i < 2; i++) {
-                        float t = Main.rand.NextFloat(0.1f, 1f);
-                        Dust d = Dust.NewDustPerfect(Vector2.Lerp(butt, tip, t), DustID.BlueTorch,
-                            bladeDir * Main.rand.NextFloat(-0.1f, 0.3f)
-                                + new Vector2(0f, Main.rand.NextFloat(-0.8f, -0.4f)),
-                            110, default, Main.rand.NextFloat(1.1f, 1.7f));
-                        d.noGravity = true;
-                    }
-                    Dust tipFlame = Dust.NewDustPerfect(tip, DustID.BlueTorch,
-                        bladeDir * 0.4f - new Vector2(0f, 0.6f), 100, default, 1.8f);
-                    tipFlame.noGravity = true;
-                }
+                // Ледяной огонь на дуге целиком рисуется (IceArcFx.DrawFlameSpots и
+                // DrawBladeFireLine). Ванильная пыль BlueTorch — это повёрнутые
+                // ромбики-язычки: по дуге и по клинку они читались как алмазная
+                // крошка, поэтому убраны.
                 return;
             }
             for (int i = 0; i < 2; i++) {

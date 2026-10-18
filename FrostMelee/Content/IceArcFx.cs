@@ -124,10 +124,36 @@ namespace FrostMelee.Content
         public static readonly Color FireTail = new Color(170, 205, 255);
         public static readonly Color FireEdge = new Color(90, 130, 255);
 
-        // Ледяной огонь Frostbrand НА клинке — передний слой, рисуется поверх спрайта.
-        // Тонкое раскалённое ядро по оси + мерцающие языки по кромке + вспышка на острие.
-        // butt/tip — мировые координаты приклада и острия; intensity 0..1 — общая яркость.
-        // Вызывать при ОТКРЫТОМ spriteBatch (как остальные функции этого класса).
+        // Один язык пламени: изогнутая СУЖАЮЩАЯСЯ лента из нескольких мазков.
+        // Тонкая прямая линия читается как волосок или царапина, поэтому язык
+        // обязательно гнётся (bend) и сходит на нет к концу (width → 0).
+        // origin — корень языка, dir — старт, length — длина, width — толщина у корня.
+        public static void DrawTongue(Texture2D glow, Vector2 origin, Vector2 dir, float bend,
+            float length, float width, Color rim, Color core)
+        {
+            if (length < 3f || width < 0.6f)
+                return;
+            const int Steps = 5;
+            Vector2 p = origin;
+            Vector2 d = dir.SafeNormalize(Vector2.UnitX);
+            for (int k = 0; k < Steps; k++)
+            {
+                float t1 = (k + 1) / (float)Steps;
+                d = d.RotatedBy(bend / Steps);
+                Vector2 q = p + d * (length / Steps);
+                float w0 = Math.Max(0.5f, width * (1f - k / (float)Steps * 0.9f));
+                float w1 = Math.Max(0.4f, width * (1f - t1 * 0.9f));
+                DrawSegment(glow, p, q, w0, w1, rim);
+                DrawSegment(glow, p, q, w0 * 0.55f, w1 * 0.55f, core);
+                p = q;
+            }
+        }
+
+        // Ледяной огонь Frostbrand НА клинке — передний слой, поверх спрайта.
+        // Раскалённая ЖИЛКА по оси (волнистая, сужается к острию) + два языка у
+        // острия. Никаких прямых линий поперёк кромки: на 2× зуме они выглядели
+        // начёсом из волосков, а не пламенем.
+        // butt/tip — мировые координаты приклада и острия; intensity 0..1.
         public static void DrawBladeFireLine(Vector2 butt, Vector2 tip, float intensity)
         {
             if (intensity <= 0.02f)
@@ -142,38 +168,41 @@ namespace FrostMelee.Content
             Vector2 normal = new Vector2(-dir.Y, dir.X);
             Vector2 root = Vector2.Lerp(butt, tip, 0.16f);   // рукоять не горит
             float time = Main.GlobalTimeWrappedHourly;
-            float breathe = 0.85f + 0.15f * (float)Math.Sin(time * 3.3f);
 
-            // Ядро: широкий сиреневый обод + узкая светлая сердцевина. Два мазка вместо
-            // одного — лезвие читается «раскалённым», а не подкрашенным.
-            DrawSegment(glow, root, tip, 3.6f, 1.8f, Additive(FireLineRim, 0.20f * intensity * breathe));
-            DrawSegment(glow, Vector2.Lerp(root, tip, 0.06f), Vector2.Lerp(root, tip, 0.86f),
-                2.0f, 1.0f, Additive(FireLineCore, 0.28f * intensity * breathe));
+            // Сердцевина: три мазка с бегущей волной, к острию тоньше
+            Vector2 prev = root;
+            for (int k = 1; k <= 3; k++)
+            {
+                float u = k / 3f;
+                float wave = (float)Math.Sin(time * 2.4f + u * 6f) * 1.1f * (float)Math.Sin(Math.PI * u);
+                Vector2 at = Vector2.Lerp(root, tip, u) + normal * wave;
+                float w0 = MathHelper.Lerp(3.4f, 1.2f, (k - 1) / 3f);
+                float w1 = MathHelper.Lerp(3.4f, 1.2f, u);
+                DrawSegment(glow, prev, at, w0, w1, Additive(FireLineRim, 0.15f * intensity));
+                DrawSegment(glow, prev, at, w0 * 0.55f, w1 * 0.55f, Additive(FireLineCore, 0.20f * intensity));
+                prev = at;
+            }
 
-            // Языки по кромке: отгибаются назад (к рукояти) — как у пламени на ветру
-            const int PerSide = 4;
+            // Языки по кромке — три с каждой стороны, тянутся вперёд вдоль лезвия.
+            // Широкие и сужающиеся: тонкие линии читались как волоски.
             for (int side = -1; side <= 1; side += 2)
             {
-                for (int i = 0; i < PerSide; i++)
+                for (int i = 0; i < 3; i++)
                 {
-                    float u = (i + 0.5f) / PerSide;
-                    float t = 0.18f + 0.78f * u;
-                    float flick = 0.5f + 0.5f * (float)Math.Sin(time * 6.1f + i * 2.3f + side);
-                    if (flick < 0.35f)
-                        continue;
-                    float length = (4f + 7f * u) * flick;
-                    Vector2 at = Vector2.Lerp(root, tip, t) + normal * side * 1.5f;
-                    Vector2 apex = at + (normal * side * 0.8f - dir * 0.6f).SafeNormalize(normal * side) * length;
-                    DrawSegment(glow, at, apex, 1.8f, 0.4f, Additive(FireEdge, 0.34f * intensity * flick));
-                    DrawSegment(glow, Vector2.Lerp(at, apex, 0.2f), Vector2.Lerp(at, apex, 0.85f),
-                        1.0f, 0.3f, Additive(FireCore, 0.40f * intensity * flick));
+                    float u = 0.55f + 0.17f * i;               // 0.55 .. 0.89
+                    float flick = 0.55f + 0.45f * (float)Math.Sin(time * 4.7f + i * 2.4f + side * 1.7f);
+                    Vector2 at = Vector2.Lerp(root, tip, u) + normal * side * 2f;
+                    Vector2 d = (dir * 0.72f + normal * side * 0.55f).SafeNormalize(dir);
+                    DrawTongue(glow, at, d, side * 0.35f, (9f + 7f * u) * flick * intensity, 2.8f,
+                        Additive(FireEdge, 0.26f * intensity * flick),
+                        Additive(FireCore, 0.30f * intensity * flick));
                 }
             }
 
-            // Вспышка на острие: крест из двух лучей + белая точка
-            float pulse = 0.62f + 0.38f * (float)Math.Sin(time * 5.7f);
-            DrawSparkle(glow, tip, 16f * pulse, dir.ToRotation(), 2,
-                Additive(FireLineRim, 0.28f * intensity), Additive(FireCore, 0.45f * intensity * pulse));
+            // Острие: мягкая точка + короткий крест
+            float pulse = 0.65f + 0.35f * (float)Math.Sin(time * 5.3f);
+            DrawSparkle(glow, tip, 12f * pulse, dir.ToRotation(), 2,
+                Additive(FireLineRim, 0.22f * intensity), Additive(FireCore, 0.35f * intensity * pulse));
         }
 
         // Аддитивный цвет: альфа уходит в яркость RGB (A = 0), альфа экрана не трогается

@@ -68,7 +68,6 @@ namespace FrostMelee.Content.Weapons
         // Горит там, где меч нарисован СЕЙЧАС: позу отдаёт TryGetBladeLine (замах,
         // тычок, встреча, взмах, стойка). Брошенный меч не горит — в руке пусто.
         // Во взмахе пыль по клинку уже сыплет дуга, поэтому здесь мы молчим.
-        private int fireDustCooldown;
         private static readonly Color FireLight = new Color(0.1f, 0.5f, 0.65f);
 
         public bool HoldingSword =>
@@ -362,8 +361,9 @@ namespace FrostMelee.Content.Weapons
             return true;
         }
 
-        // Постоянное свечение горящего клинка: пыль вдоль РЕАЛЬНОГО клинка
-        // (его позу отдаёт TryGetBladeLine) + холодный свет.
+        // Постоянное свечение горящего клинка: холодный СВЕТ по РЕАЛЬНОЙ линии
+        // лезвия (её отдаёт TryGetBladeLine). Само пламя рисуют IceArcFx и
+        // SwordFireSystem — на пыли его больше нет.
         private void UpdateHeldFire()
         {
             if (Player.itemAnimation > 0)
@@ -372,29 +372,11 @@ namespace FrostMelee.Content.Weapons
                 return;
             if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
                 return; // брошен / рука пустая / позы нет — нечего жечь
-            if (--fireDustCooldown > 0)
-                return;
-            fireDustCooldown = 2;
 
-            Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
-            // Язычок: рождается на клинке (гуще у острия) и поднимается выше.
-            // Размер и яркость держим скромными: крупные синие кляксы мылили картинку
-            // в туман — резкие языки теперь рисует сам слой огня (IceArcFx/SwordFireSystem).
-            float t = Main.rand.NextFloat(0.22f, 1f);
-            Vector2 at = Vector2.Lerp(butt, tip, t);
-            Dust tongue = Dust.NewDustPerfect(at, DustID.BlueTorch,
-                dir * Main.rand.NextFloat(0.3f, 0.7f) + new Vector2(0f, Main.rand.NextFloat(-0.9f, -0.45f)),
-                130, default, Main.rand.NextFloat(0.75f, 1.15f));
-            tongue.noGravity = true;
-            // Вспышка на острие
-            Dust tipFlame = Dust.NewDustPerfect(tip, DustID.BlueTorch,
-                new Vector2(Player.direction * 0.2f, -0.6f), 110, default, 1.25f);
-            tipFlame.noGravity = true;
-            // Мягкое холодное сияние вокруг горящего клинка (полупрозрачное, не пятно)
-            Dust aura = Dust.NewDustPerfect(Vector2.Lerp(butt, tip, 0.6f),
-                DustID.BlueTorch, new Vector2(Player.direction * 0.1f, -0.2f), 160, default, 1.0f);
-            aura.noGravity = true;
-            aura.alpha = 165;
+            // Пыли здесь больше нет. Ванильная DustID.BlueTorch — это маленький
+            // ПОВЁРНУТЫЙ язычок-ромбик: по клинку она рассыпалась алмазной крошкой
+            // и читалась как мусор, а не как пламя. Весь огонь теперь рисуется
+            // (IceArcFx.DrawBladeFireLine + SwordFireSystem), от пыли остался свет.
             Lighting.AddLight(Vector2.Lerp(butt, tip, 0.6f), FireLight.R / 255f, FireLight.G / 255f, FireLight.B / 255f);
         }
 
