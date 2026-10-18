@@ -110,10 +110,10 @@ namespace FrostMelee.Content
             if (length < 8f)
                 return;
             Vector2 normal = new Vector2(-axis.Y, axis.X);
+            // Сторона лезвия, что смотрит в НЕБО: с неё языки и дымают вверх
+            Vector2 upSide = normal.Y <= 0f ? normal : -normal;
             float time = Main.GlobalTimeWrappedHourly;
             float rot = axis.ToRotation();
-            // Спрайт смотрит вверх — поворот +90° кладёт языки вдоль оси клинка к острию
-            float flameRot = rot + MathHelper.PiOver2;
             float extra = FrostKindle.MaxReachCharges * FrostKindle.IceTipPerCharge * h;
             // Пульс — огонь живой, яркость дышит
             float pulse = 0.92f + 0.16f * (float)Math.Sin(time * 5.3);
@@ -138,22 +138,25 @@ namespace FrostMelee.Content
             if (flame == null)
                 return;
 
-            // 2) Языки вдоль клинка: основание на лезвии, тело — к острию.
-            // Крупные, чтобы читались и на одном заряде. К концу чуть меньше,
-            // чтобы грива у острия была ясно главной.
-            int tongues = 3 + (int)Math.Round(3f * h);
+            // 2) Языки стоят на лезвии и дымят ВВЕРХ к небу (как пламя на клинке),
+            // слегка наклонённые к острию. Основание — на линии клинка.
+            int tongues = 4 + (int)Math.Round(4f * h);
             for (int i = 0; i < tongues; i++)
             {
                 float s = (i + 1f) / (tongues + 1f);
                 float seed = i * 2.399f;
-                float wob = (float)Math.Sin(time * (2.4f + 0.32f * i) + seed);
-                float wob2 = (float)Math.Sin(time * (3.8f + 0.45f * i) + seed * 1.7f);
+                float wob = (float)Math.Sin(time * (3.1f + 0.4f * i) + seed);
+                float wob2 = (float)Math.Sin(time * (5.3f + 0.6f * i) + seed * 1.7f);
                 Vector2 pos = Vector2.Lerp(butt, tip, s)
-                    + normal * (wob * (2.5f + 4f * h) * (0.35f + 0.65f * s))
                     + axis * (wob2 * (1.5f + 2.5f * h));
-                float hgt = length * (0.55f + 0.35f * h) * (1.15f - 0.45f * s) * (0.92f + 0.08f * wob);
-                float wid = (14f + 16f * h) * (0.75f + 0.35f * s);
-                float r = flameRot + wob * 0.18f;
+                // Направление огня: вверх по миру + чуть к острию; качается
+                Vector2 dir = (upSide * 0.78f + axis * (0.28f + 0.10f * wob))
+                    .SafeNormalize(-Vector2.UnitY);
+                float hgt = (14f + 26f * h + length * (0.22f + 0.20f * h))
+                    * (0.80f + 0.35f * s) * (0.85f + 0.15f * wob);
+                float wid = (13f + 15f * h) * (0.75f + 0.30f * s);
+                // спрайт смотрит вверх — поворот, который кладёт его в направлении dir
+                float r = dir.ToRotation() + MathHelper.PiOver2 + wob * 0.22f;
                 // синий ореол шире → сам пиксельный язык (в нём уже ядро и кромка)
                 Add(flame, pos, A(IceEdge, 0.45f * power), r,
                     new Vector2(wid * 1.45f / flame.Width, hgt * 1.05f / flame.Height), baseOrigin);
@@ -162,21 +165,24 @@ namespace FrostMelee.Content
             }
 
             // 3) Грива за остриём — та часть огня, что даёт длину.
-            // Пять языков веером, основания у самого острия, центральный самый длинный.
+            // Вытянута ПО линии жала (чтобы длина читалась), но живёт и качается:
+            // основания цепляются за остриё, тянутся за ним вверх-вперёд.
             float plumeH = extra + 20f + 36f * h;
             float[] sideAngle = { -0.42f, -0.20f, 0f, 0.20f, 0.42f };
             float[] sideH = { 0.55f, 0.75f, 1f, 0.80f, 0.60f };
             float[] sideOff = { -0.9f, -0.4f, 0f, 0.4f, 0.9f };
             for (int k = 0; k < 5; k++)
             {
-                float wob = (float)Math.Sin(time * (3.1f + 0.55f * k) + k * 2.1f);
-                Vector2 dir = axis.RotatedBy(sideAngle[k] * 0.5f);
+                float wob = (float)Math.Sin(time * (3.6f + 0.55f * k) + k * 2.1f);
                 Vector2 pos = tip
                     + axis * (2f * h)
-                    + normal * (sideOff[k] * (7f + 7f * h) + wob * (1.5f + 2f * h));
-                float hgt = plumeH * sideH[k] * (0.90f + 0.10f * wob);
+                    + normal * (sideOff[k] * (6f + 6f * h));
+                // ось жала, свёрнутая к небу — огонь и вдоль длины, и вверх
+                Vector2 dir = (axis * 0.55f - Vector2.UnitY * 0.50f
+                    + normal * (sideAngle[k] * 0.8f)).SafeNormalize(-Vector2.UnitY);
+                float hgt = plumeH * sideH[k] * (0.85f + 0.20f * wob);
                 float wid = (15f + 16f * h) * sideH[k];
-                float r = rot + MathHelper.PiOver2 + sideAngle[k] + wob * 0.14f;
+                float r = dir.ToRotation() + MathHelper.PiOver2 + wob * 0.16f;
                 Add(flame, pos, A(IceEdge, 0.48f * power), r,
                     new Vector2(wid * 1.4f / flame.Width, hgt * 1.04f / flame.Height), baseOrigin);
                 Add(flame, pos, A(Color.White, 0.95f * power), r,
