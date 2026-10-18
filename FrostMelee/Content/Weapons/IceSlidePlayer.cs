@@ -119,6 +119,9 @@ namespace FrostMelee.Content.Weapons
             // Ледяной слой на сетке тайлов: отметки под ногами и чуть по ходу.
             // IceSheetSystem нарисует их в PostDrawTiles поверх любых блоков,
             // но до игрока — слой лежит на поверхности, а не висит над ней.
+            if (Main.GameUpdateCount % 60 == 0)
+                Mod.Logger.Info("[IceSheet] скольжение активно, ставлю метки глазури");
+
             int y = (int)((Player.Bottom.Y + 2f) / 16f);
             int x0 = (int)((Player.Left.X - 2f) / 16f);
             int x1 = (int)((Player.Right.X + 2f) / 16f);

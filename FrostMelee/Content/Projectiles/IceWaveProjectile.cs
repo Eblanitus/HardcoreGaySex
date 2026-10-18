@@ -52,6 +52,7 @@ namespace FrostMelee.Content.Projectiles
             if (Projectile.localAI[0] == 0f) {
                 Projectile.localAI[0] = 1f;
                 Projectile.timeLeft = maxTicks + 10;
+                Mod.Logger.Info($"[Wave] волна живая: long={longWave}, pos={Projectile.Center}");
                 // звук льда
                 SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.5f, Pitch = 0.3f }, Projectile.Center);
             }
@@ -87,6 +88,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
                     Main.rand.NextFloat(1f), 0f);
+                Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
             }
 
             // Гребень: куски льда вперёд по ходу
@@ -159,6 +161,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
                     Main.rand.NextFloat(1f), 0f);
+                Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
             }
         }
 

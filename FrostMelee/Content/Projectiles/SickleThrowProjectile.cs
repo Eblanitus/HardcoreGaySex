@@ -435,6 +435,7 @@ namespace FrostMelee.Content.Projectiles
 
         private void SpawnIceWave(int itemType, bool isKill)
         {
+            Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
             if (itemType != ItemID.IceBlade) return;
             // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;

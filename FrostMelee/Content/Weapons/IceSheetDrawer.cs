@@ -29,10 +29,17 @@ namespace FrostMelee.Content.Weapons
 
         public override void AI()
         {
+            if (Projectile.localAI[0] == 0f)
+            {
+                Projectile.localAI[0] = 1f;
+                Mod.Logger.Info("[IceSheet] художник создан");
+            }
+
             IceSheetSystem.PurgeExpired();
 
             if (!IceSheetSystem.Any)
             {
+                Mod.Logger.Info("[IceSheet] художник умер: меток нет");
                 Projectile.Kill();
                 return;
             }
