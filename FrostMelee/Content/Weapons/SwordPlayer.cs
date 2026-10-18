@@ -278,9 +278,14 @@ namespace FrostMelee.Content.Weapons
         // замах броска → тычок → встреча → взмах → стойка (Weapon Out Lite).
         // false — меча в руке нет, он брошен, или рука уже пустая (выброс броска):
         // гореть нечему.
+        // Линию отдал снаряд (тычок/встреча): он рисует меч сам и сам рисует наледь —
+        // слою игрока в этот момент рисовать не надо, иначе лёд ляжет дважды
+        public bool BladeLineIsProjectile;
+
         public bool TryGetBladeLine(out Vector2 butt, out Vector2 tip)
         {
             butt = tip = default;
+            BladeLineIsProjectile = false;
             if (!HoldingSword || Player.dead)
                 return false;
             // Брошенный экземпляр лежит в мире — в руке пусто
@@ -305,10 +310,16 @@ namespace FrostMelee.Content.Weapons
 
             // 3. Тычок: снаряд держит меч у кисти и знает своё направление
             if (TryGetStanceBladeLine(ModContent.ProjectileType<SwordStabProjectile>(), out butt, out tip))
+            {
+                BladeLineIsProjectile = true;
                 return true;
+            }
             // 4. Встреча: выставленный меч
             if (TryGetStanceBladeLine(ModContent.ProjectileType<SickleBraceProjectile>(), out butt, out tip))
+            {
+                BladeLineIsProjectile = true;
                 return true;
+            }
             // 5. Взмах: настоящая ванильная поза (itemLocation/itemRotation)
             if (Player.itemAnimation > 0 && SwordArcProjectile.GetBladeLine(Player, out butt, out tip))
                 return true;
@@ -353,8 +364,7 @@ namespace FrostMelee.Content.Weapons
             Vector2 dir = projType == ModContent.ProjectileType<SwordStabProjectile>()
                 ? proj.velocity.SafeNormalize(Vector2.UnitX)
                 : Vector2.UnitX.RotatedBy(proj.ai[1]);
-            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f
-                * FrostKindle.SwordScale(Player, (int)proj.ai[2]);
+            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f;
             butt = proj.Center - dir * half;
             tip = proj.Center + dir * half;
             return true;

@@ -38,10 +38,10 @@ namespace FrostMelee.Content
         public const float IceBladeDamageMult = 1.18f;
         public const int IceBladeExtendTicks = 60; // +1 с
 
-        // Frostbrand: за каждого горящего, которого ударил, меч становится крупнее и длиннее.
-        // Растёт сам клинок — и в руке, и в тычке, встрече, броске; дуга считается от него
-        // и потому тоже становится больше.
-        public const float GrowthPerCharge = 0.05f; // +5 % к размеру меча за заряд
+        // Frostbrand: за каждого горящего, которого ударил, на клинке нарастает лёд.
+        // Спрайт не растягивается: иней ползёт по лезвию от острия к рукояти,
+        // а за остриём вырастает ледяное жало — оно и даёт прибавку длины.
+        public const float IceTipPerCharge = 3f;  // px льда за остриём на заряд
         public const int MaxReachCharges = 5;
         public const int ReachLife = 480;          // 8 с живёт заряд
         public const float BurnSpreadRadius = 60f; // умерший горящий поджигает соседей
@@ -59,13 +59,11 @@ namespace FrostMelee.Content
         public static int BurnBuffFor(int itemType) =>
             itemType == ItemID.Frostbrand ? BuffID.Frostburn2 : BuffID.Frostburn;
 
-        // Во сколько раз меч сейчас крупнее обычного (1 — обычный размер)
-        public static float SwordScale(Player p, int itemType)
-        {
-            if (p == null || !p.active || itemType != ItemID.Frostbrand)
-                return 1f;
-            return 1f + p.GetModPlayer<FrostKindlePlayer>().ReachCharges * GrowthPerCharge;
-        }
+        // Насколько меч оброс льдом: 0 — чистый, 1 — все заряды
+        public static float Growth01(Player p) =>
+            p == null || !p.active
+                ? 0f
+                : p.GetModPlayer<FrostKindlePlayer>().ReachCharges / (float)MaxReachCharges;
 
         // «Горит» — любой из двух тиров
         public static bool IsBurning(NPC npc) =>
@@ -301,14 +299,6 @@ namespace FrostMelee.Content
     {
         private readonly int[] reachNpc = new int[FrostKindle.MaxReachCharges];
         private readonly long[] reachUntil = new long[FrostKindle.MaxReachCharges];
-
-        // Меч в руке рисует ванилла через GetAdjustedItemScale — растим его здесь,
-        // чтобы длина была видна и в стойке, и в замахе, и в дуге.
-        public override void ModifyItemScale(Item item, ref float scale)
-        {
-            if (item.type == ItemID.Frostbrand)
-                scale *= FrostKindle.SwordScale(Player, item.type);
-        }
 
         public int ReachCharges
         {

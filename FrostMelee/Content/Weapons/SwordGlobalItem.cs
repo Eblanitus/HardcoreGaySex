@@ -89,9 +89,11 @@ public class SwordGlobalItem : GlobalItem
 
             // Frostbrand растёт от горящих: масштаб клинка уже увеличен (ModPlayer.ModifyItemScale),
             // поэтому дуга и зона полного урона считаются от подросшего меча сами.
-            float baseReach = bladeLength * adjustedItemScale + SwordArcProjectile.HandReach;
+            // Лёд на клинке удлиняет его: дуга считается от длины вместе с ледяным жалом
+            float grownLength = bladeLength + FrostGrowth.TipExtra(player, item.type);
+            float baseReach = grownLength * adjustedItemScale + SwordArcProjectile.HandReach;
 
-            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength;
+            float finalScale = adjustedItemScale * grownLength / ArcSizeLength;
 
             int arcIndex = Projectile.NewProjectile(
                 source,
