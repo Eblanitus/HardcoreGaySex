@@ -177,7 +177,7 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, (int)Projectile.ai[2]);
+            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, (int)Projectile.ai[2], FrostKindle.FromStab);
         }
 
         public override bool PreDraw(ref Color lightColor)

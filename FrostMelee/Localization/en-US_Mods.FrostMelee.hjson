@@ -25,6 +25,8 @@ IceBladeKindleTooltip:
 	Chills enemies struck in frost, water, rain or a snow biome.
 	Three chills set them ablaze with cold fire.
 	Deals 18% more damage to burning enemies and makes the burn last 1s longer.
+	Stabs lay two chills; a chilled enemy that runs onto the braced blade ignites;
+	a sword stuck in the ground freezes everything around it.
 	'''
 FrostbrandKindleTooltip:
 	'''
@@ -32,6 +34,8 @@ FrostbrandKindleTooltip:
 	Three chills set them ablaze with cold fire.
 	Each burning enemy struck lengthens the swing by 5px (up to 5 charges, 8s each).
 	A burning enemy that dies ignites those nearby.
+	Stabs lay two chills; a chilled enemy that runs onto the braced blade ignites;
+	a sword stuck in the ground freezes everything around it.
 	'''
 YoyoControlsTooltip:
 	'''

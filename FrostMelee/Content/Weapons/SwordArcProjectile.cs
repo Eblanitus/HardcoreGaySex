@@ -474,7 +474,7 @@ namespace FrostMelee.Content.Weapons
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
             // Холод/поджиг и заряды Frostbrand за горящих
-            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, SwordItem);
+            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, SwordItem, FrostKindle.FromSwing);
         }
 
         public override void OnHitPlayer(Player target, Player.HurtInfo info) {

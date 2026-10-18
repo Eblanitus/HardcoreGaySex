@@ -4,6 +4,7 @@ using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
 using FrostMelee.Content.Projectiles;
+using FrostMelee.Content.Weapons;
 
 namespace FrostMelee.Content
 {
@@ -11,10 +12,17 @@ namespace FrostMelee.Content
     //
     // Прямой удар его НЕ вешает — иначе любой моб горит с первого тычка.
     // Меч только студит: каждый удар в морозном месте даёт стак «холода».
-    // Морозно — это иней от взмаха под врагом, вода, дождь или снежный биом.
+    // Морозно — это иней от взмаха под врагом, вода, дождь, снежный биом
+    // или воткнутый в землю ледяной меч.
     // Три стака — враг вспыхивает синим (ванильный Frostburn2).
     // Вне мороза удар даёт ровно один стак, и тот гаснет за две секунды:
     // сколько ни бей, поджечь не выйдет.
+    //
+    // Свойства приёмов (у каждого своя роль):
+    // * взмах  — широкий холод по всем, кого задел;
+    // * тычок  — два холода за укол: одиночную цель поджигает вдвое быстрее;
+    // * встреча — враг сам насадился на выставленный клинок: уже остывший вспыхивает сразу;
+    // * бросок — воткнутый меч морозит вокруг себя, а застрявший во враге держит на нём холод.
     public static class FrostKindle
     {
         public const int MaxChill = 3;
@@ -34,19 +42,31 @@ namespace FrostMelee.Content
         public const int MaxReachCharges = 5;
         public const int ReachLife = 480;          // 8 с живёт заряд
         public const float BurnSpreadRadius = 60f; // умерший горящий поджигает соседей
+        public const int StabStacks = 2;           // тычок кладёт два холода за укол
+        public const float LodgedColdRadius = 60f; // воткнутый меч морозит вокруг себя
 
-        // Удар ледяным мечом по врагу. itemType — какой именно меч ударил.
-        public static void OnSwordHit(Player owner, NPC target, int itemType)
+        // Каким приёмом нанесён удар
+        public const int FromSwing = 0;   // взмах (дуга)
+        public const int FromStab = 1;    // тычок
+        public const int FromBrace = 2;   // встреча (выставленный клинок)
+        public const int FromThrow = 3;   // бросок
+
+        // Удар ледяным мечом по врагу. itemType — какой именно меч ударил,
+        // source — каким приёмом (From*).
+        public static void OnSwordHit(Player owner, NPC target, int itemType, int source = FromSwing)
         {
             if (owner == null || target == null || !target.active || target.friendly || target.immortal)
                 return;
 
             FrostKindleNPC g = target.GetGlobalNPC<FrostKindleNPC>();
             bool cold = IsCold(owner, target);
+            int before = g.Chill;
 
             if (cold)
             {
-                int add = owner.ZoneSnow ? SnowStacks : 1;
+                int add = source == FromStab ? StabStacks : 1;
+                if (owner.ZoneSnow)
+                    add *= SnowStacks;
                 g.Chill = Math.Min(MaxChill, g.Chill + add);
                 g.ChillTime = ChillLife;
                 if (g.Chill >= MaxChill)
@@ -64,6 +84,10 @@ namespace FrostMelee.Content
                 g.ChillTime = LoneChillLife;
             }
 
+            // Встреча: враг сам насадился на выставленный клинок — холод вспыхивает сразу
+            if (source == FromBrace && cold && before > 0 && g.Chill > 0)
+                Ignite(target, g);
+
             if (target.HasBuff(BuffID.Frostburn2))
             {
                 if (itemType == ItemID.IceBlade)
@@ -75,7 +99,8 @@ namespace FrostMelee.Content
                 }
                 else if (itemType == ItemID.Frostbrand)
                 {
-                    // Фростборн растёт от горящих: по одному заряду на врага
+                    // Фростборн растёт от горящих: по одному заряду на врага,
+                    // каким бы приёмом его ни ударили — длина проявится на взмахе
                     owner.GetModPlayer<FrostKindlePlayer>().AddReachCharge(target.whoAmI);
                 }
             }
@@ -92,8 +117,46 @@ namespace FrostMelee.Content
                 return true;
             if (owner != null && owner.ZoneSnow)
                 return true;
+            // Воткнутый рядом ледяной меч морозит сам по себе
+            if (LodgedSwordNear(npc.Center, npc.width * 0.5f + LodgedColdRadius))
+                return true;
             // Иней от взмаха: свои же снежные полосы под ногами
             return FrostTrailSystem.AnyNear(npc.Center, npc.width * 0.5f + ColdRadius);
+        }
+
+        // --- Воткнутые ледяные мечи: источник холода и «якорь» для стаков ---
+
+        private static bool IsLodgedSword(Projectile p) =>
+            p != null && p.active && p.type == ModContent.ProjectileType<SickleThrowProjectile>() &&
+            SwordTypes.IsSwordId((int)p.ai[2]) && p.velocity == Vector2.Zero;
+
+        public static bool LodgedSwordNear(Vector2 point, float radius)
+        {
+            float r2 = radius * radius;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (!IsLodgedSword(p))
+                    continue;
+                if (Vector2.DistanceSquared(p.Center, point) <= r2)
+                    return true;
+            }
+            return false;
+        }
+
+        public static bool SwordStuckIn(NPC npc)
+        {
+            Rectangle box = npc.Hitbox;
+            box.Inflate(12, 12);
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (!IsLodgedSword(p) || (int)p.ai[0] != npc.whoAmI)
+                    continue;
+                if (box.Contains(p.Center.ToPoint()))
+                    return true;
+            }
+            return false;
         }
 
         // Поджиг: синий ожог + вспышка искр
@@ -182,8 +245,14 @@ namespace FrostMelee.Content
         public override void PostAI(NPC npc)
         {
             WasBurning = npc.HasBuff(BuffID.Frostburn2);
-            if (ChillTime > 0 && --ChillTime == 0)
-                Chill = 0;
+            if (ChillTime > 0)
+            {
+                // Меч, застрявший в этом враге, не даёт холоду растаять
+                if (ChillTime == 1 && FrostKindle.SwordStuckIn(npc))
+                    ChillTime = FrostKindle.ChillLife;
+                else if (--ChillTime == 0)
+                    Chill = 0;
+            }
             // Холод видно на враге, пока он не растаял
             if (Chill > 0 && Main.GameUpdateCount % 10 == 0)
                 FrostKindle.ChillAura(npc, Chill);

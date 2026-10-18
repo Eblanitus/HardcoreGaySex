@@ -604,6 +604,9 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
+            // Ледяной клинок бьёт по горящим сильнее — в том числе брошенный
+            if ((int)Projectile.ai[2] == ItemID.IceBlade && target.HasBuff(BuffID.Frostburn2))
+                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             cleanNpcHit = IsCleanHit(Projectile.velocity);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
@@ -614,7 +617,7 @@ namespace FrostMelee.Content.Projectiles
             // Брошенный ледяной меч тоже студит и поджигает
             int thrownItem = (int)Projectile.ai[2];
             if (SwordTypes.IsSwordId(thrownItem))
-                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, thrownItem);
+                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, thrownItem, FrostKindle.FromThrow);
 
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);

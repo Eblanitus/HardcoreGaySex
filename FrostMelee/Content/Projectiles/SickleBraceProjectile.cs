@@ -213,6 +213,9 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
+            // Ледяной клинок бьёт по горящим сильнее — и в «встрече» тоже
+            if ((int)Projectile.ai[2] == ItemID.IceBlade && target.HasBuff(BuffID.Frostburn2))
+                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Урон от сближения: враг бежит на серп или игрок разгоняется — больно
             Player player = Main.player[Projectile.owner];
             float closingSpeed = Vector2.Dot(player.velocity - target.velocity, SpearDir);
@@ -379,6 +382,11 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            // Ледяной меч в «встрече»: холод, и уже остывший враг вспыхивает от самого тычка в клинок
+            int braceItem = (int)Projectile.ai[2];
+            if (Weapons.SwordTypes.IsSwordId(braceItem))
+                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, braceItem, FrostKindle.FromBrace);
+
             // Frostbite с попадания убран: он остался только от сильного инея взмаха (FrostTrailSystem)
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
