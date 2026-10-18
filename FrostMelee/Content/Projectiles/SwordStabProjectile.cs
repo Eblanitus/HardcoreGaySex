@@ -195,10 +195,6 @@ namespace FrostMelee.Content.Projectiles
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor, Projectile.rotation, origin, 1f, effects, 0f);
-
-            // Frostbrand: огонь по лезвию (передний слой); ореол вокруг силуэта — SwordFireSystem
-            if (itemType == ItemID.Frostbrand)
-                IceArcFx.DrawBladeFireLine(drawPos, drawPos + dir * geo.Length, 1f);
             return false;
         }
     }

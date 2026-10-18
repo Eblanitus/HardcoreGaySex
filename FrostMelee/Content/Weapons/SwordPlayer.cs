@@ -68,7 +68,6 @@ namespace FrostMelee.Content.Weapons
         // Горит там, где меч нарисован СЕЙЧАС: позу отдаёт TryGetBladeLine (замах,
         // тычок, встреча, взмах, стойка). Брошенный меч не горит — в руке пусто.
         // Во взмахе пыль по клинку уже сыплет дуга, поэтому здесь мы молчим.
-        private static readonly Color FireLight = new Color(0.1f, 0.5f, 0.65f);
 
         public bool HoldingSword =>
             !Player.HeldItem.IsAir && SwordTypes.IsSword(Player.HeldItem);
@@ -243,7 +242,6 @@ namespace FrostMelee.Content.Weapons
             PoseItemVisible = false;
             if (!HoldingSword || Player.dead)
                 return;
-            UpdateHeldFire();
             if (ApplyThrowPose())
                 return;
 
@@ -359,25 +357,6 @@ namespace FrostMelee.Content.Weapons
             butt = proj.Center - dir * half;
             tip = proj.Center + dir * half;
             return true;
-        }
-
-        // Постоянное свечение горящего клинка: холодный СВЕТ по РЕАЛЬНОЙ линии
-        // лезвия (её отдаёт TryGetBladeLine). Само пламя рисуют IceArcFx и
-        // SwordFireSystem — на пыли его больше нет.
-        private void UpdateHeldFire()
-        {
-            if (Player.itemAnimation > 0)
-                return; // взмах — огонь по настоящей позе рисует дуга
-            if (Player.HeldItem.type != ItemID.Frostbrand)
-                return;
-            if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
-                return; // брошен / рука пустая / позы нет — нечего жечь
-
-            // Пыли здесь больше нет. Ванильная DustID.BlueTorch — это маленький
-            // ПОВЁРНУТЫЙ язычок-ромбик: по клинку она рассыпалась алмазной крошкой
-            // и читалась как мусор, а не как пламя. Весь огонь теперь рисуется
-            // (IceArcFx.DrawBladeFireLine + SwordFireSystem), от пыли остался свет.
-            Lighting.AddLight(Vector2.Lerp(butt, tip, 0.6f), FireLight.R / 255f, FireLight.G / 255f, FireLight.B / 255f);
         }
 
         // Поза броска: замах (обе кнопки зажаты, меч в руке) → выброс вперёд

@@ -62,17 +62,8 @@ namespace FrostMelee.Content.Weapons
         // true — показать пылью зону клинка (полный урон) и внешний край хитбокса
         public static bool DebugHitbox = false;
 
-        // У Frostbrand — ледяной огонь (холодное пламя), у Ice Blade — чистый лёд
-        private bool Fire => SwordItem == ItemID.Frostbrand;
-
-        // Палитра ленты: чистый лёд / ледяной огонь
+        // Палитра ленты: чистый лёд
         private void GlowColors(out Color core, out Color tail, out Color edge) {
-            if (Fire) {
-                core = IceArcFx.FireCore;
-                tail = IceArcFx.FireTail;
-                edge = IceArcFx.FireEdge;
-                return;
-            }
             core = IceArcFx.SwooshCore;
             tail = IceArcFx.SwooshTail;
             edge = IceArcFx.SwooshEdge;
@@ -115,11 +106,6 @@ namespace FrostMelee.Content.Weapons
 
             if (Projectile.owner == Main.myPlayer)
                 RecordFrostTrail(player);
-
-            // Ледяной огонь светит холодным светом вдоль линии дуги
-            if (Fire && !Main.dedServ)
-                Lighting.AddLight(player.RotatedRelativePoint(player.MountedCenter) +
-                    Projectile.rotation.ToRotationVector2() * BladeReach * 0.7f, 0.2f, 0.7f, 1f);
 
             // Кристаллики инея вдоль линии дуги (визуал, все клиенты)
             if (!Main.dedServ)
@@ -212,13 +198,6 @@ namespace FrostMelee.Content.Weapons
             if (radius <= 1f)
                 return;
             int dir = Projectile.ai[0] >= 0f ? 1 : -1;
-            if (Fire) {
-                // Ледяной огонь на дуге целиком рисуется (IceArcFx.DrawFlameSpots и
-                // DrawBladeFireLine). Ванильная пыль BlueTorch — это повёрнутые
-                // ромбики-язычки: по дуге и по клинку они читались как алмазная
-                // крошка, поэтому убраны.
-                return;
-            }
             for (int i = 0; i < 2; i++) {
                 float back = MathHelper.ToRadians(Main.rand.NextFloat(0f, 45f));   // от головы к хвосту
                 float ang = IceArcFx.HeadAngleOf(Projectile.rotation, dir) - dir * back;
@@ -504,24 +483,12 @@ namespace FrostMelee.Content.Weapons
             // Поверх — IceRibbon-лента по истории углов, кристаллы на кромке и пик-вспышка
             Player owner = Main.player[Projectile.owner];
             float lineScale = scale * LineDrawScale;
-            Color? lineRim = Fire ? (Color?)IceArcFx.FireLineRim : null;
-            Color? lineCore = Fire ? (Color?)IceArcFx.FireLineCore : null;
             IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
-                lineScale, spriteEffects, 0.3f * lerpTime, lineRim, lineCore);
+                lineScale, spriteEffects, 0.3f * lerpTime, null, null);
             Vector2 wedgeTip = owner.RotatedRelativePoint(owner.MountedCenter);
             IceArcFx.DrawSparkles(wedgeTip, Projectile.rotation,
-                Projectile.ai[0] >= 0f ? 1 : -1, LineTexOuter * lineScale, Projectile.localAI[0], lerpTime, lineRim, lineCore);
+                Projectile.ai[0] >= 0f ? 1 : -1, LineTexOuter * lineScale, Projectile.localAI[0], lerpTime, null, null);
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
-            if (Fire && glow != null && !glow.IsDisposed)
-                IceArcFx.DrawFlameSpots(wedgeTip, Projectile.rotation, Projectile.ai[0] >= 0f ? 1 : -1,
-                    LineTexOuter * lineScale, Projectile.localAI[0], lerpTime * 1.4f);
-            // Огонь на самом клинке: пока идёт взмах, ванилла рисует меч по
-            // itemLocation/itemRotation — по их концам пускаем один общий передний
-            // слой (ядро + языки по кромке), тот же, что у тычка и «встречи».
-            // Задний ореол вокруг силуэта рисует SwordFireSystem.
-            if (Fire && glow != null && !glow.IsDisposed &&
-                GetBladeLine(owner, out Vector2 bladeButt, out Vector2 bladeTip))
-                IceArcFx.DrawBladeFireLine(bladeButt, bladeTip, 0.45f + 0.55f * lerpTime);
             if (glow != null && !glow.IsDisposed)
                 DrawSwoosh(owner, glow, percentageOfLife, maxAnim);
 

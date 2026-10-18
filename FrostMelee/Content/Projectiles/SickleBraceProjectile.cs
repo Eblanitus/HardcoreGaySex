@@ -441,12 +441,6 @@ namespace FrostMelee.Content.Projectiles
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
-
-            // Frostbrand: передний слой огня — раскалённое ядро по оси и языки по кромке.
-            // Задний ореол вокруг силуэта рисует SwordFireSystem, они не дублируются.
-            if (itemType == ItemID.Frostbrand)
-                IceArcFx.DrawBladeFireLine(drawPos, drawPos + SpearDir * geo.Length, 1f);
-
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
             return false;
