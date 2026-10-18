@@ -7,8 +7,9 @@ namespace FrostMelee.Content.Weapons
 {
     // Скольжение ледяного клинка: состояние + эффект + визуал.
     //
-    // Состояние: Sliding. Включается от IceSlideSystem.CanSlide (разгон >= 4 px/тик
-    // вдоль выставленного копья). Держится, пока игрок докатывается
+    // Состояние: Sliding. Включается от IceSlideSystem.CanSlide (разгон >= 6 px/тик
+    // вдоль выставленного копья, держится EngageHoldTicks тиков подряд — пики
+    // скорости не считаются). Держится, пока игрок докатывается
     // (IceSlideSystem.StillCoasting): замедление не обрывает скольжение мгновенно,
     // но на скорости ниже CoastStopSpeed (почти шаг) оно честно заканчивается.
     //
@@ -34,6 +35,7 @@ namespace FrostMelee.Content.Weapons
 
         private int coastTicks;
         private int decalTimer;
+        private int fastTicks;
 
         public override void PostUpdateRunSpeeds()
         {
@@ -81,14 +83,24 @@ namespace FrostMelee.Content.Weapons
 
             if (IceSlideSystem.CanSlide(Player, sp))
             {
-                Sliding = true;
-                coastTicks = IceSlideSystem.MaxCoastTicks;
+                // Порог держится несколько тиков подряд — случайные пики
+                // (приземление, склон, импульс) скольжение не включают
+                fastTicks++;
+                if (fastTicks >= IceSlideSystem.EngageHoldTicks)
+                {
+                    Sliding = true;
+                    coastTicks = IceSlideSystem.MaxCoastTicks;
+                }
             }
-            else if (Sliding)
+            else
             {
-                coastTicks--;
-                if (!IceSlideSystem.StillCoasting(Player, sp) || coastTicks <= 0)
-                    Sliding = false;
+                fastTicks = 0;
+                if (Sliding)
+                {
+                    coastTicks--;
+                    if (!IceSlideSystem.StillCoasting(Player, sp) || coastTicks <= 0)
+                        Sliding = false;
+                }
             }
 
             if (Sliding && !was)
