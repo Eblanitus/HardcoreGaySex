@@ -30,7 +30,8 @@ namespace FrostMelee.Content.Weapons
             // Тычок и встреча: меч рисует снаряд, он же рисует и огонь
             if (sp.BladeLineIsProjectile)
                 return;
-            FrostFire.Draw(butt, tip, heat);
+            // В кэш слоя — огонь ляжет поверх меча
+            FrostFire.Draw(ref drawInfo, butt, tip, heat);
         }
     }
 }
