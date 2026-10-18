@@ -107,7 +107,7 @@ namespace FrostMelee.Content.Weapons
                     continue;
 
                 float fade = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
-                Color c = Lighting.GetColor(kv.Key.X, kv.Key.Y) * (0.85f * fade);
+                Color c = Lighting.GetColor(kv.Key.X, kv.Key.Y) * (0.8f * fade);
                 Main.spriteBatch.Draw(capTex.Value, world - Main.screenPosition, null, c,
                     0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
             }
