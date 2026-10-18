@@ -353,7 +353,8 @@ namespace FrostMelee.Content.Weapons
             Vector2 dir = projType == ModContent.ProjectileType<SwordStabProjectile>()
                 ? proj.velocity.SafeNormalize(Vector2.UnitX)
                 : Vector2.UnitX.RotatedBy(proj.ai[1]);
-            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f;
+            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f
+                * FrostKindle.SwordScale(Player, (int)proj.ai[2]);
             butt = proj.Center - dir * half;
             tip = proj.Center + dir * half;
             return true;

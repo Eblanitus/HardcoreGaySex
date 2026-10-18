@@ -216,7 +216,7 @@ namespace FrostMelee.Content.Projectiles
 
             if (SickleArcProjectile.DebugHitbox && Projectile.owner == Main.myPlayer && Projectile.friendly)
                 SickleSprite.EmitDebugDust(SickleSprite.GetZone((int)Projectile.ai[2]), Projectile.Center,
-                    Projectile.rotation, false, Projectile.scale);
+                    Projectile.rotation, false, Projectile.scale * Grow);
         }
 
         // Страховка: упавшая/лежащая коса не должна сидеть в толще блоков (выпала из умершего врага внутри земли,
@@ -288,7 +288,7 @@ namespace FrostMelee.Content.Projectiles
             if (!stuckInit)
             {
                 stuckInit = true;
-                Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
+                Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach * Grow;
                 Vector2 axis = Projectile.rotation.ToRotationVector2();
                 bool found = false;
                 for (float d = -4f; d <= 6f && !found; d += 1f)
@@ -377,7 +377,7 @@ namespace FrostMelee.Content.Projectiles
 
             SoundEngine.PlaySound(SoundID.Dig with { Volume = 0.7f, Pitch = 0.2f }, contact);
             // Острие (самая дальняя точка лезвия), а не центроид: рисунок торчит за ним на FrontOverhang
-            Projectile.Center = contact - axis * (geo.FrontReach - embed);
+            Projectile.Center = contact - axis * (geo.FrontReach * Grow - embed);
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = -1f;
             State = StateStuckTile;
@@ -451,7 +451,7 @@ namespace FrostMelee.Content.Projectiles
         // бы далеко за ней. Возвращает смещение СЕРЕДИНЫ оси от центра цели.
         private Vector2 TipLodgeOffset(NPC npc)
         {
-            Vector2 toTip = Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
+            Vector2 toTip = Projectile.rotation.ToRotationVector2() * Geo.FrontReach * Grow;
             return ClampLodgeOffset(Projectile.Center + toTip - npc.Center, npc) - toTip;
         }
 
@@ -490,7 +490,7 @@ namespace FrostMelee.Content.Projectiles
             Vector2 oldCenter = Projectile.Center;
             Vector2 bottom = Projectile.Bottom;
             // Лежащая коса — коробка по всей видимой длине (древко и лезвие торчат за центроидами)
-            int width = Math.Max(FlightBox, (int)Math.Ceiling(geo.Length + geo.RearOverhang + geo.FrontOverhang));
+            int width = Math.Max(FlightBox, (int)Math.Ceiling((geo.Length + geo.RearOverhang + geo.FrontOverhang) * Grow));
             int height = Math.Max(4, (int)Math.Ceiling(lyingBelow + above));
 
             for (int shift = 0; shift <= width / 2; shift += 2)
@@ -581,6 +581,9 @@ namespace FrostMelee.Content.Projectiles
             return false;
         }
 
+        // Frostbrand от зарядов крупнее: брошенный клинок тоже крупнее и достаёт дальше
+        private float Grow => FrostKindle.SwordScale(Main.player[Projectile.owner], (int)Projectile.ai[2]);
+
         public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox)
         {
             if (State != StateFlying)
@@ -592,11 +595,11 @@ namespace FrostMelee.Content.Projectiles
                 FrozenSpear.UseZone(Main.player[Projectile.owner], (int)Projectile.ai[2]));
             if (zone != null)
                 return SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center,
-                    Projectile.rotation, Projectile.rotation, false, Projectile.scale);
+                    Projectile.rotation, Projectile.rotation, false, Projectile.scale * Grow);
 
             // Запас без рисунка: отрезок от центроида до центроида
             Vector2 axis = Projectile.rotation.ToRotationVector2();
-            float half = Geo.Length * 0.5f;
+            float half = Geo.Length * 0.5f * Grow;
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 Projectile.Center - axis * half, Projectile.Center + axis * half, HitWidth, ref collisionPoint);
@@ -757,7 +760,7 @@ namespace FrostMelee.Content.Projectiles
             float heading = Projectile.rotation;
             Vector2 axis = heading.ToRotationVector2();
             Vector2 center = VisualCenter(geo);
-            float scale = Projectile.scale;
+            float scale = Projectile.scale * Grow;
             Vector2 butt = center - axis * (geo.Length * 0.5f * scale);
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,

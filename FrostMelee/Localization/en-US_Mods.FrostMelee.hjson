@@ -32,7 +32,8 @@ FrostbrandKindleTooltip:
 	'''
 	Chills enemies struck in frost, water, rain or a snow biome.
 	Three chills set them ablaze with cold fire.
-	Each burning enemy struck lengthens the swing by 5px (up to 5 charges, 8s each).
+	Each burning enemy struck grows the sword by 5% (up to 5 charges, 8s each):
+	longer and larger in every move, and the arc grows with it.
 	A burning enemy that dies ignites those nearby.
 	Stabs lay two chills; a chilled enemy that runs onto the braced blade ignites;
 	a sword stuck in the ground freezes everything around it.

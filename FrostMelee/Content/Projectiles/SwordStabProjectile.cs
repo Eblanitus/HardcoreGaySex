@@ -98,7 +98,7 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
             Vector2 hand = SickleSprite.HandGrip(player, stretch, armRot);
             Vector2 butt = hand - Projectile.velocity * GripInset;
-            Projectile.Center = butt + Projectile.velocity * (geo.Length * 0.5f);
+            Projectile.Center = butt + Projectile.velocity * (geo.Length * Grow * 0.5f);
 
             // Поворот: вектор «приклад → остриё» спрайта ставим вдоль выпада.
             // При взгляде влево спрайт зеркалим (флип в PreDraw), угол — зеркального.
@@ -151,13 +151,16 @@ namespace FrostMelee.Content.Projectiles
             // Хитбокс — только кончик: отрезок длиной BladeHitLength, который кончается
             // РОВНО на видимом острие
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
+            float length = SickleSprite.Get((int)Projectile.ai[2]).Length * Grow;
             Vector2 tipPos = Projectile.Center + dir * (length * 0.5f);
-            Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength, length);
+            Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength * Grow, length);
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 bladeStart, tipPos, BladeHitWidth, ref collisionPoint);
         }
+
+        // Frostbrand от зарядов крупнее: клинок в выпаде рисуется и бьёт в этом масштабе
+        private float Grow => FrostKindle.SwordScale(Main.player[Projectile.owner], (int)Projectile.ai[2]);
 
         // Бьющая часть у острия: длина вдоль меча и толщина (px)
         private const float BladeHitLength = 14f;
@@ -197,12 +200,12 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.Geometry geo = SickleSprite.Get(itemType);
             bool flipped = Projectile.spriteDirection == -1;
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            Vector2 drawPos = Projectile.Center - dir * (geo.Length * 0.5f);
+            Vector2 drawPos = Projectile.Center - dir * (geo.Length * Grow * 0.5f);
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
-                lightColor, Projectile.rotation, origin, 1f, effects, 0f);
+                lightColor, Projectile.rotation, origin, Grow, effects, 0f);
             return false;
         }
     }

@@ -166,7 +166,7 @@ namespace FrostMelee.Content.Projectiles
             // Геометрия реального спрайта (приклад/острие по пикселям)
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
             Vector2 butt = hand - dir * (geo.Length * (GripBehind + DeployPullBack * (1f - deploy)));
-            Projectile.Center = butt + dir * (geo.Length * 0.5f);
+            Projectile.Center = butt + dir * (geo.Length * Grow * 0.5f);
 
             // Поворот: вектор «приклад → острие» спрайта вдоль серпа. SET, не +=.
             Projectile.spriteDirection = dir.X >= 0 ? 1 : -1;
@@ -201,11 +201,11 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.BladeZone zone = HitZone;
             if (zone != null)
                 return SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center, Projectile.ai[1],
-                    Projectile.ai[1], Projectile.spriteDirection == -1, 1f);
+                    Projectile.ai[1], Projectile.spriteDirection == -1, Grow);
 
-            float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
+            float length = SickleSprite.Get((int)Projectile.ai[2]).Length * Grow;
             Vector2 tipPos = Projectile.Center + dir * (length * 0.5f);
-            Vector2 start = tipPos - dir * System.Math.Min(TipHitLength, length);
+            Vector2 start = tipPos - dir * System.Math.Min(TipHitLength * Grow, length);
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 start, tipPos, TipHitWidth, ref collisionPoint);
@@ -251,11 +251,11 @@ namespace FrostMelee.Content.Projectiles
 
             // Ледяные крошки отрываются с замороженной головы и падают вниз под гравитацией,
             // частота растёт с разгоном. Без свечения, без искр и света
-            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            Vector2 tip = Projectile.Center + dir * (geo.Length * Grow * 0.5f);
             float mix = FrozenMix();
             if (mix > 0.05f && Main.rand.NextFloat() < CrumbChance * mix)
             {
-                Vector2 cp = Vector2.Lerp(tip, tip - dir * geo.Length * CrumbSpan, Main.rand.NextFloat())
+                Vector2 cp = Vector2.Lerp(tip, tip - dir * geo.Length * Grow * CrumbSpan, Main.rand.NextFloat())
                     + Main.rand.NextVector2Circular(4f, 4f);
                 Dust cd = Dust.NewDustPerfect(cp, Main.rand.NextBool(3) ? DustID.Frost : DustID.SnowflakeIce,
                     new Vector2(Main.rand.NextFloat(-0.4f, 0.4f), Main.rand.NextFloat(0f, 0.6f)), 90, default,
@@ -294,8 +294,8 @@ namespace FrostMelee.Content.Projectiles
                 return;
             Vector2 dir = SpearDir;
             Vector2 normal = new Vector2(-dir.Y, dir.X);
-            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
-            Vector2 back = tip - dir * (geo.Length * RimeBladeFrac);
+            Vector2 tip = Projectile.Center + dir * (geo.Length * Grow * 0.5f);
+            Vector2 back = tip - dir * (geo.Length * Grow * RimeBladeFrac);
 
             if (braceRime > 0.02f)
             {
@@ -373,11 +373,14 @@ namespace FrostMelee.Content.Projectiles
 
         private float FrozenMix() => FrozenSpear.Mix(Main.player[Projectile.owner], (int)Projectile.ai[2]);
 
+        // Frostbrand от зарядов крупнее: копьё в стойке длиннее и бьёт дальше
+        private float Grow => FrostKindle.SwordScale(Main.player[Projectile.owner], (int)Projectile.ai[2]);
+
         private void DrawIcicle(SickleSprite.Geometry geo, Vector2 drawPos, bool flipped, Color lightColor)
         {
             if (Main.dedServ)
                 return;
-            FrozenSpear.Draw(drawPos, geo, Projectile.rotation, flipped, lightColor, IcicleBaseScale, FrozenMix());
+            FrozenSpear.Draw(drawPos, geo, Projectile.rotation, flipped, lightColor, IcicleBaseScale * Grow, FrozenMix());
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
@@ -443,12 +446,12 @@ namespace FrostMelee.Content.Projectiles
             // Якорь — реальный приклад спрайта (зеркальный при флипе)
             SickleSprite.Geometry geo = SickleSprite.Get(itemType);
             bool flipped = Projectile.spriteDirection == -1;
-            Vector2 drawPos = Projectile.Center - SpearDir * (geo.Length * 0.5f);
+            Vector2 drawPos = Projectile.Center - SpearDir * (geo.Length * Grow * 0.5f);
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
-                lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
+                lightColor * (1f - FrozenMix()), Projectile.rotation, origin, Grow, effects, 0f);
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
             return false;

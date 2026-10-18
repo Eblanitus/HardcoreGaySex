@@ -87,14 +87,11 @@ public class SwordGlobalItem : GlobalItem
             var sprite = SickleSprite.Get(item.type);
             float bladeLength = sprite.Length;
 
-            // Frostbrand растёт от горящих: заряды удлиняют сам взмах, а не только хитбокс
+            // Frostbrand растёт от горящих: масштаб клинка уже увеличен (ModPlayer.ModifyItemScale),
+            // поэтому дуга и зона полного урона считаются от подросшего меча сами.
             float baseReach = bladeLength * adjustedItemScale + SwordArcProjectile.HandReach;
-            float reachBonus = item.type == ItemID.Frostbrand
-                ? player.GetModPlayer<FrostKindlePlayer>().ReachBonus
-                : 0f;
-            float reachMult = (baseReach + reachBonus) / baseReach;
 
-            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength * reachMult;
+            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength;
 
             int arcIndex = Projectile.NewProjectile(
                 source,
@@ -111,7 +108,7 @@ public class SwordGlobalItem : GlobalItem
             // Докуда достаёт сам клинок — там полный урон
             if (arcIndex >= 0 && arcIndex < Main.maxProjectiles &&
                 Main.projectile[arcIndex].ModProjectile is SwordArcProjectile arc) {
-                arc.BladeReach = baseReach * reachMult;
+                arc.BladeReach = baseReach;
                 // Кто взмахнул: от меча зависят ледяные свойства удара
                 arc.SwordItem = item.type;
             }
