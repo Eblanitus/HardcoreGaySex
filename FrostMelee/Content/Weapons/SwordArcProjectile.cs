@@ -134,19 +134,17 @@ namespace FrostMelee.Content.Weapons
             if (!player.HeldItem.IsAir && player.itemAnimation > 0) {
                 SickleSprite.Geometry geo = SickleSprite.Get(player.HeldItem.type);
                 if (geo.Length > 1f) {
-                    Texture2D itemTexture = TextureAssets.Item[player.HeldItem.type].Value;
+                    // Берём не «от игрока до меча» (это рукоять, а не клинок), а само
+                    // направление клинка: приклад → остриё.
+                    // Ванилла рисует предмет при origin в УГЛУ кадра, но для вектора
+                    // это неважно — важны только точки приклада и острия и зеркалирование.
+                    // itemRotation уже в зеркальной системе взгляда, флип учтён в TipFor/ButtFor,
+                    // поэтому никаких +pi: именно из-за них дуга при взмахе влево уходила вправо.
                     bool flipped = player.direction == -1;
-                    Vector2 frameHalf = itemTexture.Size() * 0.5f;
-                    float itemRot = player.itemRotation + (flipped ? MathHelper.Pi : 0f);
-                    float itemScale = player.GetAdjustedItemScale(player.HeldItem);
-                    Vector2 bladeTip = player.itemLocation +
-                        ((geo.TipFor(flipped) - frameHalf) * itemScale).RotatedBy(itemRot);
-                    Vector2 bladeButt = player.itemLocation +
-                        ((geo.ButtFor(flipped) - frameHalf) * itemScale).RotatedBy(itemRot);
-                    Vector2 mid = Vector2.Lerp(bladeButt, bladeTip, 0.6f);
-                    Vector2 fromHand = mid - player.MountedCenter;
-                    if (fromHand.LengthSquared() > 1f)
-                        return fromHand.ToRotation();
+                    float itemRot = player.itemRotation;
+                    Vector2 bladeDir = (geo.TipFor(flipped) - geo.ButtFor(flipped)).RotatedBy(itemRot);
+                    if (bladeDir.LengthSquared() > 1f)
+                        return bladeDir.ToRotation();
                 }
             }
             float percentageOfLife = MathHelper.Clamp(time, 0f, Math.Max(1f, Projectile.ai[1])) / Math.Max(1f, Projectile.ai[1]);
@@ -222,12 +220,24 @@ namespace FrostMelee.Content.Weapons
                 return false;
             Texture2D itemTexture = TextureAssets.Item[player.HeldItem.type].Value;
             bool flipped = player.direction == -1;
-            Vector2 frameHalf = itemTexture.Size() * 0.5f;
-            float rot = player.itemRotation + (flipped ? MathHelper.Pi : 0f);
+            // Ванильный origin предмета в руке — угол кадра, а не центр
+            // (PlayerDrawLayers: W/2 - W/2*direction по X, H по Y).
+            Vector2 origin = new Vector2(itemTexture.Width * 0.5f - itemTexture.Width * 0.5f * player.direction,
+                itemTexture.Height);
+            // itemRotation уже зеркальная, флип учтён в TipFor/ButtFor — +pi здесь лишний
+            float rot = player.itemRotation;
             float scale = player.GetAdjustedItemScale(player.HeldItem);
-            butt = player.itemLocation + ((geo.ButtFor(flipped) - frameHalf) * scale).RotatedBy(rot);
-            tip = player.itemLocation + ((geo.TipFor(flipped) - frameHalf) * scale).RotatedBy(rot);
+            butt = player.itemLocation + DrawOffset(geo.ButtFor(flipped), origin, flipped).RotatedBy(rot) * scale;
+            tip = player.itemLocation + DrawOffset(geo.TipFor(flipped), origin, flipped).RotatedBy(rot) * scale;
             return true;
+        }
+
+        // Смещение точки спрайта от ванильного origin с учётом горизонтального флипа
+        private static Vector2 DrawOffset(Vector2 point, Vector2 origin, bool flipped) {
+            Vector2 local = point - origin;
+            if (flipped)
+                local.X = -local.X;
+            return local;
         }
 
         public override void OnKill(int timeLeft) {
