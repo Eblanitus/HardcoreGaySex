@@ -34,7 +34,7 @@ namespace FrostMelee.Content.Weapons
     {
         public const int LifeFrames = 240;  // 4 секунды
         public const int FadeFrames = 60;   // тает в последнюю секунду
-        public const int AppearFrames = 18; // намерзает за 0.3 секунды
+        public const int AppearFrames = 24; // намерзает за 0.4 секунды, смусстеп
 
         private static readonly Dictionary<Point, int> marks = new();
         private static Asset<Texture2D> coatTex;
@@ -154,7 +154,9 @@ namespace FrostMelee.Content.Weapons
                 if (!screen.Contains((int)world.X, (int)world.Y))
                     continue;
 
-                float fade = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
+                // Таяние нелинейное: смусстеп, а не прямая линия
+                float fadeLin = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
+                float fade = fadeLin * fadeLin * (3f - 2f * fadeLin);
 
                 // Плавное появление: первые AppearFrames тиков альфа растёт
                 // смусстепом, лёд «намерзает», а не вспыхивает готовой полосой

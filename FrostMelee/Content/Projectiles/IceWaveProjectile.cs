@@ -142,6 +142,32 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        public override bool PreDraw(ref Color lightColor) => false; // рисуем пылью и глазурью, без спрайта
+        // Гребень волны рисуем сами в ванильном батче снарядов: виден
+        // гарантированно, пока снаряд жив, даже если пыль и отметки не читаются.
+        // Растянутая глазурь IceCoat лежит на земле по ходу волны.
+        public override bool PreDraw(ref Color lightColor)
+        {
+            var tex = Weapons.IceSheetSystem.CoatTex;
+            if (!tex.IsLoaded)
+                return false;
+
+            bool longWave = Projectile.ai[0] > 0.5f;
+
+            // Нелинейное появление и затухание гребня
+            float appear = MathHelper.Clamp(Projectile.localAI[1] / 12f, 0f, 1f);
+            appear = appear * appear * (3f - 2f * appear);
+            float endFade = MathHelper.Clamp((maxTicks - Projectile.localAI[1]) / 20f, 0f, 1f);
+            endFade = endFade * endFade * (3f - 2f * endFade);
+
+            Color light = Lighting.GetColor((int)Projectile.Center.X / 16, (int)Projectile.Center.Y / 16);
+            Color c = new Color((byte)(light.R * 0.75f), (byte)(light.G * 0.9f), light.B,
+                (byte)(215f * appear * endFade));
+            Vector2 scale = new Vector2(longWave ? 4f : 3f, 2f);
+            Vector2 origin = new Vector2(tex.Value.Width / 2f, tex.Value.Height);
+            Main.spriteBatch.Draw(tex.Value,
+                Projectile.Center + new Vector2(0f, 10f) - Main.screenPosition,
+                null, c, 0f, origin, scale, SpriteEffects.None, 0f);
+            return false;
+        }
     }
 }
