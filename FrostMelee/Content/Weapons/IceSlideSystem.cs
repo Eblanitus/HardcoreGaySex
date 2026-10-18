@@ -32,10 +32,15 @@ namespace FrostMelee.Content.Weapons
 
         // Порог ДЕРЖАНИЯ: пока горизонтальная скорость выше этого, игрок
         // докатывается по инерции вместо того чтобы мгновенно встать.
-        public const float CoastStopSpeed = 0.75f;
+        // Ниже — уже почти шаг, скольжение честно заканчивается.
+        public const float CoastStopSpeed = 2f;
 
         // Предохранитель: максимум тиков докатывания без повторного разгона.
-        public const int MaxCoastTicks = 180;
+        public const int MaxCoastTicks = 90;
+
+        // Ниже этой скорости визуал (глянец и крошка) не рисуется:
+        // хвост докатывания не должен выглядеть как скольжение на ходу.
+        public const float VisualMinSpeed = 2f;
 
         // Насколько поднимается потолок скорости, пока скользим.
         public const float SlideBoost = 1.15f;

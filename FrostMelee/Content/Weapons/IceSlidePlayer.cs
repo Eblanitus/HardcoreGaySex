@@ -9,12 +9,14 @@ namespace FrostMelee.Content.Weapons
     //
     // Состояние: Sliding. Включается от IceSlideSystem.CanSlide (разгон >= 4 px/тик
     // вдоль выставленного копья). Держится, пока игрок докатывается
-    // (IceSlideSystem.StillCoasting), то есть замедление НЕ обрывает скольжение —
-    // отпускаешь клавиши и едешь до почти полной остановки, а не встаёшь мгновенно.
+    // (IceSlideSystem.StillCoasting): замедление не обрывает скольжение мгновенно,
+    // но на скорости ниже CoastStopSpeed (почти шаг) оно честно заканчивается.
     //
-    // Эффект выставляется из двух хуков (см. комментарий в IceSlideSystem):
-    //   PostUpdateRunSpeeds — slippy + потолок скорости, гарантированно в движение кадра;
-    //   PostUpdate          — дубль slippy, чтобы флаг пережил границу кадра.
+    // Эффект выставляется только из PostUpdateRunSpeeds и только пока состояние
+    // Sliding активно: ваниль читает флаг в движении того же кадра, а между
+    // кадрами ничего не утекает. Дубль флага в PostUpdate, который был раньше,
+    // утекал в кадры обычной ходьбы — скольжение липло к низким скоростям.
+    // Докатывание держится не утечкой, а самим состоянием (StillCoasting).
     //
     // Визуал: пока скользим, вытянутый вперёд меч «намораживает» дорожку —
     // под игроком и чуть впереди остаётся тающая глянцевая полоса (IceSlideDeco),
@@ -44,19 +46,6 @@ namespace FrostMelee.Content.Weapons
             SpawnVisuals();
         }
 
-        public override void PostUpdate()
-        {
-            if (Player.whoAmI != Main.myPlayer)
-                return;
-
-            // Дубль флага в старой точке выставления: на твёрдой земле ваниль,
-            // похоже, не сбрасывает slippy каждый кадр, и запись отсюда несёт
-            // скольжение через границу кадра — на ней держалось докатывание
-            // в версии до переноса.
-            if (Sliding)
-                Player.slippy = true;
-        }
-
         private void UpdateState()
         {
             SwordPlayer sp = Player.GetModPlayer<SwordPlayer>();
@@ -82,6 +71,11 @@ namespace FrostMelee.Content.Weapons
 
         private void SpawnVisuals()
         {
+            // Хвост докатывания на тихом ходу не рисуем: глянец и крошка
+            // только пока скорость выше VisualMinSpeed
+            if (System.Math.Abs(Player.velocity.X) < IceSlideSystem.VisualMinSpeed)
+                return;
+
             // Глянец скользкой дорожки: каждые 3 тика, чуть впереди по ходу
             decalTimer--;
             if (decalTimer <= 0)
