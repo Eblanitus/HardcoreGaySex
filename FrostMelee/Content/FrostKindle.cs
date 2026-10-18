@@ -264,7 +264,7 @@ namespace FrostMelee.Content
             reachUntil[slot] = until;
         }
 
-        public override void OnRespawn(Player player)
+        public override void OnRespawn()
         {
             Array.Clear(reachNpc, 0, reachNpc.Length);
             Array.Clear(reachUntil, 0, reachUntil.Length);
