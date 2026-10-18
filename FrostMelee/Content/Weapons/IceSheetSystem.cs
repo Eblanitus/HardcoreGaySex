@@ -7,19 +7,21 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Ледяная обмазка: след скольжения как лёд, Намороженный НА верхний слой
-    // блоков. Не шапка над кромкой и не партиклы: текстура IceCoat 16x16
-    // накладывается ровно на верхний твёрдый тайл, и блок выглядит обледеневшим.
+    // Ледяная обмазка: след скольжения как лёд, намороженный НА верхний слой
+    // блоков. Данные — отметки на сетке тайлов ((x, y) верхнего твёрдого тайла
+    // -> кадр истечения), ставятся IceSlidePlayer под ногами скользящего.
     //
-    // Храним отметки на сетке тайлов:
-    //   (x, y) верхнего твёрдого тайла -> номер кадра, до которого обмазка живёт.
-    // Отметка ставится под ногами скользящего игрока (IceSlidePlayer),
-    // живёт 4 секунды и плавно тает в последнюю.
+    // МЕТОД ОТРИСОВКИ (поменян после трёх неудачных итераций):
+    // раньше рисовали своим батчем в ModSystem.PostDrawTiles — в сборной
+    // пользователя альфа в этом конвейере не работала, и тайл целиком
+    // перекрашивался в белый при любых цифрах прозрачности.
+    // Теперь рисует IceSheetDrawer своим PreDraw — внутри ванильного батча
+    // снарядов, того самого, в котором у этого мода уже работают
+    // полупрозрачные кроссфейды клинков. Прозрачность текстуры и цвета
+    // там доказанно живая.
     //
-    // Рисуем в PostDrawTiles: поверх ЛЮБЫХ блоков, но до игрока, NPC и снарядов —
-    // обледеневшая поверхность оказывается под ногами, как и должна.
-    // Освещение берём из мира (Lighting.GetColor), поэтому в темноте лёд тёмный,
-    // у факелов — тёплый: читается как свойство блока, а не наклейка.
+    // Освещение из мира (Lighting.GetColor) с уводом в синеву,
+    // потолок альфы задаётся вызовом (IceSlideSystem.SheetCapAlpha).
     //
     // Ограничения сознательные:
     //   - не кладём на склоны и полублоки: обмазка легла бы мимо поверхности;
@@ -31,22 +33,30 @@ namespace FrostMelee.Content.Weapons
         public const int FadeFrames = 60;   // тает в последнюю секунду
 
         private static readonly Dictionary<Point, int> marks = new();
-        private static Asset<Texture2D> capTex;
+        private static Asset<Texture2D> coatTex;
+        private static int drawer = -1;
+
+        public static bool Any => marks.Count > 0;
+
+        public static Asset<Texture2D> CoatTex =>
+            coatTex ??= ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceCoat");
 
         public override void OnWorldUnload()
         {
             marks.Clear();
+            drawer = -1;
         }
 
         public override void Unload()
         {
             marks.Clear();
-            capTex = null;
+            coatTex = null;
+            drawer = -1;
         }
 
         // Положить слой на поверхность: ищем сверху вниз первый твёрдый тайл
         // с открытым верхом и отмечаем его. yStart — тайл под ногами игрока.
-        public static void MarkSurface(int x, int yStart)
+        public static void MarkSurface(int x, int yStart, Player owner)
         {
             for (int y = yStart; y < yStart + 4; y++)
             {
@@ -70,60 +80,78 @@ namespace FrostMelee.Content.Weapons
                 int until = (int)Main.GameUpdateCount + LifeFrames;
                 if (!marks.TryGetValue(key, out int old) || old < until)
                     marks[key] = until;
+
+                EnsureDrawer(owner);
                 return;
             }
         }
 
-        public override void PostDrawTiles()
+        // Один скрытый снаряд-художник на всех: рисует дорожку в ванильном
+        // батче снарядов и живёт, пока есть отметины
+        private static void EnsureDrawer(Player owner)
         {
-            if (Main.dedServ || marks.Count == 0)
+            if (Main.dedServ)
                 return;
 
-            capTex ??= ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceCoat");
-            if (!capTex.IsLoaded)
+            if (drawer >= 0 && drawer < Main.maxProjectiles)
+            {
+                Projectile d = Main.projectile[drawer];
+                if (d.active && d.type == ModContent.ProjectileType<IceSheetDrawer>())
+                    return;
+            }
+
+            drawer = Projectile.NewProjectile(owner.GetSource_FromThis(), owner.Bottom,
+                Vector2.Zero, ModContent.ProjectileType<IceSheetDrawer>(), 0, 0f, owner.whoAmI);
+        }
+
+        // Убрать просроченное; вызывает художник каждый тик
+        public static void PurgeExpired()
+        {
+            if (marks.Count == 0)
                 return;
 
+            int now = (int)Main.GameUpdateCount;
+            List<Point> dead = null;
+            foreach (KeyValuePair<Point, int> kv in marks)
+                if (kv.Value - now <= 0)
+                    (dead ??= new List<Point>()).Add(kv.Key);
+
+            if (dead == null)
+                return;
+
+            foreach (Point p in dead)
+                marks.Remove(p);
+        }
+
+        // Рисование дорожки: вызывается из PreDraw снаряда-художника,
+        // то есть внутри ванильного батча снарядов с живой альфой
+        public static void DrawTrail()
+        {
+            if (marks.Count == 0 || !CoatTex.IsLoaded)
+                return;
+
+            Texture2D tex = CoatTex.Value;
             int now = (int)Main.GameUpdateCount;
             Rectangle screen = new Rectangle((int)Main.screenPosition.X - 32, (int)Main.screenPosition.Y - 32,
                 Main.screenWidth + 64, Main.screenHeight + 64);
 
-            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
-                Main.DefaultSamplerState, DepthStencilState.None, Main.Rasterizer, null,
-                Main.GameViewMatrix.TransformationMatrix);
-
-            List<Point> dead = null;
             foreach (KeyValuePair<Point, int> kv in marks)
             {
                 int remain = kv.Value - now;
                 if (remain <= 0)
-                {
-                    (dead ??= new List<Point>()).Add(kv.Key);
                     continue;
-                }
 
-                // Ровно на тайл: обмазка лежит НА верхнем блоке, а не над ним
                 Vector2 world = new Vector2(kv.Key.X * 16f, kv.Key.Y * 16f);
                 if (!screen.Contains((int)world.X, (int)world.Y))
                     continue;
 
                 float fade = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
-
-                // Прозрачность задаётся ЗДЕСЬ, а не альфой текстуры:
-                // какой бы ни пришла текстура из пакета, полоса не станет
-                // доской — альфа вызова draw ограничена CapAlpha.
-                // RGB берём из освещения мира и уводим в синеву: лёд, не мел.
                 Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
                 byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade);
                 Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
-                Main.spriteBatch.Draw(capTex.Value, world - Main.screenPosition, null, c,
+                Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
                     0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
             }
-
-            Main.spriteBatch.End();
-
-            if (dead != null)
-                foreach (Point p in dead)
-                    marks.Remove(p);
         }
     }
 }

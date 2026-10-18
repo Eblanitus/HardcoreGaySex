@@ -123,7 +123,7 @@ namespace FrostMelee.Content.Weapons
             int x0 = (int)((Player.Left.X - 2f) / 16f);
             int x1 = (int)((Player.Right.X + 2f) / 16f);
             for (int x = x0; x <= x1; x++)
-                IceSheetSystem.MarkSurface(x, y);
+                IceSheetSystem.MarkSurface(x, y, Player);
 
             // Ледяная крошка из-под ног
             if (Main.rand.NextBool(3))
