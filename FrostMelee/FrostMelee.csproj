@@ -3,7 +3,6 @@
 
   <PropertyGroup>
     <AssemblyName>FrostMelee</AssemblyName>
-    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
