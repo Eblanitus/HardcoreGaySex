@@ -62,6 +62,11 @@ namespace FrostMelee.Content.Weapons
         // с открытым верхом и отмечаем его. yStart — тайл под ногами игрока.
         public static void MarkSurface(int x, int yStart, Player owner)
         {
+            // Предохранитель от разрастания словаря (например, на сервере,
+            // где художник не спавнится и чисткой никто не занимается)
+            if (marks.Count > 1024)
+                PurgeExpired();
+
             for (int y = yStart; y < yStart + 4; y++)
             {
                 if (!WorldGen.InWorld(x, y, 2))

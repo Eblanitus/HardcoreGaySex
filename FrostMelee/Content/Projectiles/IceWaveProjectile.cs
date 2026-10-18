@@ -7,12 +7,22 @@ using Terraria.Audio;
 namespace FrostMelee.Content.Projectiles
 {
     // Волна льда по поверхности от броска ледяного клинка.
-    // Идёт по земле как атака Deerclops, но слабее. При убийстве броском — длиннее.
+    // Идёт по земле как атака Deerclops, но сильно уменьшенная: короче, слабее,
+    // урон треть от броска и ещё x0.35, плюс Slow на секунду.
+    // При убийстве броском — длиннее и дольше (LongWaveTicks).
+    //
+    // Проработка эффекта: волна НЕ только пыль.
+    // - За собой она намораживает настоящую ледяную глазурь на блоках
+    //   (IceSheetSystem.MarkSurface) — атака буквально замораживает землю,
+    //   след лежит 4 секунды, как от скольжения.
+    // - Гребень читается тремя слоями пыли: куски льда вперёд,
+    //   осколки вверх, снежинки назад.
+    // - В конце жизни волна рассыпается веером осколков.
     public class IceWaveProjectile : ModProjectile
     {
         public override string Texture => "Terraria/Images/Projectile_0"; // невидимый, рисуем сами Dust
 
-        private int maxTicks = 40; // маленькая волна ~40 тиков (~0.66с) = ~120px при скорости 3
+        private int maxTicks = 40;   // маленькая волна: 40 тиков * 4 px = ~160 px
         private float waveSpeed = 4f;
 
         public override void SetDefaults()
@@ -35,8 +45,8 @@ namespace FrostMelee.Content.Projectiles
             // ai[0] = longWave 0/1, ai[1] = dir X (-1/1)
             bool longWave = Projectile.ai[0] > 0.5f;
             if (longWave) {
-                maxTicks = 110; // ~110 тиков = ~330px
-                waveSpeed = 3.5f;
+                maxTicks = 150; // волна убийства: 150 тиков * 4 px = ~600 px, 2.5 с
+                waveSpeed = 4f;
             }
 
             if (Projectile.localAI[0] == 0f) {
@@ -63,13 +73,36 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.Center = new Vector2(Projectile.Center.X, tilePos.Y * 16 - 18);
             }
 
-            // Пыль волны
+            // Волна намораживает глазурь за собой: земля замерзает по пути
+            Point mark = Projectile.Center.ToTileCoordinates();
+            Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y, Main.player[Projectile.owner]);
+            Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y, Main.player[Projectile.owner]);
+
+            // Гребень: куски льда вперёд по ходу
+            float crest = longWave ? 1.7f : 1.3f;
+            Dust ice = Dust.NewDustPerfect(Projectile.Center + new Vector2(dir * 10f, 6f), DustID.Ice,
+                new Vector2(dir * Main.rand.NextFloat(1f, 2.2f), -Main.rand.NextFloat(0.8f, 1.6f)), 100, default, crest);
+            ice.noGravity = true;
+
+            // Осколки вверх
             if (Main.rand.NextBool(2)) {
-                Dust d = Dust.NewDustPerfect(Projectile.Center + new Vector2(Main.rand.NextFloat(-8f,8f), 8f), DustID.Frost, new Vector2(dir * 0.3f, -0.6f), 120, default, 1.1f);
+                Dust d = Dust.NewDustPerfect(Projectile.Center + new Vector2(Main.rand.NextFloat(-8f, 8f), 8f), DustID.Frost,
+                    new Vector2(dir * 0.3f, -Main.rand.NextFloat(1.2f, 2.2f)), 120, default, longWave ? 1.5f : 1.1f);
                 d.noGravity = true;
             }
-            // Лёгкий свет
-            Lighting.AddLight(Projectile.Center, 0.1f, 0.4f, 0.6f);
+
+            // Снежинки назад, в след
+            if (Main.rand.NextBool(3)) {
+                Dust s = Dust.NewDustPerfect(Projectile.Center + new Vector2(-dir * 8f, 4f), DustID.SnowflakeIce,
+                    new Vector2(-dir * Main.rand.NextFloat(0.4f, 1f), -0.4f), 130, default, 0.9f);
+                s.noGravity = true;
+            }
+
+            // Лёгкий свет, у длинной волны ярче
+            if (longWave)
+                Lighting.AddLight(Projectile.Center, 0.15f, 0.5f, 0.75f);
+            else
+                Lighting.AddLight(Projectile.Center, 0.1f, 0.4f, 0.6f);
 
             if (Projectile.localAI[1] > maxTicks) {
                 Projectile.Kill();
@@ -95,6 +128,20 @@ namespace FrostMelee.Content.Projectiles
             target.AddBuff(BuffID.Slow, 60); // 1 сек замедления
         }
 
-        public override bool PreDraw(ref Color lightColor) => false; // рисуем пылью, без спрайта
+        public override void OnKill(int timeLeft)
+        {
+            // Конец волны: веер осколков, чтобы граница пробега читалась
+            float dir = Projectile.ai[1] != 0 ? Projectile.ai[1] : 1f;
+            for (int i = 0; i < 10; i++)
+            {
+                float ang = -MathHelper.PiOver2 + Main.rand.NextFloat(-0.9f, 0.9f);
+                Dust d = Dust.NewDustPerfect(Projectile.Center + new Vector2(0f, 6f), DustID.Frost,
+                    ang.ToRotationVector2() * Main.rand.NextFloat(1.5f, 3.5f) + new Vector2(dir * 0.5f, 0f),
+                    110, default, Main.rand.NextFloat(1f, 1.6f));
+                d.noGravity = true;
+            }
+        }
+
+        public override bool PreDraw(ref Color lightColor) => false; // рисуем пылью и глазурью, без спрайта
     }
 }
