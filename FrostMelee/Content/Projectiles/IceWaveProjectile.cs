@@ -78,6 +78,17 @@ namespace FrostMelee.Content.Projectiles
             Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y, Main.player[Projectile.owner]);
             Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y, Main.player[Projectile.owner]);
 
+            // Ледяные пики по ходу волны: атака как у Deerclops, но мелкая.
+            // Шаг чаще у длинной волны убийства
+            int spikeEvery = longWave ? 4 : 6;
+            if ((int)Projectile.localAI[1] % spikeEvery == 0)
+            {
+                Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
+                Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
+                    ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
+                    Main.rand.NextFloat(1f), 0f);
+            }
+
             // Гребень: куски льда вперёд по ходу
             float crest = longWave ? 1.7f : 1.3f;
             Dust ice = Dust.NewDustPerfect(Projectile.Center + new Vector2(dir * 10f, 6f), DustID.Ice,
@@ -140,42 +151,17 @@ namespace FrostMelee.Content.Projectiles
                     110, default, Main.rand.NextFloat(1f, 1.6f));
                 d.noGravity = true;
             }
+
+            // Граница пробега: ещё три пика подряд
+            for (int i = 0; i < 3; i++)
+            {
+                Vector2 sp = Projectile.Center + new Vector2(dir * i * 10f, 8f);
+                Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
+                    ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
+                    Main.rand.NextFloat(1f), 0f);
+            }
         }
 
-        // Гребень волны рисуем сами в ванильном батче снарядов: виден
-        // гарантированно, пока снаряд жив, даже если пыль и отметки не читаются.
-        // Растянутая глазурь IceCoat лежит на земле по ходу волны.
-        public override bool PreDraw(ref Color lightColor)
-        {
-            var tex = Weapons.IceSheetSystem.CoatTex;
-            bool longWave = Projectile.ai[0] > 0.5f;
-
-            // Нелинейное появление и затухание гребня
-            float appear = MathHelper.Clamp(Projectile.localAI[1] / 12f, 0f, 1f);
-            appear = appear * appear * (3f - 2f * appear);
-            float endFade = MathHelper.Clamp((maxTicks - Projectile.localAI[1]) / 20f, 0f, 1f);
-            endFade = endFade * endFade * (3f - 2f * endFade);
-
-            Color light = Lighting.GetColor((int)Projectile.Center.X / 16, (int)Projectile.Center.Y / 16);
-            Color c = new Color((byte)(light.R * 0.75f), (byte)(light.G * 0.9f), light.B,
-                (byte)(215f * appear * endFade));
-            float wantWidth = longWave ? 64f : 48f;
-            Vector2 pos = Projectile.Center + new Vector2(0f, 10f) - Main.screenPosition;
-
-            if (tex.IsLoaded)
-            {
-                // Нормируем к нужной ширине гребня: текстура может быть любой
-                Vector2 scale = new Vector2(wantWidth / tex.Value.Width, 2f);
-                Vector2 origin = new Vector2(tex.Value.Width / 2f, tex.Value.Height);
-                Main.spriteBatch.Draw(tex.Value, pos, null, c, 0f, origin, scale, SpriteEffects.None, 0f);
-            }
-            else
-            {
-                // Запасной гребень magic pixel, если текстура не загрузилась
-                Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
-                    new Rectangle((int)pos.X - (int)(wantWidth / 2f), (int)pos.Y - 8, (int)wantWidth, 8), c);
-            }
-            return false;
-        }
+        public override bool PreDraw(ref Color lightColor) => false; // визуал — пики и пыль
     }
 }

@@ -180,11 +180,9 @@ namespace FrostMelee.Content.Weapons
 
                 if (tex != null)
                 {
-                    // Нормируем ширину к 16 px тайла: текстура может быть
-                    // любой ширины (игрок рисует сам), тайл всегда 16
-                    Vector2 scale = new Vector2(16f / tex.Width, 1f);
+                    // Текстура игрока рисуется 1:1: её размер и есть покрытие
                     Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
-                        0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+                        0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
                 }
                 else
                 {
