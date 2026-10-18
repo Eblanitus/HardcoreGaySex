@@ -12,15 +12,22 @@ namespace FrostMelee.Content.Weapons
     // (IceSlideSystem.StillCoasting): замедление не обрывает скольжение мгновенно,
     // но на скорости ниже CoastStopSpeed (почти шаг) оно честно заканчивается.
     //
-    // Эффект выставляется только из PostUpdateRunSpeeds и только пока состояние
-    // Sliding активно: ваниль читает флаг в движении того же кадра, а между
-    // кадрами ничего не утекает. Дубль флага в PostUpdate, который был раньше,
-    // утекал в кадры обычной ходьбы — скольжение липло к низким скоростям.
-    // Докатывание держится не утечкой, а самим состоянием (StillCoasting).
+    // Точки выставления эффекта — по результату четырёх игровых проверок:
+    //   PostUpdate      — «ледяной» флаг slippy. Запись из этой точки доживает
+    //                     до движения следующего кадра; запись из
+    //                     PostUpdateRunSpeeds ваниль стирает до того, как
+    //                    flag прочитают (проверено: без PostUpdate чувства нет).
+    //                     Флаг взят под полный контроль: slippy = Sliding ИЛИ
+    //                     под ногами ванильный лёд. Поэтому липкости больше нет:
+    //                     состояние кончилось — флаг сразу вернулся к ванильному
+    //                     значению, а не живёт до прыжка, как раньше.
+    //   PostUpdateRunSpeeds — потолок скорости (maxRunSpeed *= SlideBoost):
+    //                     по документации tModLoader это единственный хук, где
+    //                     эта запись применяется к движению того же кадра.
     //
     // Визуал: пока скользим, вытянутый вперёд меч «намораживает» дорожку —
-    // под игроком и чуть впереди остаётся тающая глянцевая полоса (IceSlideDeco),
-    // плюс ледяная крошка из-под ног.
+    // глянцевая полоса (IceSlideDeco) теперь живёт несколько секунд и тает
+    // в конце жизни: видно, где ты проехал, и лёд не исчезает мгновенно.
     public class IceSlidePlayer : ModPlayer
     {
         public bool Sliding;
@@ -37,13 +44,34 @@ namespace FrostMelee.Content.Weapons
             if (!Sliding)
                 return;
 
-            Player.slippy = true;
             Player.maxRunSpeed *= IceSlideSystem.SlideBoost;
 
             if (Main.dedServ)
                 return;
 
             SpawnVisuals();
+        }
+
+        public override void PostUpdate()
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return;
+
+            // Владение флагом: скользим ИЛИ стоишь на ванильном льду.
+            // Между кадрами ничего не утекает и не застревает.
+            Player.slippy = Sliding || OnIceFloor();
+        }
+
+        // Под ногами ванильный лёд (там скольжение положено самой игрой)
+        private bool OnIceFloor()
+        {
+            int x = (int)(Player.Center.X / 16f);
+            int y = (int)((Player.Bottom.Y + 4f) / 16f);
+            if (!WorldGen.InWorld(x, y))
+                return false;
+
+            Tile tile = Main.tile[x, y];
+            return tile.HasTile && TileID.Sets.IceSkateSlippery[tile.TileType];
         }
 
         private void UpdateState()
@@ -76,7 +104,8 @@ namespace FrostMelee.Content.Weapons
             if (System.Math.Abs(Player.velocity.X) < IceSlideSystem.VisualMinSpeed)
                 return;
 
-            // Глянец скользкой дорожки: каждые 3 тика, чуть впереди по ходу
+            // Глянец скользкой дорожки: каждые 3 тика, чуть впереди по ходу.
+            // Полоса живёт несколько секунд (LifeTicks в IceSlideDeco).
             decalTimer--;
             if (decalTimer <= 0)
             {

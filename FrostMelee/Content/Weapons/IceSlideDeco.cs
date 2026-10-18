@@ -14,7 +14,7 @@ namespace FrostMelee.Content.Weapons
     // получается блестящая полоса на поверхности земли.
     public class IceSlideDeco : ModProjectile
     {
-        public const int LifeTicks = 36;
+        public const int LifeTicks = 240; // 4 секунды: дорожка видна после проезда
 
         public override string Texture => "FrostMelee/Items/AmarokIceStrip";
 
@@ -35,8 +35,9 @@ namespace FrostMelee.Content.Weapons
         {
             // Лежит на месте и тает
             Projectile.velocity = Vector2.Zero;
-            if (Projectile.timeLeft < 12)
-                Projectile.alpha = 255 - (int)(255f * Projectile.timeLeft / 12f);
+            // Тает плавно в последнюю секунду жизни
+            if (Projectile.timeLeft < 60)
+                Projectile.alpha = 255 - (int)(255f * Projectile.timeLeft / 60f);
         }
 
         public override bool PreDraw(ref Color lightColor)
@@ -45,7 +46,7 @@ namespace FrostMelee.Content.Weapons
             if (tex == null || tex.IsDisposed)
                 return false;
 
-            float fade = Projectile.timeLeft < 12 ? Projectile.timeLeft / 12f : 1f;
+            float fade = Projectile.timeLeft < 60 ? Projectile.timeLeft / 60f : 1f;
             // локаль: X = толщина ленты (44), Y = её длина (504);
             // после поворота на 90° длина ложится вдоль земли
             Vector2 scale = new Vector2(0.18f, 0.35f);
