@@ -595,15 +595,7 @@ namespace FrostMelee.Content.Projectiles
                 if (SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center,
                     Projectile.rotation, Projectile.rotation, false, Projectile.scale))
                     return true;
-                // Ледяное жало за остриём бьёт вместе с клинком
-                float ice = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]) * Projectile.scale;
-                if (ice <= 0.5f)
-                    return false;
-                Vector2 tipAxis = Projectile.rotation.ToRotationVector2();
-                Vector2 spriteTip = Projectile.Center + tipAxis * (Geo.Length * 0.5f * Projectile.scale);
-                float cpTip = 0f;
-                return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
-                    spriteTip, spriteTip + tipAxis * ice, HitWidth, ref cpTip);
+                return false;
             }
 
             // Запас без рисунка: отрезок от центроида до центроида
@@ -616,9 +608,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Ледяной клинок бьёт по горящим сильнее — в том числе брошенный
-            if ((int)Projectile.ai[2] == ItemID.IceBlade && FrostKindle.IsBurning(target))
-                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             cleanNpcHit = IsCleanHit(Projectile.velocity);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
@@ -626,11 +615,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            // Брошенный ледяной меч тоже студит и поджигает
-            int thrownItem = (int)Projectile.ai[2];
-            if (SwordTypes.IsSwordId(thrownItem))
-                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, thrownItem, FrostKindle.FromThrow);
-
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);
 
@@ -774,8 +758,6 @@ namespace FrostMelee.Content.Projectiles
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
-            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
-            FrostFire.Draw(butt, butt + axis * (geo.Length * scale), FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }

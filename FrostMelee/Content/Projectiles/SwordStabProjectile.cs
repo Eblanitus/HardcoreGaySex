@@ -152,10 +152,8 @@ namespace FrostMelee.Content.Projectiles
             // РОВНО на видимом острие
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
-            // Ледяное жало за остриём бьёт вместе с клинком
-            float extra = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
-            Vector2 tipPos = Projectile.Center + dir * (half + extra);
-            Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength + extra, half * 2f + extra);
+            Vector2 tipPos = Projectile.Center + dir * half;
+            Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength, half * 2f);
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 bladeStart, tipPos, BladeHitWidth, ref collisionPoint);
@@ -167,9 +165,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Ледяной клинок бьёт по горящим сильнее
-            if ((int)Projectile.ai[2] == ItemID.IceBlade && FrostKindle.IsBurning(target))
-                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Тычок меча спавнится с knockBack = 0 (SwordTypes.StabKnockbackMult).
             // Отключаем отбрасывание полностью, чтобы его не вернули бонусы
             // отбрасывания игрока (перчатки и т.п.)
@@ -179,7 +174,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, (int)Projectile.ai[2], FrostKindle.FromStab);
         }
 
         public override bool PreDraw(ref Color lightColor)
@@ -205,8 +199,6 @@ namespace FrostMelee.Content.Projectiles
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor, Projectile.rotation, origin, 1f, effects, 0f);
-            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
-            FrostFire.Draw(drawPos, drawPos + dir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }

@@ -20,24 +20,6 @@ Stance: {
 ThrownTooltip: Thrown — walk up to the sickle to pick it up
 ThrownTooltipSword: Thrown — walk up to the sword to pick it up
 FrozenSpearName: Frozen Spear
-IceBladeKindleTooltip:
-	'''
-	Chills enemies struck in frost, water, rain or a snow biome.
-	Three chills set them ablaze with cold fire.
-	Deals 18% more damage to burning enemies and makes the burn last 1s longer.
-	Stabs lay two chills; a chilled enemy that runs onto the braced blade ignites;
-	a sword stuck in the ground freezes everything around it.
-	'''
-FrostbrandKindleTooltip:
-	'''
-	Chills enemies struck in frost, water, rain or a snow biome.
-	Three chills set them ablaze with cold fire.
-	Each burning enemy struck feeds the frostfire on the blade (up to 5 charges, 8s each):
-	the flame grows and spills past the tip, reaching further, arc included.
-	A burning enemy that dies ignites those nearby.
-	Stabs lay two chills; a chilled enemy that runs onto the braced blade ignites;
-	a sword stuck in the ground freezes everything around it.
-	'''
 YoyoControlsTooltip:
 	'''
 	LMB (hold): guide the yoyo

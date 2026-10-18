@@ -213,17 +213,12 @@ namespace FrostMelee.Content.Projectiles
                 if (SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center, Projectile.ai[1],
                     Projectile.ai[1], Projectile.spriteDirection == -1, 1f))
                     return true;
-                // Ледяное жало за остриём бьёт вместе с клинком
-                float ice = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
-                if (ice > 0.5f)
-                    return HitTipLine(dir, SickleSprite.Get((int)Projectile.ai[2]).Length, ice, targetHitbox);
                 return false;
             }
 
             float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
-            float extra = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
-            Vector2 tipPos = Projectile.Center + dir * (length * 0.5f + extra);
-            Vector2 start = tipPos - dir * System.Math.Min(TipHitLength + extra, length + extra);
+            Vector2 tipPos = Projectile.Center + dir * (length * 0.5f);
+            Vector2 start = tipPos - dir * System.Math.Min(TipHitLength, length);
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 start, tipPos, TipHitWidth, ref collisionPoint);
@@ -231,9 +226,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Ледяной клинок бьёт по горящим сильнее — и в «встрече» тоже
-            if ((int)Projectile.ai[2] == ItemID.IceBlade && FrostKindle.IsBurning(target))
-                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Урон от сближения: враг бежит на серп или игрок разгоняется — больно
             Player player = Main.player[Projectile.owner];
             float closingSpeed = Vector2.Dot(player.velocity - target.velocity, SpearDir);
@@ -400,12 +392,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            // Ледяной меч в «встрече»: холод, и уже остывший враг вспыхивает от самого тычка в клинок
-            int braceItem = (int)Projectile.ai[2];
-            if (Weapons.SwordTypes.IsSwordId(braceItem))
-                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, braceItem, FrostKindle.FromBrace);
-
-            // Frostbite с попадания убран: он остался только от сильного инея взмаха (FrostTrailSystem)
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
 
@@ -469,8 +455,6 @@ namespace FrostMelee.Content.Projectiles
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
-            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
-            FrostFire.Draw(drawPos, drawPos + SpearDir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }

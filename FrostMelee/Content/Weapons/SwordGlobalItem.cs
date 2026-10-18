@@ -54,13 +54,6 @@ public class SwordGlobalItem : GlobalItem
         {
             if (!SwordTypes.IsSword(item))
                 return;
-            // Что делает лёд именно этого меча
-            if (item.type == ItemID.IceBlade)
-                tooltips.Add(new TooltipLine(Mod, "IceBladeKindle",
-                    Language.GetTextValue("Mods.FrostMelee.IceBladeKindleTooltip")));
-            else if (item.type == ItemID.Frostbrand)
-                tooltips.Add(new TooltipLine(Mod, "FrostbrandKindle",
-                    Language.GetTextValue("Mods.FrostMelee.FrostbrandKindleTooltip")));
             if (!FrostMeleeConfigDefaults.ShowControlTooltips)
                 return;
             tooltips.Add(new TooltipLine(Mod, "SwordControls",
@@ -87,13 +80,9 @@ public class SwordGlobalItem : GlobalItem
             var sprite = SickleSprite.Get(item.type);
             float bladeLength = sprite.Length;
 
-            // Frostbrand растёт от горящих: масштаб клинка уже увеличен (ModPlayer.ModifyItemScale),
-            // поэтому дуга и зона полного урона считаются от подросшего меча сами.
-            // Лёд на клинке удлиняет его: дуга считается от длины вместе с ледяным жалом
-            float grownLength = bladeLength + FrostFire.TipExtra(player, item.type);
-            float baseReach = grownLength * adjustedItemScale + SwordArcProjectile.HandReach;
+            float baseReach = bladeLength * adjustedItemScale + SwordArcProjectile.HandReach;
 
-            float finalScale = adjustedItemScale * grownLength / ArcSizeLength;
+            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength;
 
             int arcIndex = Projectile.NewProjectile(
                 source,

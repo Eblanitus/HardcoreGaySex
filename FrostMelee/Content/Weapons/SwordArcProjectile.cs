@@ -56,7 +56,7 @@ namespace FrostMelee.Content.Weapons
         public float BladeReach;
 
         // Каким мечом спавнена дуга: ItemID предмета. Задаёт SwordGlobalItem.Shoot
-        // вместе с BladeReach. От меча зависят ледяные свойства удара (FrostKindle).
+        // вместе с BladeReach.
         public int SwordItem;
 
         // true — показать пылью зону клинка (полный урон) и внешний край хитбокса
@@ -454,9 +454,6 @@ namespace FrostMelee.Content.Weapons
         }
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers) {
-            // Ледяной клинок бьёт по горящим сильнее — из-за горения, а не радиуса
-            if (SwordItem == ItemID.IceBlade && FrostKindle.IsBurning(target))
-                modifiers.SourceDamage *= FrostKindle.IceBladeDamageMult;
             // Урон и отбрасывание от радиуса: клинком — как мечом, к краю дуги — до крошечных
             float edge = EdgeFactor(target.Hitbox);
             // Урон: крутой спад сразу за клинком, дальше крошечный; защита вычтется уже после этого
@@ -473,8 +470,6 @@ namespace FrostMelee.Content.Weapons
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
-            // Холод/поджиг и заряды Frostbrand за горящих
-            FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, SwordItem, FrostKindle.FromSwing);
         }
 
         public override void OnHitPlayer(Player target, Player.HurtInfo info) {
