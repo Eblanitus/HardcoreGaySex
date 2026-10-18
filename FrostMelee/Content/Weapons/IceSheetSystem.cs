@@ -39,6 +39,7 @@ namespace FrostMelee.Content.Weapons
         private static readonly Dictionary<Point, int> marks = new();
         private static Asset<Texture2D> coatTex;
         private static int drawer = -1;
+        private static bool loadWarned;
 
         public static bool Any => marks.Count > 0;
 
@@ -56,6 +57,7 @@ namespace FrostMelee.Content.Weapons
             marks.Clear();
             coatTex = null;
             drawer = -1;
+            loadWarned = false;
         }
 
         // Положить слой на поверхность: ищем сверху вниз первый твёрдый тайл
@@ -136,10 +138,19 @@ namespace FrostMelee.Content.Weapons
         // то есть внутри ванильного батча снарядов с живой альфой
         public static void DrawTrail()
         {
-            if (marks.Count == 0 || !CoatTex.IsLoaded)
+            if (marks.Count == 0)
                 return;
 
-            Texture2D tex = CoatTex.Value;
+            // Если текстура глазури не загрузилась (любой формат/путь),
+            // рисуем запасным magic pixel: лёд виден всегда, а в лог
+            // один раз пишем, что текстура не подхватилась
+            Texture2D tex = CoatTex.IsLoaded ? CoatTex.Value : null;
+            if (tex == null && !loadWarned)
+            {
+                loadWarned = true;
+                Mod.Logger.Warn("[IceSheet] текстура IceCoat не загрузилась, рисую запасным пикселем");
+            }
+
             int now = (int)Main.GameUpdateCount;
             Rectangle screen = new Rectangle((int)Main.screenPosition.X - 32, (int)Main.screenPosition.Y - 32,
                 Main.screenWidth + 64, Main.screenHeight + 64);
@@ -166,8 +177,21 @@ namespace FrostMelee.Content.Weapons
                 Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
                 byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade * appear);
                 Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
-                Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
-                    0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
+
+                if (tex != null)
+                {
+                    // Нормируем ширину к 16 px тайла: текстура может быть
+                    // любой ширины (игрок рисует сам), тайл всегда 16
+                    Vector2 scale = new Vector2(16f / tex.Width, 1f);
+                    Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
+                        0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+                }
+                else
+                {
+                    Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                        new Rectangle((int)world.X - (int)Main.screenPosition.X,
+                            (int)world.Y - (int)Main.screenPosition.Y, 16, 5), c);
+                }
             }
         }
     }

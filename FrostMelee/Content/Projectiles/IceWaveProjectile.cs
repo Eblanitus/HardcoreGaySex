@@ -148,9 +148,6 @@ namespace FrostMelee.Content.Projectiles
         public override bool PreDraw(ref Color lightColor)
         {
             var tex = Weapons.IceSheetSystem.CoatTex;
-            if (!tex.IsLoaded)
-                return false;
-
             bool longWave = Projectile.ai[0] > 0.5f;
 
             // Нелинейное появление и затухание гребня
@@ -162,11 +159,22 @@ namespace FrostMelee.Content.Projectiles
             Color light = Lighting.GetColor((int)Projectile.Center.X / 16, (int)Projectile.Center.Y / 16);
             Color c = new Color((byte)(light.R * 0.75f), (byte)(light.G * 0.9f), light.B,
                 (byte)(215f * appear * endFade));
-            Vector2 scale = new Vector2(longWave ? 4f : 3f, 2f);
-            Vector2 origin = new Vector2(tex.Value.Width / 2f, tex.Value.Height);
-            Main.spriteBatch.Draw(tex.Value,
-                Projectile.Center + new Vector2(0f, 10f) - Main.screenPosition,
-                null, c, 0f, origin, scale, SpriteEffects.None, 0f);
+            float wantWidth = longWave ? 64f : 48f;
+            Vector2 pos = Projectile.Center + new Vector2(0f, 10f) - Main.screenPosition;
+
+            if (tex.IsLoaded)
+            {
+                // Нормируем к нужной ширине гребня: текстура может быть любой
+                Vector2 scale = new Vector2(wantWidth / tex.Value.Width, 2f);
+                Vector2 origin = new Vector2(tex.Value.Width / 2f, tex.Value.Height);
+                Main.spriteBatch.Draw(tex.Value, pos, null, c, 0f, origin, scale, SpriteEffects.None, 0f);
+            }
+            else
+            {
+                // Запасной гребень magic pixel, если текстура не загрузилась
+                Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                    new Rectangle((int)pos.X - (int)(wantWidth / 2f), (int)pos.Y - 8, (int)wantWidth, 8), c);
+            }
             return false;
         }
     }
