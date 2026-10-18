@@ -67,3 +67,19 @@ ControlsTooltip:
 	ПКМ (зажать): тычки
 	ПКМ + ЛКМ: бросок (подбери, чтобы снова пользоваться)
 	'''
+
+Configs: {
+	WoodSwordsConfig: {
+		// DisplayName: Wood Swords Config
+
+		ShowStanceIndicator: {
+			// Label: Показывать режим атаки над головой
+			// Tooltip: Отключает надпись приёма (Взмах/Тычок/Копьё/Заточка/Брошено) над персонажем.
+		}
+
+		ShowControlTooltips: {
+			// Label: Подсказки управления в описании
+			// Tooltip: Отключает список приёмов в тултипе оружия.
+		}
+	}
+}
