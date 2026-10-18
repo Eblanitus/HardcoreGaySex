@@ -28,6 +28,9 @@ namespace FrostMelee.Content.Weapons
         public const int ThrowHoldTicks = 6;       // задержка клик → вылет (замах)
         public const int ThrowFollowTicks = 14;    // сколько тиков длится выброс + возврат после вылета
         private const float ThrowWindupBack = 2.4f; // рука в замахе: угол назад-вверх от линии броска (рад)
+        // Сколько рукояти торчит позади кисти — общая цифра для позы замаха
+        // (SwordThrowPoseLayer) и для огня на клинке (TryGetBladeLine)
+        public const float ThrowGripInset = 4f;
 
         // Режим приёма. Брошенность — свойство предмета (ThrownLockItem), не режима.
         public enum Mode { Swing, Stab, Spear } // Spear = «встреча» меча
@@ -61,11 +64,10 @@ namespace FrostMelee.Content.Weapons
         public Vector2 PoseHandOffset;
         public Vector2 PoseItemDir = Vector2.UnitX;
 
-        // === Ледяной огонь на клинке Frostbrand, когда меч просто в руке ===
-        // Позу меча в стойке держит Weapon Out Lite, наших координат у неё нет, поэтому
-        // огонь привязан к персонажу: искорки и язычки поднимаются от точки, где
-        // обычно лежит клинок (рукоять у груди, остриё у головы). Во взмахе огонь
-        // рисует дуга по настоящей позе, поэтому здесь мы молчим.
+        // === Ледяной огонь на клинке Frostbrand ===
+        // Горит там, где меч нарисован СЕЙЧАС: позу отдаёт TryGetBladeLine (замах,
+        // тычок, встреча, взмах, стойка). Брошенный меч не горит — в руке пусто.
+        // Во взмахе пыль по клинку уже сыплет дуга, поэтому здесь мы молчим.
         private int fireDustCooldown;
         private static readonly Color FireLight = new Color(0.1f, 0.5f, 0.65f);
 
@@ -273,40 +275,125 @@ namespace FrostMelee.Content.Weapons
         private static float LerpAngle(float a, float b, float t) =>
             a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);
 
-        // Постоянное свечение горящего клинка: пыль вдоль виртуального клинка
-        // (рукоять у груди, остриё вверх-вперёд у головы) + холодный свет.
+        // === Реальная линия клинка (приклад → остриё) в мире ===
+        // Нужна всему, что рисует огонь Frostbrand вне взмаха: пламя должно лежать
+        // на клинке, а не у пояса. Позу берём у того, кто её реально держит:
+        // замах броска → тычок → встреча → взмах → стойка (Weapon Out Lite).
+        // false — меча в руке нет, он брошен, или рука уже пустая (выброс броска):
+        // гореть нечему.
+        public bool TryGetBladeLine(out Vector2 butt, out Vector2 tip)
+        {
+            butt = tip = default;
+            if (!HoldingSword || Player.dead)
+                return false;
+            // Брошенный экземпляр лежит в мире — в руке пусто
+            if (HeldThrown)
+                return false;
+
+            SickleSprite.Geometry geo = SickleSprite.Get(Player.HeldItem.type);
+            if (geo.Length <= 1f)
+                return false;
+
+            // 1. Замах броска: позу и кисть задал ApplyThrowPose, слой рисует от кисти
+            if (PoseItemVisible)
+            {
+                Vector2 dir = PoseItemDir;
+                butt = Player.Center + PoseHandOffset - dir * ThrowGripInset;
+                tip = butt + dir * geo.Length;
+                return true;
+            }
+            // 2. Выброс/возврат руки после броска: меч уже летит снарядом
+            if (throwFollowTicks > 0)
+                return false;
+
+            // 3. Тычок: снаряд держит меч у кисти и знает своё направление
+            if (TryGetStanceBladeLine(ModContent.ProjectileType<SwordStabProjectile>(), out butt, out tip))
+                return true;
+            // 4. Встреча: выставленный меч
+            if (TryGetStanceBladeLine(ModContent.ProjectileType<SickleBraceProjectile>(), out butt, out tip))
+                return true;
+            // 5. Взмах: настоящая ванильная поза (itemLocation/itemRotation)
+            if (Player.itemAnimation > 0 && SwordArcProjectile.GetBladeLine(Player, out butt, out tip))
+                return true;
+
+            // 6. Стойка: меч рисует Weapon Out Lite, его координат у нас нет — оценка
+            float scale = Player.GetAdjustedItemScale(Player.HeldItem);
+            Vector2 heldDir = new Vector2(Player.direction, -0.95f).SafeNormalize(Vector2.UnitX);
+            butt = Player.Center + new Vector2(3f * Player.direction, 8f);
+            tip = butt + heldDir * (geo.Length * scale);
+            return true;
+        }
+
+        // Линия клинка выставленного снаряда (тычок/встреча): он ставит Center
+        // ровно на середину оси приклад→остриё, длина — геометрия спрайта, scale 1.
+        private bool TryGetStanceBladeLine(int projType, out Vector2 butt, out Vector2 tip)
+        {
+            butt = tip = default;
+            // O(1): таких снарядов у игрока нет — полный перебор не нужен. Без этой
+            // проверки огонь Frostbrand сканировал бы 1000 снарядов каждый тик.
+            if (Player.ownedProjectileCounts[projType] <= 0)
+                return false;
+            // У локального игрока индекс уже есть; у чужого (мультиплеер) — ищем свой
+            int index = projType == ModContent.ProjectileType<SickleBraceProjectile>() ? spearProj : stabProj;
+            if (!IsMyProjectile(index, projType))
+            {
+                index = -1;
+                for (int i = 0; i < Main.maxProjectiles; i++)
+                {
+                    Projectile p = Main.projectile[i];
+                    if (p.active && p.type == projType && p.owner == Player.whoAmI)
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+                if (index < 0)
+                    return false;
+            }
+
+            Projectile proj = Main.projectile[index];
+            // Тычок задаёт направление скоростью, встреча — углом ai[1] (фиксируется при спавне)
+            Vector2 dir = projType == ModContent.ProjectileType<SwordStabProjectile>()
+                ? proj.velocity.SafeNormalize(Vector2.UnitX)
+                : Vector2.UnitX.RotatedBy(proj.ai[1]);
+            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f;
+            butt = proj.Center - dir * half;
+            tip = proj.Center + dir * half;
+            return true;
+        }
+
+        // Постоянное свечение горящего клинка: пыль вдоль РЕАЛЬНОГО клинка
+        // (его позу отдаёт TryGetBladeLine) + холодный свет.
         private void UpdateHeldFire()
         {
             if (Player.itemAnimation > 0)
                 return; // взмах — огонь по настоящей позе рисует дуга
             if (Player.HeldItem.type != ItemID.Frostbrand)
                 return;
+            if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
+                return; // брошен / рука пустая / позы нет — нечего жечь
             if (--fireDustCooldown > 0)
                 return;
             fireDustCooldown = 2;
 
-            float scale = Player.GetAdjustedItemScale(Player.HeldItem);
-            // В стойке меч замерает поднятым: рукоять у пояса, остриё вверх-вперёд
-            Vector2 dir = new Vector2(Player.direction, -0.95f).SafeNormalize(Vector2.UnitX);
-            float bladeLength = SickleSprite.Get(ItemID.Frostbrand).Length * scale;
-            Vector2 butt = Player.Center + new Vector2(3f * Player.direction, 8f);
+            Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
             // Язычок: рождается на клинке (гуще у острия) и поднимается выше
             float t = Main.rand.NextFloat(0.1f, 1f);
-            Vector2 at = Vector2.Lerp(butt, butt + dir * bladeLength, t);
+            Vector2 at = Vector2.Lerp(butt, tip, t);
             Dust tongue = Dust.NewDustPerfect(at, DustID.BlueTorch,
                 dir * Main.rand.NextFloat(0.3f, 0.7f) + new Vector2(0f, Main.rand.NextFloat(-0.9f, -0.45f)),
                 130, default, Main.rand.NextFloat(1.0f, 1.5f));
             tongue.noGravity = true;
             // Вспышка на острие
-            Dust tipFlame = Dust.NewDustPerfect(butt + dir * bladeLength, DustID.BlueTorch,
+            Dust tipFlame = Dust.NewDustPerfect(tip, DustID.BlueTorch,
                 new Vector2(Player.direction * 0.2f, -0.6f), 110, default, 1.7f);
             tipFlame.noGravity = true;
             // Мягкое холодное сияние вокруг горящего клинка
-            Dust aura = Dust.NewDustPerfect(Vector2.Lerp(butt, butt + dir * bladeLength, 0.6f),
+            Dust aura = Dust.NewDustPerfect(Vector2.Lerp(butt, tip, 0.6f),
                 DustID.BlueTorch, new Vector2(Player.direction * 0.1f, -0.2f), 160, default, 1.7f);
             aura.noGravity = true;
             aura.alpha = 120;
-            Lighting.AddLight(butt + dir * bladeLength * 0.6f, FireLight.R / 255f, FireLight.G / 255f, FireLight.B / 255f);
+            Lighting.AddLight(Vector2.Lerp(butt, tip, 0.6f), FireLight.R / 255f, FireLight.G / 255f, FireLight.B / 255f);
         }
 
         // Поза броска: замах (обе кнопки зажаты, меч в руке) → выброс вперёд

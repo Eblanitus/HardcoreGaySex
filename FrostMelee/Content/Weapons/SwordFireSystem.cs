@@ -11,9 +11,9 @@ namespace FrostMelee.Content.Weapons
     // Постоянный огонь на клинке Frostbrand: рисуем ПОСЛЕ ТАЙЛОВ, тем же
     // приёмом, что FrostZoneSystem и SickleArc (свой Begin/End) — гарантированно
     // видимый слой поверх мира, без данных внутри отрисовки игрока или дуги.
-    // Поза клинка: во время взмаха — ванильная (itemLocation/itemRotation,
-    // тот же расчёт, что у SwordArcProjectile.GetBladeLine), в стойке —
-    // оценка по позе Weapon Out (рукоять у пояса, остриё вверх-вперёд).
+    // Позу клинка отдаёт SwordPlayer.TryGetBladeLine — она честно следует за
+    // взмахом, тычком, «встречей» и замахом броска, а если меч брошен (в руке
+    // пусто) — огня нет вообще.
     public class SwordFireSystem : ModSystem
     {
         public override void PostDrawTiles()
@@ -34,17 +34,14 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        // Линия лезвия: взмах — точная ванильная поза, стойка — оценка Weapon Out
+        // Линия лезвия: та же, что у огня в SwordPlayer — взмах, тычок, встреча,
+        // замах броска или стойка. false — меч брошен (в руке пусто) или позы нет.
         private static bool BladeLine(Player player, out Vector2 butt, out Vector2 tip)
         {
-            if (player.itemAnimation > 0 && SwordArcProjectile.GetBladeLine(player, out butt, out tip))
-                return true;
-            float scale = player.GetAdjustedItemScale(player.HeldItem);
-            Vector2 dir = new Vector2(player.direction, -0.95f).SafeNormalize(Vector2.UnitX);
-            float bladeLength = SickleSprite.Get(player.HeldItem.type).Length * scale;
-            butt = player.Center + new Vector2(3f * player.direction, 8f);
-            tip = butt + dir * bladeLength;
-            return bladeLength > 1f;
+            butt = tip = default;
+            if (!SwordTypes.IsSword(player.HeldItem))
+                return false;
+            return player.GetModPlayer<SwordPlayer>().TryGetBladeLine(out butt, out tip);
         }
 
         private static void DrawBladeFlame(Player player, Vector2 butt, Vector2 tip)

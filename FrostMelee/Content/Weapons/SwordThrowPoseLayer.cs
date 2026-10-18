@@ -15,8 +15,6 @@ namespace FrostMelee.Content.Weapons
     // оригинал, иней на мечах не растёт — FrozenSpear.Mix вернул бы 0).
     public class SwordThrowPoseLayer : PlayerDrawLayer
     {
-        private const float GripInset = 4f; // сколько рукояти позади кисти, как в тычке
-
         public override Position GetDefaultPosition() => new AfterParent(PlayerDrawLayers.HeldItem);
 
         public override bool GetDefaultVisibility(PlayerDrawSet drawInfo) =>
@@ -37,7 +35,9 @@ namespace FrostMelee.Content.Weapons
             SickleSprite.Geometry geo = SickleSprite.Get(itemType);
             bool flipped = player.direction == -1;
             Vector2 dir = sp.PoseItemDir;
-            Vector2 butt = player.Center + sp.PoseHandOffset - dir * GripInset;
+            // Отступ рукояти позади кисти — общая цифра со SwordPlayer (огонь на клинке
+            // считает ту же линию, иначе пламя съезжает с меча на замахе)
+            Vector2 butt = player.Center + sp.PoseHandOffset - dir * SwordPlayer.ThrowGripInset;
             float rotation = dir.ToRotation() - geo.AngleFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
             Color color = Lighting.GetColor((butt / 16f).ToPoint());
