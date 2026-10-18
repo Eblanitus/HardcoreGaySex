@@ -43,20 +43,23 @@ namespace FrostMelee.Content.Projectiles
             if (!tex.IsLoaded)
                 return false;
 
-            // Рост: ease-out за 10 тиков; ai[0] = случайный разброс размера
-            float grow = MathHelper.Clamp((46 - Projectile.timeLeft) / 10f, 0f, 1f);
+            // Выстреливание из земли: ease-out за 8 тиков, как шипы
+            // Blood Thorn / ледяные пики Deerclops растут из блока;
+            // ai[0] = случайный разброс размера
+            float grow = MathHelper.Clamp((46 - Projectile.timeLeft) / 8f, 0f, 1f);
             grow = 1f - (1f - grow) * (1f - grow);
             float scale = grow * (0.8f + Projectile.ai[0] * 0.5f);
 
-            // Таяние: последние 12 тиков, нелинейно
-            float fadeLin = Projectile.timeLeft < 12 ? Projectile.timeLeft / 12f : 1f;
+            // Таяние: последние 14 тиков, нелинейно
+            float fadeLin = Projectile.timeLeft < 14 ? Projectile.timeLeft / 14f : 1f;
             float fade = fadeLin * fadeLin * (3f - 2f * fadeLin);
 
             Color light = Lighting.GetColor((int)Projectile.Center.X / 16, (int)Projectile.Center.Y / 16);
             Color c = new Color((byte)(light.R * 0.8f), (byte)(light.G * 0.92f), light.B,
-                (byte)(235f * fade));
+                (byte)(235f * fade * grow));
             Vector2 origin = new Vector2(tex.Value.Width / 2f, tex.Value.Height);
-            Main.spriteBatch.Draw(tex.Value, Projectile.Center - Main.screenPosition,
+            // EntitySpriteDraw — рабочий конвейер полупрозрачности этого мода
+            Main.EntitySpriteDraw(tex.Value, Projectile.Center - Main.screenPosition,
                 null, c, 0f, origin, scale, SpriteEffects.None, 0f);
             return false;
         }

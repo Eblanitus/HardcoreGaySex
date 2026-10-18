@@ -165,9 +165,10 @@ namespace FrostMelee.Content.Weapons
                 if (!screen.Contains((int)world.X, (int)world.Y))
                     continue;
 
-                // Таяние нелинейное: смусстеп, а не прямая линия
-                float fadeLin = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
-                float fade = fadeLin * fadeLin * (3f - 2f * fadeLin);
+                // Таяние НЕПРЕРЫВНОЕ и нелинейное: льдинка становится
+                // прозрачнее каждый тик всей своей жизни, а не обрывается в конце
+                float t = (float)remain / LifeFrames;
+                float fade = t * t * (3f - 2f * t);
 
                 // Плавное появление: первые AppearFrames тиков альфа растёт
                 // смусстепом, лёд «намерзает», а не вспыхивает готовой полосой
@@ -178,17 +179,19 @@ namespace FrostMelee.Content.Weapons
                 byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade * appear);
                 Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
 
+                // EntitySpriteDraw — тот же вызов, которым в моде рисуются
+                // рабочие полупрозрачные слои (кроссфейды клинков, копьё)
                 if (tex != null)
                 {
                     // Текстура игрока рисуется 1:1: её размер и есть покрытие
-                    Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
+                    Main.EntitySpriteDraw(tex, world - Main.screenPosition, null, c,
                         0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
                 }
                 else
                 {
-                    Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
-                        new Rectangle((int)world.X - (int)Main.screenPosition.X,
-                            (int)world.Y - (int)Main.screenPosition.Y, 16, 5), c);
+                    Main.EntitySpriteDraw(TextureAssets.MagicPixel.Value,
+                        world - Main.screenPosition, null, c, 0f, Vector2.Zero,
+                        new Vector2(16f, 5f), SpriteEffects.None, 0f);
                 }
             }
         }
