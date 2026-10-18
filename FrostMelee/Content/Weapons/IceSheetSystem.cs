@@ -34,6 +34,7 @@ namespace FrostMelee.Content.Weapons
     {
         public const int LifeFrames = 240;  // 4 секунды
         public const int FadeFrames = 60;   // тает в последнюю секунду
+        public const int AppearFrames = 18; // намерзает за 0.3 секунды
 
         private static readonly Dictionary<Point, int> marks = new();
         private static Asset<Texture2D> coatTex;
@@ -149,8 +150,14 @@ namespace FrostMelee.Content.Weapons
                     continue;
 
                 float fade = remain < FadeFrames ? remain / (float)FadeFrames : 1f;
+
+                // Плавное появление: первые AppearFrames тиков альфа растёт
+                // смусстепом, лёд «намерзает», а не вспыхивает готовой полосой
+                int age = now - (kv.Value - LifeFrames);
+                float appear = age < AppearFrames ? age / (float)AppearFrames : 1f;
+                appear = appear * appear * (3f - 2f * appear);
                 Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
-                byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade);
+                byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade * appear);
                 Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
                 Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
                     0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
