@@ -148,7 +148,7 @@ namespace FrostMelee.Content.Weapons
             if (tex == null && !loadWarned)
             {
                 loadWarned = true;
-                Mod.Logger.Warn("[IceSheet] текстура IceCoat не загрузилась, рисую запасным пикселем");
+                ModContent.GetInstance<FrostMelee.FrostMelee>().Logger.Warn("[IceSheet] текстура IceCoat не загрузилась, рисую запасным пикселем");
             }
 
             int now = (int)Main.GameUpdateCount;
