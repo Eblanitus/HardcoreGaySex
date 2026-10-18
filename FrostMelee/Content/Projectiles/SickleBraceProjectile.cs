@@ -214,14 +214,14 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.ai[1], Projectile.spriteDirection == -1, 1f))
                     return true;
                 // Ледяное жало за остриём бьёт вместе с клинком
-                float ice = FrostGrowth.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
+                float ice = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
                 if (ice > 0.5f)
                     return HitTipLine(dir, SickleSprite.Get((int)Projectile.ai[2]).Length, ice, targetHitbox);
                 return false;
             }
 
             float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
-            float extra = FrostGrowth.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
+            float extra = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
             Vector2 tipPos = Projectile.Center + dir * (length * 0.5f + extra);
             Vector2 start = tipPos - dir * System.Math.Min(TipHitLength + extra, length + extra);
             float collisionPoint = 0f;
@@ -469,8 +469,8 @@ namespace FrostMelee.Content.Projectiles
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
-            // Наледь: иней по лезвию и ледяное жало за остриём
-            FrostGrowth.Draw(drawPos, drawPos + SpearDir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
+            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
+            FrostFire.Draw(drawPos, drawPos + SpearDir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }

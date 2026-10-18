@@ -38,10 +38,10 @@ namespace FrostMelee.Content
         public const float IceBladeDamageMult = 1.18f;
         public const int IceBladeExtendTicks = 60; // +1 с
 
-        // Frostbrand: за каждого горящего, которого ударил, на клинке нарастает лёд.
-        // Спрайт не растягивается: иней ползёт по лезвию от острия к рукояти,
-        // а за остриём вырастает ледяное жало — оно и даёт прибавку длины.
-        public const float IceTipPerCharge = 3f;  // px льда за остриём на заряд
+        // Frostbrand: за каждого горящего, которого ударил, вокруг клинка разрастается
+        // ледяной огонь. Спрайт не растягивается — пламя становится больше и выходит
+        // за остриё; эта часть и даёт прибавку длины.
+        public const float IceTipPerCharge = 3f;  // px пламени за остриём на заряд
         public const int MaxReachCharges = 5;
         public const int ReachLife = 480;          // 8 с живёт заряд
         public const float BurnSpreadRadius = 60f; // умерший горящий поджигает соседей

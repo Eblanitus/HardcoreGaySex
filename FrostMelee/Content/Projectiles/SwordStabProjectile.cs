@@ -153,7 +153,7 @@ namespace FrostMelee.Content.Projectiles
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
             // Ледяное жало за остриём бьёт вместе с клинком
-            float extra = FrostGrowth.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
+            float extra = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]);
             Vector2 tipPos = Projectile.Center + dir * (half + extra);
             Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength + extra, half * 2f + extra);
             float collisionPoint = 0f;
@@ -205,8 +205,8 @@ namespace FrostMelee.Content.Projectiles
 
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor, Projectile.rotation, origin, 1f, effects, 0f);
-            // Наледь: иней по лезвию и ледяное жало за остриём
-            FrostGrowth.Draw(drawPos, drawPos + dir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
+            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
+            FrostFire.Draw(drawPos, drawPos + dir * geo.Length, FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }

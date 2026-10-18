@@ -596,7 +596,7 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.rotation, Projectile.rotation, false, Projectile.scale))
                     return true;
                 // Ледяное жало за остриём бьёт вместе с клинком
-                float ice = FrostGrowth.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]) * Projectile.scale;
+                float ice = FrostFire.TipExtra(Main.player[Projectile.owner], (int)Projectile.ai[2]) * Projectile.scale;
                 if (ice <= 0.5f)
                     return false;
                 Vector2 tipAxis = Projectile.rotation.ToRotationVector2();
@@ -774,8 +774,8 @@ namespace FrostMelee.Content.Projectiles
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
-            // Наледь: иней по лезвию и ледяное жало за остриём
-            FrostGrowth.Draw(butt, butt + axis * (geo.Length * scale), FrostKindle.Growth01(Main.player[Projectile.owner]));
+            // Ледяной огонь поверх клинка: языки по лезвию и грива за остриём
+            FrostFire.Draw(butt, butt + axis * (geo.Length * scale), FrostKindle.Growth01(Main.player[Projectile.owner]));
             return false;
         }
     }
