@@ -1030,6 +1030,20 @@ namespace FrostMelee.Content.Projectiles
 
         private static readonly List<Trail> trails = new List<Trail>();
 
+        // Есть ли рядом точка инея: по ней мечи решают, что враг стоит «на льду»
+        public static bool AnyNear(Vector2 point, float radius)
+        {
+            float r2 = radius * radius;
+            for (int ti = 0; ti < trails.Count; ti++)
+            {
+                List<Vector2> pos = trails[ti].Pos;
+                for (int i = 0; i < pos.Count; i++)
+                    if (Vector2.DistanceSquared(pos[i], point) <= r2)
+                        return true;
+            }
+            return false;
+        }
+
         // Мягкое пятно в стиле зоны (FrostZoneSystem): обычный иней тоньше и тише, сильный ярче и плотнее
         private const float TrailBlobAlpha = 0.3f;      // прозрачность одного пятна (перекрываются)
         private const float TrailBlobSizeMult = 3f;     // диаметр пятна = FrostPatchSz * это

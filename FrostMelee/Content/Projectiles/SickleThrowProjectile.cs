@@ -7,6 +7,7 @@ using Terraria.Audio;
 using Terraria.GameContent;
 using Terraria.ID;
 using Terraria.ModLoader;
+using FrostMelee.Content.Weapons;
 
 namespace FrostMelee.Content.Projectiles
 {
@@ -610,6 +611,11 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            // Брошенный ледяной меч тоже студит и поджигает
+            int thrownItem = (int)Projectile.ai[2];
+            if (SwordTypes.IsSwordId(thrownItem))
+                FrostKindle.OnSwordHit(Main.player[Projectile.owner], target, thrownItem);
+
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);
 

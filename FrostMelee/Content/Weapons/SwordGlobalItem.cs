@@ -52,7 +52,16 @@ public class SwordGlobalItem : GlobalItem
         // Подсказка по управлению приёмами
         public override void ModifyTooltips(Item item, List<TooltipLine> tooltips)
         {
-            if (!SwordTypes.IsSword(item) || !FrostMeleeConfigDefaults.ShowControlTooltips)
+            if (!SwordTypes.IsSword(item))
+                return;
+            // Что делает лёд именно этого меча
+            if (item.type == ItemID.IceBlade)
+                tooltips.Add(new TooltipLine(Mod, "IceBladeKindle",
+                    Language.GetTextValue("Mods.FrostMelee.IceBladeKindleTooltip")));
+            else if (item.type == ItemID.Frostbrand)
+                tooltips.Add(new TooltipLine(Mod, "FrostbrandKindle",
+                    Language.GetTextValue("Mods.FrostMelee.FrostbrandKindleTooltip")));
+            if (!FrostMeleeConfigDefaults.ShowControlTooltips)
                 return;
             tooltips.Add(new TooltipLine(Mod, "SwordControls",
                 Language.GetTextValue("Mods.FrostMelee.SwordControlsTooltip")));
@@ -78,7 +87,14 @@ public class SwordGlobalItem : GlobalItem
             var sprite = SickleSprite.Get(item.type);
             float bladeLength = sprite.Length;
 
-            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength;
+            // Frostbrand растёт от горящих: заряды удлиняют сам взмах, а не только хитбокс
+            float baseReach = bladeLength * adjustedItemScale + SwordArcProjectile.HandReach;
+            float reachBonus = item.type == ItemID.Frostbrand
+                ? player.GetModPlayer<FrostKindlePlayer>().ReachBonus
+                : 0f;
+            float reachMult = (baseReach + reachBonus) / baseReach;
+
+            float finalScale = adjustedItemScale * bladeLength / ArcSizeLength * reachMult;
 
             int arcIndex = Projectile.NewProjectile(
                 source,
@@ -95,8 +111,8 @@ public class SwordGlobalItem : GlobalItem
             // Докуда достаёт сам клинок — там полный урон
             if (arcIndex >= 0 && arcIndex < Main.maxProjectiles &&
                 Main.projectile[arcIndex].ModProjectile is SwordArcProjectile arc) {
-                arc.BladeReach = bladeLength * adjustedItemScale + SwordArcProjectile.HandReach;
-                // Кто взмахнул: Frostbrand рисует на дуге ледяной огонь
+                arc.BladeReach = baseReach * reachMult;
+                // Кто взмахнул: от меча зависят ледяные свойства удара
                 arc.SwordItem = item.type;
             }
             return false;
