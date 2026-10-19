@@ -86,6 +86,20 @@ namespace FrostMelee.Content.Weapons
         private int iceIdleTicks; // тиков без попаданий до заледенения
         private bool lastRoughLogged = true; // для строки диагностики полировки
 
+        // === Отдача полировки на все приёмы меча ===
+        // P = 0 (весь в инее) .. 1 (отполирован): быстрее и больнее, но меньше отдача
+        public static float PolishOf(Player player) =>
+            1f - player.GetModPlayer<SwordPlayer>().IceFrost;
+
+        public static float PolishDamageMult(Player player) =>
+            1f + 0.25f * PolishOf(player);      // до +25% урона
+
+        public static float PolishKnockbackMult(Player player) =>
+            1f - 0.45f * PolishOf(player);       // до -45% отбрасывания
+
+        public static float PolishSpeedMult(Player player) =>
+            1f - 0.15f * PolishOf(player);       // до -15% времени использования
+
         public void AddPolish()
         {
             if (Player.whoAmI != Main.myPlayer || Player.HeldItem.type != ItemID.IceBlade) return;
@@ -593,14 +607,14 @@ namespace FrostMelee.Content.Weapons
             if (Math.Abs(dir.X) < StabSideDeadzone)
                 dir = new Vector2(StabSideDeadzone * Player.direction, dir.Y).SafeNormalize(Vector2.UnitX);
             armAimDir = dir;
-            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.StabDamageMult(held)));
+            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.StabDamageMult(held) * PolishDamageMult(Player)));
             stabProj = Projectile.NewProjectile(
                 Player.GetSource_ItemUse(held),
                 Player.MountedCenter,
                 dir * 8f,
                 ModContent.ProjectileType<SwordStabProjectile>(),
                 damage,
-                held.knockBack * SwordTypes.StabKnockbackMult(held),
+                held.knockBack * SwordTypes.StabKnockbackMult(held) * PolishKnockbackMult(Player),
                 Player.whoAmI,
                 duration, 0f, held.type);
         }
@@ -621,14 +635,14 @@ namespace FrostMelee.Content.Weapons
                 dir = new Vector2(dir.X >= 0 ? 1f : -1f, 0f);
             // Урон встречи: слабее взмаха за секунду, но растёт со скоростью сближения
             // (внутри снаряда ×0.4..×2.5 от скорости — см. SickleBraceProjectile)
-            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.SpearDamageMult(held)));
+            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.SpearDamageMult(held) * PolishDamageMult(Player)));
             spearProj = Projectile.NewProjectile(
                 Player.GetSource_ItemUse(held),
                 Player.MountedCenter + dir * 18f,
                 Vector2.Zero,
                 meetType,
                 damage,
-                held.knockBack,
+                held.knockBack * PolishKnockbackMult(Player),
                 Player.whoAmI,
                 0f, dir.ToRotation(), held.type);
         }
@@ -649,8 +663,8 @@ namespace FrostMelee.Content.Weapons
                 spawn,
                 dir * SickleThrowProjectile.ThrowSpeed,
                 ModContent.ProjectileType<SickleThrowProjectile>(),
-                Player.GetWeaponDamage(held),
-                held.knockBack,
+                Math.Max(1, (int)(Player.GetWeaponDamage(held) * PolishDamageMult(Player))),
+                held.knockBack * PolishKnockbackMult(Player),
                 Player.whoAmI,
                 -1f, 0f, held.type);
             if (index < 0 || index >= Main.maxProjectiles ||

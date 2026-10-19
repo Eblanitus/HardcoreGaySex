@@ -33,9 +33,9 @@ namespace FrostMelee.Content.Weapons
 
         public static float SpearDamageMult(Item item) => 0.8f;
 
-        // Бросок: меч летит остриём (лезвием) вперёд, как копьё, и втыкается
-        // в мягкий блок/врага на скорости (SickleThrowProjectile).
-        public static bool ThrownAlwaysTipFirst(int itemType) => true;
+        // Бросок мечей — как у палок, а не как у копья: крученый, в полёте
+        // вертится, на земле ложится и settle-ится (SickleThrowProjectile).
+        public static bool ThrownAlwaysTipFirst(int itemType) => false;
 
         public static float StabKnockbackMult(Item item) => 0.5f;
 

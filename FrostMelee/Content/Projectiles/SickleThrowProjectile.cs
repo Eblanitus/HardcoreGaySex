@@ -118,6 +118,8 @@ namespace FrostMelee.Content.Projectiles
         private bool stuckInit;
         private Point stuckTile;
         private bool cleanNpcHit;
+        // Попадание пиксельной зоной клинка (лезвием) в этом тике
+        private bool bladeZoneHit;
 
         private FrostTrailSystem.Trail frostTrail;
         private Vector2 lastTrailPos;
@@ -145,6 +147,7 @@ namespace FrostMelee.Content.Projectiles
 
         public override void AI()
         {
+            bladeZoneHit = false;
             if (!initialized)
             {
                 initialized = true;
@@ -436,7 +439,7 @@ namespace FrostMelee.Content.Projectiles
         private void SpawnIceWave(int itemType, bool isKill)
         {
             Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
-            if (itemType != ItemID.IceBlade) return;
+            if (!Weapons.SwordTypes.IsSwordId(itemType)) return;
             // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
@@ -625,7 +628,10 @@ namespace FrostMelee.Content.Projectiles
             {
                 if (SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center,
                     Projectile.rotation, Projectile.rotation, false, Projectile.scale))
+                {
+                    bladeZoneHit = true; // лезвием, а не плашкой
                     return true;
+                }
                 return false;
             }
 
@@ -639,7 +645,11 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            cleanNpcHit = IsCleanHit(Projectile.velocity);
+            // Меч: «лезвием» = попадание пиксельной зоной клинка.
+            // Серп: по-прежнему чистый удар остриём по скорости
+            cleanNpcHit = Weapons.SwordTypes.IsSwordId((int)Projectile.ai[2])
+                ? bladeZoneHit
+                : IsCleanHit(Projectile.velocity);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
@@ -647,10 +657,11 @@ namespace FrostMelee.Content.Projectiles
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             int thrownItem = (int)Projectile.ai[2];
-            if (Weapons.SwordTypes.IsSwordId(thrownItem) && thrownItem == ItemID.IceBlade) {
-                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
-                // Волна льда по поверхности — маленькая на попадании
-                if (Projectile.owner == Main.myPlayer) {
+            if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
+                if (thrownItem == ItemID.IceBlade)
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+                // Волна льда — оба меча, и только когда попало лезвием
+                if (cleanNpcHit && Projectile.owner == Main.myPlayer) {
                     bool isKill = target.life <= 0;
                     SpawnIceWave(thrownItem, isKill);
                 }

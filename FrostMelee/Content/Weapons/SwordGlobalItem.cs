@@ -42,6 +42,21 @@ public class SwordGlobalItem : GlobalItem
             item.autoReuse = true;
         }
 
+        // Чем полированнее клинок, тем быстрее взмах/тычок/бросок
+        public override bool UseTime(Item item, Player player, ref int useTime)
+        {
+            if (SwordTypes.IsSword(item))
+                useTime = Math.Max(2, (int)(useTime * SwordPlayer.PolishSpeedMult(player)));
+            return true;
+        }
+
+        public override bool UseAnimation(Item item, Player player, ref int useAnimation)
+        {
+            if (SwordTypes.IsSword(item))
+                useAnimation = Math.Max(2, (int)(useAnimation * SwordPlayer.PolishSpeedMult(player)));
+            return true;
+        }
+
         // Меч сам не бьёт: иначе он и дуга попадали по одной цели за взмах
         public override void UseItemHitbox(Item item, Player player, ref Rectangle hitbox, ref bool noHitbox)
         {
@@ -73,7 +88,7 @@ public class SwordGlobalItem : GlobalItem
             float adjustedItemScale = player.GetAdjustedItemScale(item);
             // Дуга — единственный удар взмаха: полный урон взмаха (со стихией меча).
             // К краю дуги урон падает — см. SwordArcProjectile.ModifyHitNPC
-            int arcDamage = Math.Max(1, (int)Math.Round(damage * SwordTypes.SwingDamageMult(item)));
+            int arcDamage = Math.Max(1, (int)Math.Round(damage * SwordTypes.SwingDamageMult(item) * SwordPlayer.PolishDamageMult(player)));
 
             // Размер дуги — от реальной длины клинка (рукоять → остриё по пикселям;
             // для мечей замер меч-специфичный: остриё дальний от угла, см. SickleSprite).
@@ -90,7 +105,7 @@ public class SwordGlobalItem : GlobalItem
                 new Vector2(player.direction, 0f),
                 arcType,
                 arcDamage,
-                knockback,
+                knockback * SwordPlayer.PolishKnockbackMult(player),
                 player.whoAmI,
                 player.direction * player.gravDir,
                 Math.Max(1, player.itemAnimationMax),

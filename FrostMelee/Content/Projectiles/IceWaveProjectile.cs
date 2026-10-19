@@ -81,11 +81,6 @@ namespace FrostMelee.Content.Projectiles
 
             if (grounded)
             {
-                // Волна намораживает глазурь за собой: земля замерзает по пути
-                Point mark = Projectile.Center.ToTileCoordinates();
-                Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y);
-                Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y);
-
                 // Ледяные пики по ходу волны: атака как у Deerclops, но мелкая.
                 // Шаг чаще у длинной волны убийства.
                 // Размер шипа тем меньше, чем дальше от меча: ai[2] = множитель
