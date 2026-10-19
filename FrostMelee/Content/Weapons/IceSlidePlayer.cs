@@ -75,7 +75,10 @@ namespace FrostMelee.Content.Weapons
             if (Player.iceSkate)
                 return true;
 
-            for (int i = 3; i < 3 + Player.maxAccessories; i++)
+            // Слоты аксессуаров в ванили — armor[3..9] (5 базовых +
+            // демон-сердце + мастер-мод), соц-слоты с 10 эффектов не дают.
+            // Пустые и закрытые слоты не совпадут по типу сами
+            for (int i = 3; i < 10; i++)
             {
                 int t = Player.armor[i].type;
                 if (t == ItemID.IceSkates || t == ItemID.FrostsparkBoots || t == ItemID.TerrasparkBoots)
