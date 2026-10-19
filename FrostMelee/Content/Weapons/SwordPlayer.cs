@@ -57,7 +57,8 @@ namespace FrostMelee.Content.Weapons
         // Направление, куда смотрят руки: НЕ живой курсор, а оружие
         private Vector2 armAimDir = Vector2.UnitX;
         // Поза броска (только локальный игрок)
-        private int throwFollowTicks;                 // сколько тиков ещё идёт выброс/возврат
+        private int throwFollowTicks;
+        private float fireGlow;   // свечение Фростбранда от горящих рядом врагов                 // сколько тиков ещё идёт выброс/возврат
         private Vector2 throwAimDir = Vector2.UnitX;  // линия броска, зафиксированная при вылете
         // Меч в руке в замахе: рисует SwordThrowPoseLayer. Кисть — смещением от центра игрока
         public bool PoseItemVisible;
@@ -327,6 +328,30 @@ namespace FrostMelee.Content.Weapons
             // ванилла каждый тик перебивает руки в PlayerFrame и разворот в движении.
             if (Player.whoAmI != Main.myPlayer)
                 return;
+
+            // Фростбранд: чем больше врагов горит рядом, тем ярче светится меч
+            if (HoldingSword && Player.HeldItem.type == ItemID.Frostbrand)
+            {
+                int burning = FrostFireSystem.CountBurningNear(Player.Center, 500f);
+                float target = System.Math.Min(burning, 5) / 5f;
+                fireGlow += (target - fireGlow) * 0.08f;
+                if (fireGlow > 0.02f)
+                {
+                    Lighting.AddLight(Player.Center, 0.25f * fireGlow, 0.55f * fireGlow, 0.75f * fireGlow);
+                    if (!Main.dedServ && Main.rand.NextFloat() < 0.15f + 0.35f * fireGlow)
+                    {
+                        Dust d = Dust.NewDustPerfect(Player.Center + new Vector2(Player.direction * 18f, -10f),
+                            DustID.IceTorch,
+                            new Vector2(Main.rand.NextFloat(-0.4f, 0.4f), -Main.rand.NextFloat(0.6f, 1.4f)),
+                            100, default, Main.rand.NextFloat(0.8f, 1.4f));
+                        d.noGravity = true;
+                    }
+                }
+            }
+            else
+            {
+                fireGlow *= 0.92f;
+            }
             // Скольжение на льду — только когда уже разогнался с копьём, а не постоял
             if (SpearMode) {
                 IceSlideSystem.TrySlide(Player, this);

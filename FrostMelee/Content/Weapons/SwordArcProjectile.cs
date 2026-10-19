@@ -473,6 +473,10 @@ namespace FrostMelee.Content.Weapons
             if (SwordItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish();
             }
+            // Фростбранд: любой удар поджигает холодным огнём
+            if (SwordItem == ItemID.Frostbrand) {
+                FrostFireSystem.Ignite(target, Projectile.owner);
+            }
         }
 
         public override void OnHitPlayer(Player target, Player.HurtInfo info) {

@@ -177,6 +177,13 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish();
             }
+            // Фростбранд: поджигает; умер, пока горел, — взрыв холодного огня
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
+                bool wasBurning = Content.Weapons.FrostFireSystem.WasBurning(target);
+                Content.Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+                if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
+                    Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
+            }
         }
 
         public override bool PreDraw(ref Color lightColor)

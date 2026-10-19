@@ -142,6 +142,20 @@ namespace FrostMelee.Content.Projectiles
             float armRot = Projectile.ai[1] - MathHelper.PiOver2;
 
             // Выдвиг: первые DeployTicks серп выдвигается вперёд, дальше висит
+            // Фростбранд: узкая струя холодного пламени из лезвия, пока
+            // встреча выставлена и меч в руке. Держишь — жжёт, отпустил — гаснет.
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand
+                && Projectile.owner == Main.myPlayer
+                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand
+                && Main.GameUpdateCount % 5 == 0)
+            {
+                Player jetOwner = Main.player[Projectile.owner];
+                Vector2 jetTip = Projectile.Center + SpearDir * (SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f);
+                int jetDmg = Math.Max(1, jetOwner.GetWeaponDamage(jetOwner.HeldItem) * 3 / 10);
+                Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * 9f,
+                    ModContent.ProjectileType<FrostFireJet>(), jetDmg, 0.5f, Projectile.owner);
+            }
+
             if (Projectile.localAI[0] < DeployTicks)
                 Projectile.localAI[0]++;
             float t = Projectile.localAI[0] / DeployTicks;
@@ -395,6 +409,10 @@ namespace FrostMelee.Content.Projectiles
             int braceItem = (int)Projectile.ai[2];
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+            }
+            // Фростбранд: встреча тоже поджигает
+            if (braceItem == ItemID.Frostbrand) {
+                Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
             }
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);

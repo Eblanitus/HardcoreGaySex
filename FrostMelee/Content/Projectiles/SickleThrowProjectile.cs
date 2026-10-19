@@ -655,6 +655,13 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
                 if (thrownItem == ItemID.IceBlade)
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+                // Фростбранд: поджигает; убил горящего — взрыв сильнее и шире тычкового
+                if (thrownItem == ItemID.Frostbrand) {
+                    bool wasBurning = Weapons.FrostFireSystem.WasBurning(target);
+                    Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+                    if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
+                        Weapons.FrostFireSystem.Explode(target, 200f, Projectile.damage * 7 / 10, Projectile.owner, true);
+                }
                 // Волна льда — оба меча, и только когда попало лезвием
                 if (cleanNpcHit && Projectile.owner == Main.myPlayer) {
                     bool isKill = target.life <= 0;
