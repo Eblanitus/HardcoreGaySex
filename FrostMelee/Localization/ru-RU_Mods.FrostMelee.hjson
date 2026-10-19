@@ -11,6 +11,8 @@ Projectiles: {
 	// IceSlideDeco.DisplayName: Ice Slide Deco
 	// IceSheetDrawer.DisplayName: Ice Sheet Drawer
 	// IceWaveSpike.DisplayName: Ice Wave Spike
+	// FrostFireBlast.DisplayName: Frost Fire Blast
+	// FrostFireJet.DisplayName: Frost Fire Jet
 }
 
 Stance: {

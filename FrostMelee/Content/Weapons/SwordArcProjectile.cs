@@ -107,9 +107,13 @@ namespace FrostMelee.Content.Weapons
             if (Projectile.owner == Main.myPlayer)
                 RecordFrostTrail(player);
 
-            // Кристаллики инея вдоль линии дуги (визуал, все клиенты)
-            if (!Main.dedServ)
-                SpawnFrostDust(player);
+            // Визуал (все клиенты): Ice Blade точится об воздух, остальные — иней вдоль дуги
+            if (!Main.dedServ) {
+                if (IsIceBlade(player))
+                    UpdateHone(player, maxAnim);
+                else
+                    SpawnFrostDust(player);
+            }
 
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
                 ShowHitbox(player);
@@ -349,6 +353,188 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
+        // === Ice Blade: клинок точится об воздух ===
+        // Копьё во взмахе сбрасывает иней широкой кометой; меч наоборот — правит всю
+        // длину клинка: блик бежит от пяты к острию, за кромкой остаётся веер рисок,
+        // с шершавого клинка сыплется стружка наледи, с отточенного — искры правки.
+        // В конце правки остриё «дзинькает». Чем выше полировка, тем тоньше и ярче след.
+        private const int HonePoints = 16;          // точек истории угла клинка
+        private const float HoneStart = 0.12f;      // доля взмаха, когда блик трогается с пяты
+        private const float HoneSpan = 0.6f;        // за какую долю взмаха он доходит до острия
+        private const float TingTicks = 7f;         // сколько тиков живёт «дзинь»
+
+        // История — свой массив у каждого снаряда (ArcRotation во время взмаха даёт только
+        // текущий угол клинка, поэтому прошлые углы приходится запоминать по тикам)
+        private float[] honeAngles;
+        private float[] honeRadii;
+        private int honeCount;
+        private float tingTick = -1f;
+
+        private static readonly float[] drawAngles = new float[HonePoints];
+        private static readonly float[] drawRadii = new float[HonePoints];
+
+        private bool IsIceBlade(Player player) {
+            int item = SwordItem != 0 ? SwordItem : player.HeldItem.type;
+            return item == ItemID.IceBlade;
+        }
+
+        private static float HoneGlintAt(float progress) => Smooth01((progress - HoneStart) / HoneSpan);
+
+        // Пята и остриё настоящего клинка (запасной вариант — по углу дуги) и блик между ними
+        private void HoneLine(Player player, float progress, out Vector2 butt, out Vector2 tip, out Vector2 glint, out Vector2 bladeDir) {
+            if (!GetBladeLine(player, out butt, out tip) || Vector2.DistanceSquared(butt, tip) < 4f) {
+                Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
+                Vector2 d = Projectile.rotation.ToRotationVector2();
+                butt = center + d * HandReach;
+                tip = center + d * Math.Max(BladeReach, 30f);
+            }
+            bladeDir = (tip - butt).SafeNormalize(Projectile.rotation.ToRotationVector2());
+            glint = Vector2.Lerp(butt, tip, HoneGlintAt(progress));
+        }
+
+        // Куда клинок движется: +1 — угол растёт, -1 — убывает
+        private int SwingSign() {
+            if (honeCount >= 2 && Math.Abs(honeAngles[0] - honeAngles[1]) > 0.001f)
+                return honeAngles[0] > honeAngles[1] ? 1 : -1;
+            return Projectile.ai[0] >= 0f ? 1 : -1;
+        }
+
+        private void UpdateHone(Player player, float maxAnim) {
+            honeAngles ??= new float[HonePoints];
+            honeRadii ??= new float[HonePoints];
+            // Сдвиг истории; угол разворачиваем относительно прошлого, чтобы не прыгал на 2π
+            float angle = Projectile.rotation;
+            if (honeCount > 0)
+                angle = honeAngles[0] + MathHelper.WrapAngle(angle - honeAngles[0]);
+            for (int i = Math.Min(honeCount, HonePoints - 1); i > 0; i--) {
+                honeAngles[i] = honeAngles[i - 1];
+                honeRadii[i] = honeRadii[i - 1];
+            }
+            honeAngles[0] = angle;
+            honeRadii[0] = ArcLineRadius(Projectile.localAI[0]);
+            honeCount = Math.Min(honeCount + 1, HonePoints);
+
+            float progress = Projectile.localAI[0] / maxAnim;
+            float env = SwingEnv(Projectile.localAI[0], maxAnim);
+            float polish = IceBladeFx.PolishOf(player);
+            float rough = 1f - polish;
+            HoneLine(player, progress, out _, out Vector2 tip, out Vector2 glint, out _);
+            int sign = SwingSign();
+            Vector2 radial = Projectile.rotation.ToRotationVector2();
+            Vector2 tangent = radial.RotatedBy(MathHelper.PiOver2 * sign);
+
+            // Под бликом воздух снимает с клинка: наледь — стружкой, металл — искрами.
+            // Всё летит назад, против хода клинка
+            if (env > 0.05f) {
+                int shavings = IceBladeFx.Count(env * rough * 2.2f);
+                for (int i = 0; i < shavings; i++) {
+                    Vector2 vel = -tangent * Main.rand.NextFloat(1.5f, 3.2f) + radial * Main.rand.NextFloat(0.3f, 1.4f);
+                    IceBladeFx.SpawnShaving(glint + Main.rand.NextVector2Circular(3f, 3f), vel, Main.rand.NextFloat(0.8f, 1.2f));
+                }
+                int sparks = IceBladeFx.Count(env * (0.25f + 1.4f * polish));
+                for (int i = 0; i < sparks; i++) {
+                    Vector2 vel = -tangent * Main.rand.NextFloat(2f, 4.5f) + radial * Main.rand.NextFloat(-0.6f, 1.2f);
+                    IceBladeFx.SpawnSpark(glint, vel, Main.rand.NextFloat(0.8f, 1.15f));
+                }
+                Lighting.AddLight(glint, IceBladeFx.EdgeRim.ToVector3() * (0.25f + 0.55f * polish) * env * 0.7f);
+            }
+
+            // Блик дошёл до острия — «дзинь»: с острия срывается последняя наледь / сноп искр
+            if (tingTick < 0f && HoneGlintAt(progress) >= 0.98f) {
+                tingTick = Projectile.localAI[0];
+                int chips = (int)Math.Round(rough * 6f);
+                for (int i = 0; i < chips; i++) {
+                    Vector2 vel = radial * Main.rand.NextFloat(1.5f, 3.5f) - tangent * Main.rand.NextFloat(0f, 2f);
+                    IceBladeFx.SpawnShaving(tip, vel.RotatedByRandom(0.5f), Main.rand.NextFloat(0.9f, 1.3f));
+                }
+                int burst = (int)Math.Round(1f + polish * 5f);
+                for (int i = 0; i < burst; i++) {
+                    Vector2 vel = (radial * Main.rand.NextFloat(2f, 4f) - tangent * Main.rand.NextFloat(1f, 3f)).RotatedByRandom(0.6f);
+                    IceBladeFx.SpawnSpark(tip, vel, Main.rand.NextFloat(0.9f, 1.3f));
+                }
+                Lighting.AddLight(tip, IceBladeFx.EdgeCore.ToVector3() * (0.3f + 0.6f * polish));
+            }
+        }
+
+        // Удар по цели: срывает с кромки крошку / высекает искру (только визуал)
+        private static void HoneHitBurst(Player player, NPC target) {
+            if (Main.dedServ)
+                return;
+            float polish = IceBladeFx.PolishOf(player);
+            Vector2 at = target.Hitbox.ClosestPointInRect(player.MountedCenter);
+            Vector2 away = (at - player.MountedCenter).SafeNormalize(Vector2.UnitX);
+            int chips = (int)Math.Round((1f - polish) * 4f);
+            for (int i = 0; i < chips; i++)
+                IceBladeFx.SpawnShaving(at, away.RotatedByRandom(1.1f) * Main.rand.NextFloat(1f, 2.6f), Main.rand.NextFloat(0.8f, 1.1f));
+            int sparks = (int)Math.Round(1f + polish * 3f);
+            for (int i = 0; i < sparks; i++)
+                IceBladeFx.SpawnSpark(at, away.RotatedByRandom(1.2f) * Main.rand.NextFloat(2f, 4f), 1f);
+        }
+
+        private void DrawHone(Player player, float progress, float maxAnim) {
+            float env = SwingEnv(Projectile.localAI[0], maxAnim);
+            if (env <= 0.02f || Main.dedServ)
+                return;
+            Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
+            float polish = IceBladeFx.PolishOf(player);
+
+            // История, обрезанная по TrailMaxAngle: веер не оборачивается вокруг игрока
+            int n = 0;
+            if (honeAngles != null && honeCount > 0) {
+                float head = honeAngles[0];
+                drawAngles[0] = head;
+                drawRadii[0] = honeRadii[0];
+                n = 1;
+                for (int i = 1; i < honeCount; i++) {
+                    float delta = Math.Abs(honeAngles[i] - head);
+                    if (delta > TrailMaxAngle) {
+                        float prevDelta = Math.Abs(drawAngles[n - 1] - head);
+                        float f = MathHelper.Clamp((TrailMaxAngle - prevDelta) / Math.Max(0.0001f, delta - prevDelta), 0f, 1f);
+                        drawAngles[n] = MathHelper.Lerp(drawAngles[n - 1], honeAngles[i], f);
+                        drawRadii[n] = MathHelper.Lerp(drawRadii[n - 1], honeRadii[i], f);
+                        n++;
+                        break;
+                    }
+                    drawAngles[n] = honeAngles[i];
+                    drawRadii[n] = honeRadii[i];
+                    n++;
+                }
+            }
+            if (n >= 2)
+                IceBladeFx.DrawArcStrips(center, drawAngles, drawRadii, n, Math.Max(16f, BladeReach * 0.3f),
+                    polish, env, Projectile.localAI[0]);
+
+            Texture2D glow = IceBladeFx.Glow();
+            if (glow == null)
+                return;
+
+            // Режущая точка на кромке: где клинок сейчас рассекает воздух
+            if (n >= 1) {
+                Vector2 radial = drawAngles[0].ToRotationVector2();
+                Vector2 edgePos = center + radial * drawRadii[0];
+                Vector2 tangent = radial.RotatedBy(MathHelper.PiOver2 * SwingSign());
+                float cut = env * (0.3f + 0.6f * polish);
+                IceBladeFx.Stroke(glow, edgePos - tangent * 9f, edgePos + tangent * 2f, 3f,
+                    IceBladeFx.Additive(IceBladeFx.EdgeRim, cut * 0.7f));
+                IceBladeFx.Dot(glow, edgePos, 8f + 4f * polish, IceBladeFx.Additive(IceBladeFx.EdgeCore, cut));
+            }
+
+            // Правленая часть клинка и бегущий блик
+            HoneLine(player, progress, out Vector2 butt, out Vector2 tip, out Vector2 glint, out Vector2 bladeDir);
+            float glintAlpha = env * (0.45f + 0.55f * polish) * Smooth01((progress - HoneStart * 0.5f) / 0.08f);
+            IceBladeFx.DrawHone(glow, butt, glint, bladeDir, polish, glintAlpha);
+
+            // «Дзинь» на острие
+            if (tingTick >= 0f) {
+                float age = (Projectile.localAI[0] - tingTick) / TingTicks;
+                if (age < 1f) {
+                    float a = 1f - age;
+                    IceBladeFx.DrawTing(glow, tip, (26f + 36f * polish) * (0.65f + 0.35f * a), bladeDir.ToRotation(),
+                        polish, a * (0.55f + 0.45f * polish));
+                }
+            }
+        }
+
         // Хитбокс на момент time — сектор вокруг игрока: от центра до внешнего края линии
         // (но не короче клинка), по углу от хвоста до головы дуги
         private void GetHitSector(Player player, float time, out Vector2 center, out float outer, out float startAngle, out float sweep) {
@@ -472,6 +658,7 @@ namespace FrostMelee.Content.Weapons
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
             if (SwordItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish();
+                HoneHitBurst(Main.player[Projectile.owner], target);
             }
             // Фростбранд: любой удар поджигает холодным огнём
             if (SwordItem == ItemID.Frostbrand) {
@@ -502,6 +689,10 @@ namespace FrostMelee.Content.Weapons
             // светлое ядро с дыханием (IceArcFx) и мерцающие кристаллики вдоль неё.
             // Поверх — IceRibbon-лента по истории углов, кристаллы на кромке и пик-вспышка
             Player owner = Main.player[Projectile.owner];
+            if (IsIceBlade(owner)) {
+                DrawHone(owner, percentageOfLife, maxAnim);
+                return false;
+            }
             float lineScale = scale * LineDrawScale;
             IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
                 lineScale, spriteEffects, 0.3f * lerpTime, null, null);
@@ -519,6 +710,7 @@ namespace FrostMelee.Content.Weapons
             if (Main.dedServ)
                 return;
             IceRibbon.Unload();
+            IceBladeFx.Unload();
         }
     }
 }

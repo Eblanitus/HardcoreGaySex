@@ -5,6 +5,7 @@ using Terraria.Audio;
 using Terraria.GameContent;
 using Terraria.ID;
 using Terraria.ModLoader;
+using Fx = FrostMelee.Content.Weapons.IceBladeFx;
 
 namespace FrostMelee.Content.Projectiles
 {
@@ -105,6 +106,10 @@ namespace FrostMelee.Content.Projectiles
             // ЗНАК = (не +=) — иначе угол копится каждый тик и меч крутится.
             bool flipped = Projectile.spriteDirection == -1;
             Projectile.rotation = Projectile.velocity.ToRotation() - geo.AngleFor(flipped);
+
+            // Ice Blade правит остриё об воздух (визуал, все клиенты)
+            if (!Main.dedServ && (int)Projectile.ai[2] == ItemID.IceBlade)
+                UpdateHone(player, geo);
 
             return false; // своя AI вместо ванильной
         }
@@ -209,8 +214,15 @@ namespace FrostMelee.Content.Projectiles
 
             Player owner = Main.player[Projectile.owner];
             if (itemType == ItemID.IceBlade) {
+                // Ice Blade: игла и V-волна под клинком, блик и «дзинь» поверх
+                Texture2D glow = Fx.Glow();
+                if (glow != null)
+                    DrawHoneBehind(owner, geo, glow);
                 float mix = Content.Weapons.IceBladeVisual.Mix(owner, itemType);
                 Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, SickleSprite.Get(itemType), Projectile.rotation, flipped, lightColor, 1f, mix);
+                if (glow != null)
+                    DrawHoneFront(owner, geo, glow);
+                return false;
             } else {
                 Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                     lightColor, Projectile.rotation, origin, 1f, effects, 0f);
@@ -244,6 +256,132 @@ namespace FrostMelee.Content.Projectiles
             }
             float t2 = (life - ThrustPortion) / (1f - ThrustPortion);
             return 1f - t2 * t2;
+        }
+
+        // === Ice Blade: правка острия об воздух ===
+        // Дуга правит всю длину клинка, тычок — остриё: воздух впереди рассекается иглой,
+        // обтекает клинок V-волной вдоль кромок, блик бежит от острия к пяте.
+        // На пике — «дзинь»: с острия по инерции слетает наледь (шершавый) или
+        // назад по волне брызжут искры (отточенный).
+        private const float NeedleLength = 46f;     // длина иглы рассечённого воздуха, px
+        private const float WakeSpread = 0.22f;     // рад: раскрытие V-волны от оси
+        private const float TingWidthTicks = 1.8f;  // ширина пика «дзинь», тиков
+
+        private float Env(float life) => Smooth01(life * 12f) * Smooth01((1f - life) * 6f);
+
+        // Остриё на пике выпада — от него отрывается игла
+        private Vector2 PeakTip(Player player, SickleSprite.Geometry geo)
+        {
+            Vector2 vel = Projectile.velocity;
+            float armRot = vel.ToRotation() - ArmLift * Projectile.spriteDirection - MathHelper.PiOver2;
+            Vector2 hand = SickleSprite.HandGrip(player, Player.CompositeArmStretchAmount.Full, armRot);
+            return hand + vel * (geo.Length - GripInset);
+        }
+
+        private void UpdateHone(Player player, SickleSprite.Geometry geo)
+        {
+            float life = Life;
+            float env = Env(life);
+            float polish = Fx.PolishOf(player);
+            float rough = 1f - polish;
+            Vector2 dir = Projectile.velocity;
+            Vector2 nrm = dir.RotatedBy(MathHelper.PiOver2);
+            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            Vector2 butt = Projectile.Center - dir * (geo.Length * 0.5f);
+
+            // Пока клинок летит вперёд, встречный воздух сдирает наледь вдоль клинка назад
+            if (life < 0.55f && env > 0.05f) {
+                int shavings = Fx.Count(rough * 1.6f * env);
+                for (int i = 0; i < shavings; i++) {
+                    Vector2 at = Vector2.Lerp(tip, butt, Main.rand.NextFloat(0.05f, 0.8f)) + nrm * Main.rand.NextFloat(-3f, 3f);
+                    Vector2 vel = -dir * Main.rand.NextFloat(1f, 2.5f) + nrm * Main.rand.NextFloat(-0.8f, 0.8f);
+                    Fx.SpawnShaving(at, vel, Main.rand.NextFloat(0.7f, 1.05f));
+                }
+            }
+
+            // Пик выпада — один раз: «дзинь» на острие
+            if (Projectile.localAI[1] == 0f && life >= ThrustPortion) {
+                Projectile.localAI[1] = 1f;
+                int chips = (int)System.Math.Round(rough * 5f);
+                for (int i = 0; i < chips; i++)
+                    Fx.SpawnShaving(tip, dir.RotatedByRandom(0.35f) * Main.rand.NextFloat(2f, 4.5f), Main.rand.NextFloat(0.9f, 1.3f));
+                int sparks = (int)System.Math.Round(2f + polish * 4f);
+                for (int i = 0; i < sparks; i++) {
+                    float side = (i % 2 == 0 ? 1f : -1f) * (WakeSpread + Main.rand.NextFloat(-0.1f, 0.1f));
+                    Fx.SpawnSpark(tip, (-dir).RotatedBy(side) * Main.rand.NextFloat(2f, 4f), Main.rand.NextFloat(0.9f, 1.2f));
+                }
+            }
+
+            if (env > 0.05f)
+                Lighting.AddLight(tip, Fx.EdgeRim.ToVector3() * (0.2f + 0.5f * polish) * env * 0.7f);
+        }
+
+        // Под спрайтом: игла впереди острия и V-волна вдоль кромок
+        private void DrawHoneBehind(Player player, SickleSprite.Geometry geo, Texture2D glow)
+        {
+            float life = Life;
+            float env = Env(life);
+            if (env <= 0.02f)
+                return;
+            float polish = Fx.PolishOf(player);
+            Vector2 dir = Projectile.velocity;
+            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+
+            // Игла: растёт вместе с выпадом, после пика отрывается и улетает вперёд, тая
+            float needleA = env * (0.35f + 0.65f * polish);
+            Vector2 start;
+            float len;
+            if (life < ThrustPortion) {
+                start = tip;
+                len = NeedleLength * (0.6f + 0.4f * polish) * ExtendAt(life);
+            } else {
+                float after = (life - ThrustPortion) * Duration;  // тиков после пика
+                start = PeakTip(player, geo) + dir * after * 3f;
+                len = NeedleLength * (0.6f + 0.4f * polish) * (1f - 0.5f * Smooth01(after / 8f));
+                needleA *= 1f - Smooth01((life - ThrustPortion) / 0.35f);
+            }
+            if (needleA > 0.02f && len > 2f) {
+                Fx.Stroke(glow, start, start + dir * len, 3f, Fx.Additive(Fx.EdgeRim, needleA * 0.55f));
+                Fx.Stroke(glow, start, start + dir * len * 0.6f, 1.2f, Fx.Additive(Fx.EdgeCore, needleA));
+            }
+
+            // V-волна: воздух расходится от острия вдоль кромок. Шершавый клинок гонит
+            // матовую морозную волну, отточенный — две тонкие светлые линии
+            float wake = env * (1f - Smooth01((life - 0.25f) / 0.3f));
+            if (wake > 0.02f) {
+                float wakeLen = geo.Length * 0.55f * (0.5f + 0.5f * ExtendAt(life));
+                float rough = 1f - polish;
+                for (int s = -1; s <= 1; s += 2) {
+                    Vector2 back = (-dir).RotatedBy(s * WakeSpread);
+                    Vector2 a = tip - dir * 2f;
+                    Vector2 b = a + back * wakeLen;
+                    if (rough > 0.03f)
+                        Fx.Stroke(glow, a, b, 5f, Fx.FrostMatte * (wake * rough * 0.4f));
+                    Fx.Stroke(glow, a, Vector2.Lerp(a, b, 0.8f), 1.4f, Fx.Additive(Fx.EdgeRim, wake * (0.3f + 0.7f * polish)));
+                }
+            }
+        }
+
+        // Поверх спрайта: блик от острия к пяте и «дзинь» на пике
+        private void DrawHoneFront(Player player, SickleSprite.Geometry geo, Texture2D glow)
+        {
+            float life = Life;
+            float env = Env(life);
+            if (env <= 0.02f)
+                return;
+            float polish = Fx.PolishOf(player);
+            Vector2 dir = Projectile.velocity;
+            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            Vector2 butt = Projectile.Center - dir * (geo.Length * 0.5f);
+
+            float s = Smooth01((life - 0.08f) / 0.5f);
+            Vector2 glint = Vector2.Lerp(tip, butt, s * 0.85f);
+            Fx.DrawHone(glow, tip, glint, dir, polish, env * (0.45f + 0.55f * polish) * Smooth01(life / 0.08f));
+
+            float d = (life - ThrustPortion) * Duration / TingWidthTicks;
+            float ting = (float)System.Math.Exp(-d * d) * env;
+            if (ting > 0.03f)
+                Fx.DrawTing(glow, tip, 22f + 30f * polish, dir.ToRotation(), polish, ting * (0.55f + 0.45f * polish));
         }
 
         private void DrawThrustTrail(Player player)

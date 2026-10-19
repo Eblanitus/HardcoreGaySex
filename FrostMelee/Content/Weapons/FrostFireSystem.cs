@@ -120,7 +120,7 @@ namespace FrostMelee.Content.Weapons
             // Урон взрыва — blast-снарядом через ванильные коллизии:
             // без прямых вызовов StrikeNPC, урон и мультихит-защита ванильные
             Projectile.NewProjectile(Main.player[owner].GetSource_FromThis(), c, Vector2.Zero,
-                ModContent.ProjectileType<FrostFireBlast>(), damage, 0f, owner, radius);
+                ModContent.ProjectileType<Projectiles.FrostFireBlast>(), damage, 0f, owner, radius);
         }
 
         // Сколько врагов горит рядом: для свечения меча в руке
