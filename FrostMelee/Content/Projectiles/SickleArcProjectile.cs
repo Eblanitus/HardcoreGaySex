@@ -1015,6 +1015,7 @@ namespace FrostMelee.Content.Projectiles
             public bool Mine;
             public bool Strong;   // сильный иней: от полной заморозки, другой вид, вешает Frostbite
             public bool Open = true;
+            public bool Visible = true;   // false — только механика (Slow), без пятен и искр инея
             public int Tick;
 
             public void Add(Vector2 p)
@@ -1067,9 +1068,9 @@ namespace FrostMelee.Content.Projectiles
         private const float StrongSizeMult = 1.3f;      // размер пятен
         private const float StrongDensityMult = 3f;     // частота искр
 
-        public static Trail Begin(bool mine, bool strong = false)
+        public static Trail Begin(bool mine, bool strong = false, bool visible = true)
         {
-            Trail t = new Trail { Mine = mine, Strong = strong };
+            Trail t = new Trail { Mine = mine, Strong = strong, Visible = visible };
             trails.Add(t);
             return t;
         }
@@ -1107,7 +1108,7 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 }
 
-                if (!Main.dedServ)
+                if (!Main.dedServ && t.Visible)
                     SpawnFrost(t, life, t.Strong);
                 if (t.Mine && t.Tick % SickleArcProjectile.FrostCheckEvery == 0)
                     SlowNpcs(t);
@@ -1131,6 +1132,8 @@ namespace FrostMelee.Content.Projectiles
                 DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
             foreach (Trail t in trails)
             {
+                if (!t.Visible)
+                    continue;
                 Color body = t.Strong ? FrostZoneSystem.StrongBody : FrostZoneSystem.WeakBody;
                 float alphaMul = TrailBlobAlpha * (t.Strong ? StrongAlphaMult : 1f);
                 float sizeMul = t.Strong ? StrongSizeMult : 1f;

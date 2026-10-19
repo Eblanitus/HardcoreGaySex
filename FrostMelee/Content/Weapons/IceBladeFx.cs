@@ -4,29 +4,28 @@ using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.ID;
-using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
     // Визуал приёмов Ice Blade. Логика обратна копью: копьё в дуге СБРАСЫВАЕТ накопленный
-    // иней (широкая морозная комета), а клинок ТОЧИТСЯ об воздух — с него счищается
-    // собственная наледь, и чем он острее, тем тоньше и ярче всё, что он оставляет.
+    // иней, а клинок ТОЧИТСЯ об воздух — с него счищается собственная наледь, и чем он
+    // острее, тем чище и ярче всё, что он оставляет.
+    // Дуга: здесь — вариант шершавого клинка; по мере заточки SwordArcProjectile
+    // перетекает в дугу косы (DrawKeenArc). Стиль шершавой дуги:
+    //   тело дуги — кадр 0 текстуры Excalibur, но полупрозрачным свечением, а не заливкой;
+    //   правка — тонкие белые дуги (кадр 3), как у ванили и косы;
+    //   блеск — звёздочка из «слезы» (Extra 98) на голове дуги и на клинке;
+    //   частицы — редкая ванильная пыль (льдинки, искры самоцвета).
     // Полировка P (0 — в инее, 1 — отточен) читается на глаз:
-    //   P≈0 — матовая морозная дымка, грубые риски, сыплется ледяная стружка;
-    //   P≈1 — стружки нет, волосяная белая кромка, бегущий блик и искры правки.
-    // Два режима точат по-разному:
-    //   дуга  — правка всей длины: блик бежит от пяты к острию, за кромкой веер рисок;
-    //   тычок — правка острия: воздух рассекается иглой, обтекает клинок V-волной
-    //           и гонит блик от острия к пяте.
+    //   P≈0 — свечение матовое бледное, белая дуга одна и тусклая, изредка льдинки;
+    //   P≈1 — свечение голубое, две белые дуги, за головой пара звёздочек, редкие искры.
     // Только визуал: урон, хитбоксы и полировку не трогает.
     public static class IceBladeFx
     {
         // --- Палитра ---
-        public static readonly Color FrostMatte = new Color(170, 195, 215);   // наледь, стружка, дымка
-        public static readonly Color ScratchRough = new Color(115, 145, 175); // грубая риска
-        public static readonly Color ScratchHoned = new Color(150, 215, 255); // риска на отточенном
-        public static readonly Color EdgeCore = new Color(245, 252, 255);     // кромка, блик
-        public static readonly Color EdgeRim = new Color(120, 200, 255);      // ореол кромки
+        public static readonly Color FrostMatte = new Color(170, 195, 215);   // наледь
+        public static readonly Color EdgeCore = new Color(245, 252, 255);     // белый блик
+        public static readonly Color EdgeRim = new Color(120, 200, 255);      // голубой ореол
 
         // Полировка владельца: 0 — весь в инее, 1 — отточен (та же кривая, что кроссфейд спрайта)
         public static float PolishOf(Player player) => 1f - IceBladeVisual.Mix(player, ItemID.IceBlade);
@@ -45,29 +44,26 @@ namespace FrostMelee.Content.Weapons
             return r;
         }
 
-        public static Texture2D Glow()
-        {
-            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
-            return glow == null || glow.IsDisposed ? null : glow;
-        }
-
         // =====================================================================
-        // Частицы: стружка наледи (матовая) и искры правки (светятся)
+        // Частицы — ванильная пыль
         // =====================================================================
 
+        // Льдинка наледи: падает, как обломки льда
         public static void SpawnShaving(Vector2 pos, Vector2 vel, float scale)
         {
             if (Main.dedServ)
                 return;
-            Dust d = Dust.NewDustPerfect(pos, ModContent.DustType<IceShavingDust>(), vel, 0, FrostMatte, scale);
-            d.noGravity = true;
+            Dust d = Dust.NewDustPerfect(pos, DustID.Ice, vel, 0, default, scale);
+            d.noGravity = false;
         }
 
+        // Искра правки: белый или голубой блеск самоцвета, гаснет на лету
         public static void SpawnSpark(Vector2 pos, Vector2 vel, float scale)
         {
             if (Main.dedServ)
                 return;
-            Dust d = Dust.NewDustPerfect(pos, ModContent.DustType<HoneSparkDust>(), vel, 0, EdgeCore, scale);
+            int type = Main.rand.NextBool(3) ? DustID.GemSapphire : DustID.GemDiamond;
+            Dust d = Dust.NewDustPerfect(pos, type, vel, 0, default, scale * 0.7f);
             d.noGravity = true;
         }
 
@@ -83,385 +79,205 @@ namespace FrostMelee.Content.Weapons
         }
 
         // =====================================================================
-        // Спрайтовые элементы (рисуются при ОТКРЫТОМ spriteBatch)
+        // Звёздочка — как ванильная DrawPrettyStarSparkle (слеза Extra 98 крестом)
         // =====================================================================
-
-        // Мазок вдоль отрезка a→b: растянутое мягкое пятно (мировые координаты)
-        public static void Stroke(Texture2D glow, Vector2 a, Vector2 b, float width, Color color)
+        // length — длина длинного луча, cross — короткого (px), rotation — куда смотрит длинный.
+        // Ширина лучей — доля длины, как у ванили; ядро — белое, ореол — shine.
+        public static void Star(Vector2 world, float length, float cross, float rotation, Color shine, float alpha)
         {
-            if (width < 0.3f)
+            if (alpha <= 0.02f || length <= 1f)
                 return;
-            Vector2 delta = b - a;
-            Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, color, delta.ToRotation(),
-                glow.Size() / 2f, new Vector2((delta.Length() + width) / glow.Width, width / glow.Height),
-                SpriteEffects.None, 0f);
+            Texture2D tex = TextureAssets.Extra[98].Value;
+            if (tex == null || tex.IsDisposed)
+                return;
+            Vector2 pos = world - Main.screenPosition;
+            Vector2 origin = tex.Size() / 2f;
+            float fat = 0.38f;
+            Vector2 longScale = new Vector2(length * fat / tex.Width, length / tex.Height);
+            Vector2 crossScale = new Vector2(cross * fat / tex.Width, cross / tex.Height);
+            Color halo = Additive(shine, alpha);
+            Color core = Additive(Color.White, alpha * 0.8f);
+            // текстура — вертикальная слеза: +π/2 кладёт её вдоль rotation
+            float rLong = rotation + MathHelper.PiOver2;
+            Main.EntitySpriteDraw(tex, pos, null, halo, rLong, origin, longScale, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(tex, pos, null, halo, rotation, origin, crossScale, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(tex, pos, null, core, rLong, origin, longScale * 0.6f, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(tex, pos, null, core, rotation, origin, crossScale * 0.6f, SpriteEffects.None, 0f);
         }
 
-        public static void Dot(Texture2D glow, Vector2 pos, float size, Color color)
+        // =====================================================================
+        // Дуга взмаха по рецепту ванильного Excalibur, в ледяных тонах
+        // =====================================================================
+        // tex — текстура Excalibur (4 кадра), center — центр снаряда (мир), rotation/fx/scale —
+        // как у ванильного снаряда, dir — сторона взмаха (ai[0] ≥ 0 ? 1 : -1),
+        // progress — доля взмаха, fade — ванильная огибающая (0→1 к 60 %, дальше гаснет).
+        public static void DrawSwingArc(Texture2D tex, Vector2 center, float rotation, float dir, float scale,
+            SpriteEffects fx, float progress, float fade, float polish)
         {
-            Main.EntitySpriteDraw(glow, pos - Main.screenPosition, null, color, 0f, glow.Size() / 2f,
-                size / glow.Width, SpriteEffects.None, 0f);
+            if (fade <= 0.01f)
+                return;
+            Vector2 pos = center - Main.screenPosition;
+            Rectangle body = tex.Frame(1, 4);
+            Rectangle line = tex.Frame(1, 4, 0, 3);
+            Vector2 origin = body.Size() / 2f;
+            Color shine = Color.Lerp(FrostMatte, EdgeRim, polish);
+
+            // тело: не плотная ванильная заливка, а полупрозрачное свечение формы взмаха
+            // (как ореол у косы); слегка отстаёт от клинка — видно движение
+            Main.EntitySpriteDraw(tex, pos, body, Additive(shine, fade * (0.16f + 0.12f * polish)),
+                rotation - dir * MathHelper.PiOver4 * 0.5f * (1f - progress), origin, scale, fx, 0f);
+            Main.EntitySpriteDraw(tex, pos, body, Additive(Color.Lerp(shine, EdgeCore, 0.4f), fade * (0.08f + 0.1f * polish)),
+                rotation, origin, scale * 0.975f, fx, 0f);
+
+            // правка: белые дуги. Шершавый — одна бледная матовая, отточенный — вторая внутри
+            Color lineCol = Color.Lerp(FrostMatte, Color.White, polish);
+            Main.EntitySpriteDraw(tex, pos, line, lineCol * (fade * (0.28f + 0.17f * polish)),
+                rotation + dir * 0.01f, origin, scale, fx, 0f);
+            float second = Smooth01((polish - 0.4f) / 0.4f);
+            if (second > 0.01f)
+                Main.EntitySpriteDraw(tex, pos, line, Color.White * (fade * 0.22f * second),
+                    rotation - dir * 0.05f, origin, scale * 0.85f, fx, 0f);
+
+            // голова дуги — звёздочка там, где клинок режет воздух; на отточенном за ней
+            // ещё одна-две гаснущие
+            float sweep = Utils.Remap(progress, 0f, 1f, 0f, MathHelper.PiOver4) * dir;
+            float radius = (tex.Width * 0.5f - 5f) * scale;
+            int trailing = (int)Math.Round(2f * polish);
+            for (int i = 0; i <= trailing; i++) {
+                float ang = rotation + sweep - dir * i * 0.22f;
+                float k = 1f - i / (float)(trailing + 1);
+                Star(center + ang.ToRotationVector2() * radius,
+                    Utils.Remap(progress, 0f, 1f, 18f, 7f) * scale * k, 8f * scale * k, ang + MathHelper.PiOver2,
+                    shine, fade * k * (0.4f + 0.45f * polish));
+            }
         }
 
-        // Правленая часть клинка и бегущий по ней блик.
-        // from — откуда идёт правка (пята для дуги, остриё для тычка), glint — где блик сейчас.
-        public static void DrawHone(Texture2D glow, Vector2 from, Vector2 glint, Vector2 bladeDir, float polish, float alpha)
+        // =====================================================================
+        // Правка на самом клинке
+        // =====================================================================
+        // Брусок — блик-звезда, бегущая по клинку (дуга: от пяты к острию, тычок: наоборот).
+        // Длинный луч — поперёк клинка (брусок), короткий — вдоль. В конце правки — «дзинь».
+        // Координата t вдоль клинка: 0 — пята (где кончается гарда), 1 — остриё.
+
+        public const float HeelFrac = 0.3f;        // где на оси приклад→остриё начинается клинок
+        public const float BladeHalfWidth = 4f;    // полуширина клинка Ice Blade поперёк оси, px
+        private const float TipTaper = 0.25f;      // последняя доля клинка, где кромки сходятся в остриё
+
+        public static Vector2 HeelOf(Vector2 butt, Vector2 tip) => Vector2.Lerp(butt, tip, HeelFrac);
+
+        // Точка на кромке side (±1) — для частиц, срывающихся с кромок
+        public static Vector2 EdgePoint(Vector2 heel, Vector2 tip, float halfWidth, float t, int side)
+        {
+            Vector2 d = tip - heel;
+            Vector2 n = new Vector2(-d.Y, d.X).SafeNormalize(Vector2.UnitY);
+            float w = halfWidth * MathHelper.Clamp((1f - t) / TipTaper, 0f, 1f);
+            return heel + d * t + n * w * side;
+        }
+
+        public static void DrawStone(Vector2 heel, Vector2 tip, float t, float polish, float alpha)
         {
             if (alpha <= 0.02f)
                 return;
-            // Свежая кромка позади блика: на шершавом едва видна, на отточенном — тонкая белая
-            if (Vector2.DistanceSquared(from, glint) > 4f) {
-                Stroke(glow, from, glint, 3.2f, Additive(EdgeRim, alpha * (0.15f + 0.3f * polish)));
-                Stroke(glow, from, glint, 1.3f, Additive(EdgeCore, alpha * (0.2f + 0.6f * polish)));
-            }
-            // Блик: продольный штрих по клинку + короткий поперечный + ядро
-            float size = 22f * (0.7f + 0.5f * polish);
-            Vector2 along = bladeDir * size * 0.5f;
-            Stroke(glow, glint - along, glint + along, 3.5f, Additive(EdgeRim, alpha * 0.8f));
-            Vector2 across = bladeDir.RotatedBy(MathHelper.PiOver2) * size * 0.22f;
-            Stroke(glow, glint - across, glint + across, 2f, Additive(EdgeCore, alpha * (0.4f + 0.5f * polish)));
-            Dot(glow, glint, 9f * (0.6f + 0.6f * polish), Additive(EdgeCore, alpha));
+            Vector2 at = Vector2.Lerp(heel, tip, t);
+            float along = (tip - heel).ToRotation();
+            Star(at, 14f + 6f * polish, 7f + 4f * polish, along + MathHelper.PiOver2,
+                Color.Lerp(FrostMatte, EdgeRim, polish), alpha);
         }
 
-        // «Дзинь» — звезда отточенного металла: длинный луч вдоль rotation, короче поперёк,
-        // тонкие диагонали. На шершавом клинке маленькая и тусклая.
-        public static void DrawTing(Texture2D glow, Vector2 pos, float size, float rotation, float polish, float alpha)
+        // «Дзинь» на острие: крупная звезда, длинный луч вдоль клинка
+        public static void DrawTing(Vector2 tip, Vector2 bladeDir, float polish, float alpha)
         {
-            if (alpha <= 0.02f || size <= 1f)
-                return;
-            Vector2 origin = glow.Size() / 2f;
-            Vector2 p = pos - Main.screenPosition;
-            float thin = 0.055f;
-            Color rim = Additive(EdgeRim, alpha * 0.9f);
-            Color core = Additive(EdgeCore, alpha);
-            Main.EntitySpriteDraw(glow, p, null, rim, rotation, origin,
-                new Vector2(size / glow.Width, size * thin * 1.6f / glow.Height), SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, p, null, core, rotation, origin,
-                new Vector2(size * 0.9f / glow.Width, size * thin / glow.Height), SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, p, null, core, rotation + MathHelper.PiOver2, origin,
-                new Vector2(size * 0.55f / glow.Width, size * thin / glow.Height), SpriteEffects.None, 0f);
-            float diag = size * 0.28f * polish;
-            if (diag > 1f) {
-                Main.EntitySpriteDraw(glow, p, null, rim, rotation + MathHelper.PiOver4, origin,
-                    new Vector2(diag / glow.Width, size * thin * 0.8f / glow.Height), SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, p, null, rim, rotation - MathHelper.PiOver4, origin,
-                    new Vector2(diag / glow.Width, size * thin * 0.8f / glow.Height), SpriteEffects.None, 0f);
-            }
-            Main.EntitySpriteDraw(glow, p, null, core, 0f, origin, size * 0.16f / glow.Width, SpriteEffects.None, 0f);
+            Star(tip, 24f + 12f * polish, 12f + 6f * polish, bladeDir.ToRotation(), EdgeRim, alpha);
         }
 
         // =====================================================================
-        // Дуга: вершинные полосы по истории углов клинка
+        // Тычок: клинок вспарывает воздух
         // =====================================================================
-        // Три слоя от центра игрока, у каждого своя маска:
-        //   дымка — матовая морозная крошка у кромки, только у шершавого клинка;
-        //   риски — тонкие концентрические царапины правки по всему вееру;
-        //   кромка — волосяная линия рассечённого воздуха на радиусе линии дуги.
-        // u — вдоль полосы (0 голова, 1 хвост), v — поперёк (0 внешний край, 1 внутренний).
+        // Рецепт ванильных колющих (Piercing Starlight / Daybreak): широкая «слеза» Extra 98
+        // слоями вдоль выпада — тёмное тело, светлая середина, белое ядро; у острия — клин
+        // рассечённого воздуха. Поверх — пиксельные линии скорости: сплошные бруски толщиной
+        // в пиксель спрайта Terraria (2 px), бегут назад вдоль кромок.
+        // Шершавый: матовое тело, бледные бруски, одна дорожка; отточенный: голубое сияние,
+        // белые бруски, две дорожки.
+        private const float ArtPixel = 2f;   // один пиксель рисунка Terraria в мировых px
 
-        private const int MaxPoints = 32;
-        private static BasicEffect effect;
-        private static Texture2D hazeMask, scratchMask, edgeMask;
-        private static BlendState additive;
-        private static RasterizerState raster;
-        private static readonly VertexPositionColorTexture[] verts = new VertexPositionColorTexture[MaxPoints * 2];
+        private static Vector2 Snap(Vector2 v) =>
+            new Vector2((float)Math.Round(v.X / ArtPixel) * ArtPixel, (float)Math.Round(v.Y / ArtPixel) * ArtPixel);
+
+        // Сплошной брусок: от a длиной len вдоль dir, толщиной thick (мировые px)
+        private static void Bar(Vector2 a, Vector2 dir, float len, float thick, Color c)
+        {
+            Texture2D px = TextureAssets.MagicPixel.Value;
+            if (px == null || px.IsDisposed)
+                return;
+            Main.EntitySpriteDraw(px, Snap(a) - Main.screenPosition, new Rectangle(0, 0, 1, 1), c, dir.ToRotation(),
+                new Vector2(0f, 0.5f), new Vector2(Math.Max(ArtPixel, len), thick), SpriteEffects.None, 0f);
+        }
+
+        // Слеза Extra 98 вдоль rotation: длина len, ширина width (мировые px)
+        private static void Tear(Texture2D tex, Vector2 at, float rotation, float len, float width, Color c)
+        {
+            Main.EntitySpriteDraw(tex, at - Main.screenPosition, null, c, rotation + MathHelper.PiOver2, tex.Size() / 2f,
+                new Vector2(width / tex.Width, len / tex.Height), SpriteEffects.None, 0f);
+        }
+
+        public static void DrawThrustCut(Vector2 tip, Vector2 dir, float bladeLen, float halfWidth,
+            float flow, float polish, float alpha)
+        {
+            if (alpha <= 0.02f)
+                return;
+            Texture2D tex = TextureAssets.Extra[98].Value;
+            if (tex == null || tex.IsDisposed)
+                return;
+            Vector2 n = dir.RotatedBy(MathHelper.PiOver2);
+            float rot = dir.ToRotation();
+            Color shine = Color.Lerp(FrostMatte, EdgeRim, polish);
+            Color deep = Color.Lerp(new Color(90, 115, 140), new Color(40, 110, 230), polish);
+
+            // разрез: слоистая слеза от острия назад вдоль клинка и дальше
+            float len = bladeLen * 1.25f + 34f;
+            Vector2 mid = tip - dir * (len * 0.5f - 6f);
+            float width = 18f + 6f * polish;
+            Color body = polish < 0.5f ? deep * (alpha * 0.55f) : Additive(deep, alpha * 0.8f);
+            Tear(tex, mid, rot, len, width, body);
+            Tear(tex, mid + dir * 4f, rot, len * 0.85f, width * 0.6f, Additive(shine, alpha * (0.35f + 0.4f * polish)));
+            Tear(tex, mid + dir * 8f, rot, len * 0.7f, width * 0.25f,
+                Additive(Color.Lerp(FrostMatte, EdgeCore, polish), alpha * (0.3f + 0.6f * polish)));
+
+            // клин у острия: воздух расходится на две стороны
+            for (int side = -1; side <= 1; side += 2) {
+                Vector2 wedge = dir.RotatedBy(side * 0.5f);
+                Tear(tex, tip - wedge * 10f + n * side * 2f, wedge.ToRotation(), 22f + 8f * polish, 8f,
+                    Additive(shine, alpha * (0.45f + 0.4f * polish)));
+            }
+
+            // пиксельные линии скорости вдоль кромок: бегут назад и тают к хвосту
+            const float Period = 20f;
+            float tailLen = bladeLen + 30f;
+            int lanes = polish > 0.5f ? 2 : 1;
+            Color barCol = Color.Lerp(FrostMatte, EdgeCore, polish);
+            for (int lane = 0; lane < lanes; lane++) {
+                float gap = halfWidth + 8f + lane * 8f;
+                for (int side = -1; side <= 1; side += 2) {
+                    float phase = (flow + lane * 7f + (side > 0 ? 0f : Period * 0.5f)) % Period;
+                    for (float x = phase; x < tailLen; x += Period) {
+                        float k = x / tailLen;
+                        float a = alpha * (1f - k) * Smooth01(x / 8f) * (lane == 0 ? 1f : 0.65f);
+                        if (a <= 0.03f)
+                            continue;
+                        float widen = Math.Min(1f, x / (bladeLen * TipTaper));
+                        Vector2 at = tip - dir * x + n * side * (gap * (0.5f + 0.5f * widen) + Math.Max(0f, x - bladeLen) * 0.25f);
+                        float barLen = (10f + 8f * polish) * (1f - 0.4f * k);
+                        Color c = polish < 0.5f ? barCol * (a * 0.7f) : Additive(barCol, a * 0.9f);
+                        // брусок тянется назад от точки, толщина — 2 пикселя рисунка у первой дорожки
+                        Bar(at, -dir, barLen, lane == 0 ? ArtPixel * 2f : ArtPixel, c);
+                    }
+                }
+            }
+        }
 
         public static void Unload()
         {
-            if (Main.dedServ)
-                return;
-            BasicEffect e = effect;
-            Texture2D a = hazeMask, b = scratchMask, c = edgeMask;
-            effect = null;
-            hazeMask = scratchMask = edgeMask = null;
-            additive = null;
-            raster = null;
-            Main.QueueMainThreadAction(() =>
-            {
-                e?.Dispose();
-                a?.Dispose();
-                b?.Dispose();
-                c?.Dispose();
-            });
-        }
-
-        private static uint Hash(int x, int y, int seed)
-        {
-            uint h = (uint)(x * 374761393 + y * 668265263 + seed * 2246822519u);
-            h = (h ^ (h >> 13)) * 1274126177u;
-            return h ^ (h >> 16);
-        }
-
-        private static float Hash01(int x, int y, int seed) => (Hash(x, y, seed) & 0xFFFF) / 65535f;
-
-        // Value-шум, по x замкнут с периодом periodX (маска тайлится вдоль полосы)
-        private static float Noise(float x, float y, int periodX, int seed)
-        {
-            int x0 = (int)Math.Floor(x), y0 = (int)Math.Floor(y);
-            float fx = x - x0, fy = y - y0;
-            fx = fx * fx * (3f - 2f * fx);
-            fy = fy * fy * (3f - 2f * fy);
-            int xa = ((x0 % periodX) + periodX) % periodX, xb = (xa + 1) % periodX;
-            float a = MathHelper.Lerp(Hash01(xa, y0, seed), Hash01(xb, y0, seed), fx);
-            float b = MathHelper.Lerp(Hash01(xa, y0 + 1, seed), Hash01(xb, y0 + 1, seed), fx);
-            return MathHelper.Lerp(a, b, fy);
-        }
-
-        private static Texture2D MakeMask(GraphicsDevice device, int w, int h, Func<float, float, float> value)
-        {
-            Texture2D tex = new Texture2D(device, w, h);
-            Color[] data = new Color[w * h];
-            for (int y = 0; y < h; y++) {
-                float v = (y + 0.5f) / h;
-                for (int x = 0; x < w; x++) {
-                    float u = (x + 0.5f) / w;
-                    int b = (int)(MathHelper.Clamp(value(u, v), 0f, 1f) * 255f + 0.5f);
-                    data[y * w + x] = new Color(b, b, b, b);   // premultiplied: rgb = alpha
-                }
-            }
-            tex.SetData(data);
-            return tex;
-        }
-
-        // Дымка: зернистая морозная крошка, тайлится по u (рисунок плывёт к хвосту)
-        private static float HazeValue(float u, float v)
-        {
-            float profile = (float)Math.Exp(-Math.Pow((v - 0.4f) / 0.3f, 2));
-            float grain = Noise(u * 32f, v * 7f, 32, 11);
-            float fine = Noise(u * 96f, v * 20f, 96, 23);
-            float g = 0.25f + 0.75f * (float)Math.Pow(grain, 1.6f) * (0.55f + 0.45f * fine);
-            float speck = Hash01((int)(u * 160f), (int)(v * 24f), 37) > 0.94f ? 0.55f : 0f;
-            return profile * Math.Min(1f, g + speck);
-        }
-
-        // Риски: несколько тонких концентрических царапин разной длины, с рваной яркостью
-        private const int Scratches = 7;
-        private static readonly float[] scratchV = new float[Scratches];
-        private static readonly float[] scratchLen = new float[Scratches];
-        private static readonly float[] scratchW = new float[Scratches];
-        private static readonly float[] scratchGain = new float[Scratches];
-
-        private static float ScratchValue(float u, float v)
-        {
-            float best = 0f;
-            for (int k = 0; k < Scratches; k++) {
-                float d = (v - scratchV[k]) / scratchW[k];
-                float line = (float)Math.Exp(-d * d);
-                if (line < 0.01f)
-                    continue;
-                float len = scratchLen[k];
-                float along = Smooth01((len - u) / (len * 0.35f)) * Smooth01(u / 0.025f);
-                float torn = 0.45f + 0.55f * Noise(u * 40f, k * 3.1f, 40, 53 + k);
-                best = Math.Max(best, line * along * torn * scratchGain[k]);
-            }
-            return best;
-        }
-
-        // Кромка: резкая волосяная линия + узкий ореол. Профиль только поперёк — длину гасят вершины
-        private const float EdgeLineV = 0.38f;
-        private static float EdgeValue(float u, float v)
-        {
-            float d = v - EdgeLineV;
-            return (float)Math.Exp(-Math.Pow(d / 0.07f, 2)) + 0.3f * (float)Math.Exp(-Math.Pow(d / 0.25f, 2));
-        }
-
-        private static bool Ensure(GraphicsDevice device)
-        {
-            if (device == null)
-                return false;
-            if (effect == null || effect.IsDisposed) {
-                effect = new BasicEffect(device)
-                {
-                    TextureEnabled = true,
-                    VertexColorEnabled = true,
-                    LightingEnabled = false,
-                    FogEnabled = false
-                };
-            }
-            if (hazeMask == null || hazeMask.IsDisposed)
-                hazeMask = MakeMask(device, 256, 32, HazeValue);
-            if (scratchMask == null || scratchMask.IsDisposed) {
-                Random rng = new Random(19);
-                for (int k = 0; k < Scratches; k++) {
-                    scratchV[k] = (k + 0.25f + 0.5f * (float)rng.NextDouble()) / Scratches;
-                    scratchLen[k] = 0.35f + 0.6f * (float)rng.NextDouble();
-                    scratchW[k] = 0.008f + 0.008f * (float)rng.NextDouble();
-                    scratchGain[k] = 0.55f + 0.45f * (float)rng.NextDouble();
-                }
-                scratchMask = MakeMask(device, 256, 160, ScratchValue);
-            }
-            if (edgeMask == null || edgeMask.IsDisposed)
-                edgeMask = MakeMask(device, 8, 64, EdgeValue);
-            additive ??= new BlendState
-            {
-                ColorSourceBlend = Blend.One,
-                ColorDestinationBlend = Blend.One,
-                AlphaSourceBlend = Blend.Zero,
-                AlphaDestinationBlend = Blend.One
-            };
-            raster ??= new RasterizerState { CullMode = CullMode.None };
-            return true;
-        }
-
-        // Один слой: полоса из n пар вершин между радиусами outer(i)+outAdd и inner(i).
-        // fade — показатель затухания к хвосту (через альфу вершин), uRepeat/uScroll — тайлинг маски.
-        private static void Strip(GraphicsDevice device, Texture2D mask, SamplerState sampler, float[] angles, float[] radius,
-            int n, Vector2 center, float outAdd, float inAdd, float innerFixed, Color head, Color tail, float alpha,
-            float fade, float uRepeat, float uScroll)
-        {
-            for (int i = 0; i < n; i++) {
-                float t = i / (float)(n - 1);
-                Vector2 dir = angles[i].ToRotationVector2();
-                float rOut = radius[i] + outAdd;
-                float rIn = innerFixed > 0f ? innerFixed : radius[i] + inAdd;
-                float a = alpha * (float)Math.Pow(1f - t, fade) * Smooth01(t / 0.06f + 0.35f);
-                Color c = Color.Lerp(head, tail, t) * a;
-                c.A = 0;
-                float uv = t * uRepeat - uScroll;
-                verts[i * 2] = new VertexPositionColorTexture(new Vector3(center + dir * rOut - Main.screenPosition, 0f), c, new Vector2(uv, 0f));
-                verts[i * 2 + 1] = new VertexPositionColorTexture(new Vector3(center + dir * rIn - Main.screenPosition, 0f), c, new Vector2(uv, 1f));
-            }
-            effect.Texture = mask;
-            device.SamplerStates[0] = sampler;
-            effect.CurrentTechnique.Passes[0].Apply();
-            device.DrawUserPrimitives(PrimitiveType.TriangleStrip, verts, 0, n * 2 - 2);
-        }
-
-        // angles[0] — угол клинка сейчас, дальше назад по тикам; radius — радиус линии дуги на тот тик.
-        // scratchInner — докуда к центру идут риски (px). Вызывать при ОТКРЫТОМ spriteBatch:
-        // батч закрывается на время полос и открывается заново с настройками снарядов.
-        public static void DrawArcStrips(Vector2 center, float[] angles, float[] radius, int n, float scratchInner,
-            float polish, float env, float time)
-        {
-            if (Main.dedServ || n < 2 || env <= 0.02f)
-                return;
-            n = Math.Min(n, MaxPoints);
-            GraphicsDevice device = Main.graphics.GraphicsDevice;
-            if (!Ensure(device))
-                return;
-            Main.spriteBatch.End();
-            try {
-                effect.World = Matrix.Identity;
-                effect.View = Main.GameViewMatrix.TransformationMatrix;
-                effect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
-                device.BlendState = additive;
-                device.DepthStencilState = DepthStencilState.None;
-                device.RasterizerState = raster;
-
-                float rough = 1f - polish;
-                // дымка: крошка наледи, сорванная с кромки (у отточенного её нет)
-                if (rough > 0.03f)
-                    Strip(device, hazeMask, SamplerState.LinearWrap, angles, radius, n, center, 6f, -18f, 0f,
-                        FrostMatte, ScratchRough, env * rough * 0.55f, 1.3f, 1.6f, time * 0.035f);
-                // риски правки: грубые и частые в инее, тонкие и холодные на отточенном
-                Strip(device, scratchMask, SamplerState.LinearClamp, angles, radius, n, center, -2f, 0f, scratchInner,
-                    Color.Lerp(ScratchRough, ScratchHoned, polish), Color.Lerp(ScratchRough, EdgeRim, polish * 0.5f),
-                    env * MathHelper.Lerp(0.75f, 0.4f, polish), 0.5f, 1f, 0f);
-                // кромка: тем ярче и тоньше, чем острее клинок
-                float edgeWidth = MathHelper.Lerp(11f, 6f, polish);
-                Strip(device, edgeMask, SamplerState.LinearClamp, angles, radius, n, center, edgeWidth * EdgeLineV, -edgeWidth * (1f - EdgeLineV), 0f,
-                    Color.Lerp(FrostMatte, EdgeCore, polish), Color.Lerp(ScratchRough, EdgeRim, polish),
-                    env * MathHelper.Lerp(0.45f, 1f, polish), MathHelper.Lerp(1.6f, 1.1f, polish), 1f, 0f);
-            }
-            finally {
-                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
-                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-            }
-        }
-    }
-
-    // Ледяная стружка: сорванная воздухом наледь. Матовая (не светится), кувыркается —
-    // длина мигает от плашмя к ребру, и плашмя она на миг ловит свет.
-    public class IceShavingDust : ModDust
-    {
-        public override string Texture => "Terraria/Images/Dust";
-
-        public override void OnSpawn(Dust dust)
-        {
-            dust.fadeIn = 0f;                              // возраст, тиков
-            dust.alpha = Main.rand.Next(26, 42);           // срок жизни, тиков
-            dust.rotation = Main.rand.NextFloat(MathHelper.TwoPi);
-            dust.frame = new Rectangle(Main.rand.Next(1000), 0, 0, 0); // фаза кувырка
-            dust.noLight = true;
-        }
-
-        public override bool Update(Dust dust)
-        {
-            dust.fadeIn++;
-            dust.position += dust.velocity;
-            dust.velocity *= 0.9f;
-            dust.velocity.Y += 0.04f;                      // оседает медленно, как снег
-            dust.rotation += dust.velocity.X * 0.08f + 0.05f;
-            if (dust.fadeIn >= dust.alpha)
-                dust.active = false;
-            return false;
-        }
-
-        public override bool PreDraw(Dust dust)
-        {
-            Texture2D glow = IceBladeFx.Glow();
-            if (glow == null)
-                return false;
-            float age = dust.fadeIn / Math.Max(1, dust.alpha);
-            float a = IceBladeFx.Smooth01(age / 0.1f) * (1f - age * age);
-            float tumble = (float)Math.Cos(dust.fadeIn * 0.35f + dust.frame.X * 0.1f);
-            float len = (2.5f + 6.5f * Math.Abs(tumble)) * dust.scale;
-            float width = 2.6f * dust.scale;
-            Color light = Lighting.GetColor((int)(dust.position.X / 16f), (int)(dust.position.Y / 16f));
-            Color body = dust.color.MultiplyRGB(Color.Lerp(light, Color.White, 0.55f)) * (a * 0.85f);
-            Vector2 origin = glow.Size() / 2f;
-            Vector2 p = dust.position - Main.screenPosition;
-            Main.spriteBatch.Draw(glow, p, null, body, dust.rotation, origin,
-                new Vector2(len / glow.Width, width / glow.Height), SpriteEffects.None, 0f);
-            // плашмя к свету — мгновенный блеск
-            if (Math.Abs(tumble) > 0.93f)
-                Main.spriteBatch.Draw(glow, p, null, IceBladeFx.Additive(IceBladeFx.EdgeCore, a * 0.7f), 0f, origin,
-                    3.5f * dust.scale / glow.Width, SpriteEffects.None, 0f);
-            return false;
-        }
-    }
-
-    // Искра правки: короткий светящийся штрих по скорости, быстро гаснет
-    public class HoneSparkDust : ModDust
-    {
-        public override string Texture => "Terraria/Images/Dust";
-
-        public override void OnSpawn(Dust dust)
-        {
-            dust.fadeIn = 0f;
-            dust.alpha = Main.rand.Next(8, 15);
-            dust.noLight = true;
-        }
-
-        public override bool Update(Dust dust)
-        {
-            dust.fadeIn++;
-            dust.position += dust.velocity;
-            dust.velocity *= 0.87f;
-            dust.velocity.Y += 0.06f;
-            if (dust.fadeIn >= dust.alpha)
-                dust.active = false;
-            return false;
-        }
-
-        public override bool PreDraw(Dust dust)
-        {
-            Texture2D glow = IceBladeFx.Glow();
-            if (glow == null)
-                return false;
-            float age = dust.fadeIn / Math.Max(1, dust.alpha);
-            float a = 1f - age;
-            Vector2 v = dust.velocity;
-            float speed = v.Length();
-            float len = (2f + speed * 2.4f) * dust.scale;
-            Vector2 origin = glow.Size() / 2f;
-            Vector2 p = dust.position - v * 0.6f - Main.screenPosition;
-            float rot = speed > 0.01f ? v.ToRotation() : 0f;
-            Main.spriteBatch.Draw(glow, p, null, IceBladeFx.Additive(IceBladeFx.EdgeRim, a * 0.8f), rot, origin,
-                new Vector2(len / glow.Width, 2.4f * dust.scale / glow.Height), SpriteEffects.None, 0f);
-            Main.spriteBatch.Draw(glow, p, null, IceBladeFx.Additive(dust.color, a), rot, origin,
-                new Vector2(len * 0.7f / glow.Width, 1.1f * dust.scale / glow.Height), SpriteEffects.None, 0f);
-            return false;
         }
     }
 }

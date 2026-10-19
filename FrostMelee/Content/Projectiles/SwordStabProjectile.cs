@@ -215,13 +215,10 @@ namespace FrostMelee.Content.Projectiles
             Player owner = Main.player[Projectile.owner];
             if (itemType == ItemID.IceBlade) {
                 // Ice Blade: игла и V-волна под клинком, блик и «дзинь» поверх
-                Texture2D glow = Fx.Glow();
-                if (glow != null)
-                    DrawHoneBehind(owner, geo, glow);
+                DrawHoneBehind(owner, geo);
                 float mix = Content.Weapons.IceBladeVisual.Mix(owner, itemType);
                 Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, SickleSprite.Get(itemType), Projectile.rotation, flipped, lightColor, 1f, mix);
-                if (glow != null)
-                    DrawHoneFront(owner, geo, glow);
+                DrawHoneFront(owner, geo);
                 return false;
             } else {
                 Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
@@ -258,66 +255,95 @@ namespace FrostMelee.Content.Projectiles
             return 1f - t2 * t2;
         }
 
-        // === Ice Blade: правка острия об воздух ===
-        // Дуга правит всю длину клинка, тычок — остриё: воздух впереди рассекается иглой,
-        // обтекает клинок V-волной вдоль кромок, блик бежит от острия к пяте.
-        // На пике — «дзинь»: с острия по инерции слетает наледь (шершавый) или
-        // назад по волне брызжут искры (отточенный).
-        private const float NeedleLength = 46f;     // длина иглы рассечённого воздуха, px
-        private const float WakeSpread = 0.22f;     // рад: раскрытие V-волны от оси
-        private const float TingWidthTicks = 1.8f;  // ширина пика «дзинь», тиков
+        // === Ice Blade: правка клинка встречным воздухом ===
+        // Дуга правит клинок от пяты к острию, тычок — наоборот, от острия к пяте:
+        // клинок входит в воздух как в ножны-брусок. Под клинком — широкий ванильный
+        // разрез (слоистая слеза) и клин у острия, вдоль кромок бегут назад пиксельные
+        // линии скорости; по клинку от острия к пяте ползёт брусок, с кромок сдувает
+        // наледь. На пике выпада — «дзинь». Шершавый клинок: разрез матовый, сыплет
+        // стружку; отточенный: голубое сияние, белые линии.
+        private const float FlowSpeed = 5f;          // px/тик: скорость бегущих назад штрихов
+        private const float StoneStart = 0.05f;      // доля выпада, когда брусок трогается с острия
+        private const float StoneSpan = 0.42f;       // за какую долю выпада он доходит до пяты
+        private const float TingWidthTicks = 1.8f;   // ширина вспышки «дзинь», тиков
 
         private float Env(float life) => Smooth01(life * 12f) * Smooth01((1f - life) * 6f);
 
-        // Остриё на пике выпада — от него отрывается игла
-        private Vector2 PeakTip(Player player, SickleSprite.Geometry geo)
+        // Сила потока: пока клинок летит вперёд — полная, на возврате стихает
+        private static float Thrust(float life) => 1f - Smooth01((life - ThrustPortion) / 0.3f);
+
+        // Где брусок: t вдоль клинка (1 — остриё, 0 — пята)
+        private static float StoneProgress(float life) => Smooth01((life - StoneStart) / StoneSpan);
+
+        private void BladeEnds(SickleSprite.Geometry geo, out Vector2 heel, out Vector2 tip)
         {
-            Vector2 vel = Projectile.velocity;
-            float armRot = vel.ToRotation() - ArmLift * Projectile.spriteDirection - MathHelper.PiOver2;
-            Vector2 hand = SickleSprite.HandGrip(player, Player.CompositeArmStretchAmount.Full, armRot);
-            return hand + vel * (geo.Length - GripInset);
+            Vector2 dir = Projectile.velocity;
+            tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            heel = Fx.HeelOf(Projectile.Center - dir * (geo.Length * 0.5f), tip);
         }
 
         private void UpdateHone(Player player, SickleSprite.Geometry geo)
         {
             float life = Life;
             float env = Env(life);
+            if (env <= 0.05f)
+                return;
             float polish = Fx.PolishOf(player);
             float rough = 1f - polish;
             Vector2 dir = Projectile.velocity;
-            Vector2 nrm = dir.RotatedBy(MathHelper.PiOver2);
-            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
-            Vector2 butt = Projectile.Center - dir * (geo.Length * 0.5f);
+            BladeEnds(geo, out Vector2 heel, out Vector2 tip);
+            float hw = Fx.BladeHalfWidth;
+            Vector2 n = dir.RotatedBy(MathHelper.PiOver2);
+            float s = StoneProgress(life);
+            float t = 1f - s;
 
-            // Пока клинок летит вперёд, встречный воздух сдирает наледь вдоль клинка назад
-            if (life < 0.55f && env > 0.05f) {
-                int shavings = Fx.Count(rough * 1.6f * env);
+            // Под бруском поток сдирает наледь с кромок и уносит назад вдоль клинка
+            if (s > 0f && s < 1f) {
+                int shavings = Fx.Count(rough * 0.4f * env);
                 for (int i = 0; i < shavings; i++) {
-                    Vector2 at = Vector2.Lerp(tip, butt, Main.rand.NextFloat(0.05f, 0.8f)) + nrm * Main.rand.NextFloat(-3f, 3f);
-                    Vector2 vel = -dir * Main.rand.NextFloat(1f, 2.5f) + nrm * Main.rand.NextFloat(-0.8f, 0.8f);
-                    Fx.SpawnShaving(at, vel, Main.rand.NextFloat(0.7f, 1.05f));
+                    int side = Main.rand.NextBool() ? 1 : -1;
+                    Vector2 vel = -dir * Main.rand.NextFloat(1.2f, 2.6f) + n * side * Main.rand.NextFloat(0.3f, 1f);
+                    Fx.SpawnShaving(Fx.EdgePoint(heel, tip, hw, t, side), vel, Main.rand.NextFloat(0.7f, 1.05f));
                 }
+                int sparks = Fx.Count(polish * 0.25f * env);
+                for (int i = 0; i < sparks; i++) {
+                    int side = Main.rand.NextBool() ? 1 : -1;
+                    Vector2 vel = -dir * Main.rand.NextFloat(2f, 3.5f) + n * side * Main.rand.NextFloat(0.2f, 0.8f);
+                    Fx.SpawnSpark(Fx.EdgePoint(heel, tip, hw, t, side), vel, 0.8f);
+                }
+                Lighting.AddLight(Vector2.Lerp(heel, tip, t), Fx.EdgeRim.ToVector3() * (0.2f + 0.5f * polish) * env * 0.7f);
             }
 
-            // Пик выпада — один раз: «дзинь» на острие
+            // Пик выпада — один раз: правленые кромки звенят, остатки наледи стряхивает
+            // с них наружу (не с острия, а по всей правленой длине)
             if (Projectile.localAI[1] == 0f && life >= ThrustPortion) {
                 Projectile.localAI[1] = 1f;
-                int chips = (int)System.Math.Round(rough * 5f);
-                for (int i = 0; i < chips; i++)
-                    Fx.SpawnShaving(tip, dir.RotatedByRandom(0.35f) * Main.rand.NextFloat(2f, 4.5f), Main.rand.NextFloat(0.9f, 1.3f));
-                int sparks = (int)System.Math.Round(2f + polish * 4f);
-                for (int i = 0; i < sparks; i++) {
-                    float side = (i % 2 == 0 ? 1f : -1f) * (WakeSpread + Main.rand.NextFloat(-0.1f, 0.1f));
-                    Fx.SpawnSpark(tip, (-dir).RotatedBy(side) * Main.rand.NextFloat(2f, 4f), Main.rand.NextFloat(0.9f, 1.2f));
+                int chips = (int)System.Math.Round(rough * 2f);
+                for (int i = 0; i < chips; i++) {
+                    int side = i % 2 == 0 ? 1 : -1;
+                    Vector2 at = Fx.EdgePoint(heel, tip, hw, Main.rand.NextFloat(t, 1f), side);
+                    Fx.SpawnShaving(at, n * side * Main.rand.NextFloat(0.8f, 1.8f) - dir * Main.rand.NextFloat(0.2f, 0.8f),
+                        Main.rand.NextFloat(0.8f, 1.2f));
                 }
+                Lighting.AddLight(Vector2.Lerp(heel, tip, 0.6f), Fx.EdgeCore.ToVector3() * (0.25f + 0.5f * polish));
             }
-
-            if (env > 0.05f)
-                Lighting.AddLight(tip, Fx.EdgeRim.ToVector3() * (0.2f + 0.5f * polish) * env * 0.7f);
         }
 
-        // Под спрайтом: игла впереди острия и V-волна вдоль кромок
-        private void DrawHoneBehind(Player player, SickleSprite.Geometry geo, Texture2D glow)
+        // Под спрайтом: разрез воздуха и линии скорости
+        private void DrawHoneBehind(Player player, SickleSprite.Geometry geo)
+        {
+            float life = Life;
+            float a = Env(life) * Thrust(life);
+            if (a <= 0.02f)
+                return;
+            float polish = Fx.PolishOf(player);
+            BladeEnds(geo, out Vector2 heel, out Vector2 tip);
+            float flow = (Duration - Projectile.timeLeft) * FlowSpeed;
+            Fx.DrawThrustCut(tip, Projectile.velocity, Vector2.Distance(heel, tip), Fx.BladeHalfWidth, flow, polish, a);
+        }
+
+        // Поверх спрайта: брусок-блик ползёт от острия к пяте, на пике — «дзинь»
+        private void DrawHoneFront(Player player, SickleSprite.Geometry geo)
         {
             float life = Life;
             float env = Env(life);
@@ -325,63 +351,16 @@ namespace FrostMelee.Content.Projectiles
                 return;
             float polish = Fx.PolishOf(player);
             Vector2 dir = Projectile.velocity;
-            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            BladeEnds(geo, out Vector2 heel, out Vector2 tip);
+            float s = StoneProgress(life);
 
-            // Игла: растёт вместе с выпадом, после пика отрывается и улетает вперёд, тая
-            float needleA = env * (0.35f + 0.65f * polish);
-            Vector2 start;
-            float len;
-            if (life < ThrustPortion) {
-                start = tip;
-                len = NeedleLength * (0.6f + 0.4f * polish) * ExtendAt(life);
-            } else {
-                float after = (life - ThrustPortion) * Duration;  // тиков после пика
-                start = PeakTip(player, geo) + dir * after * 3f;
-                len = NeedleLength * (0.6f + 0.4f * polish) * (1f - 0.5f * Smooth01(after / 8f));
-                needleA *= 1f - Smooth01((life - ThrustPortion) / 0.35f);
-            }
-            if (needleA > 0.02f && len > 2f) {
-                Fx.Stroke(glow, start, start + dir * len, 3f, Fx.Additive(Fx.EdgeRim, needleA * 0.55f));
-                Fx.Stroke(glow, start, start + dir * len * 0.6f, 1.2f, Fx.Additive(Fx.EdgeCore, needleA));
-            }
-
-            // V-волна: воздух расходится от острия вдоль кромок. Шершавый клинок гонит
-            // матовую морозную волну, отточенный — две тонкие светлые линии
-            float wake = env * (1f - Smooth01((life - 0.25f) / 0.3f));
-            if (wake > 0.02f) {
-                float wakeLen = geo.Length * 0.55f * (0.5f + 0.5f * ExtendAt(life));
-                float rough = 1f - polish;
-                for (int s = -1; s <= 1; s += 2) {
-                    Vector2 back = (-dir).RotatedBy(s * WakeSpread);
-                    Vector2 a = tip - dir * 2f;
-                    Vector2 b = a + back * wakeLen;
-                    if (rough > 0.03f)
-                        Fx.Stroke(glow, a, b, 5f, Fx.FrostMatte * (wake * rough * 0.4f));
-                    Fx.Stroke(glow, a, Vector2.Lerp(a, b, 0.8f), 1.4f, Fx.Additive(Fx.EdgeRim, wake * (0.3f + 0.7f * polish)));
-                }
-            }
-        }
-
-        // Поверх спрайта: блик от острия к пяте и «дзинь» на пике
-        private void DrawHoneFront(Player player, SickleSprite.Geometry geo, Texture2D glow)
-        {
-            float life = Life;
-            float env = Env(life);
-            if (env <= 0.02f)
-                return;
-            float polish = Fx.PolishOf(player);
-            Vector2 dir = Projectile.velocity;
-            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
-            Vector2 butt = Projectile.Center - dir * (geo.Length * 0.5f);
-
-            float s = Smooth01((life - 0.08f) / 0.5f);
-            Vector2 glint = Vector2.Lerp(tip, butt, s * 0.85f);
-            Fx.DrawHone(glow, tip, glint, dir, polish, env * (0.45f + 0.55f * polish) * Smooth01(life / 0.08f));
+            float stoneA = env * (0.5f + 0.5f * polish) * Smooth01(s / 0.06f) * (1f - Smooth01((s - 0.88f) / 0.12f));
+            Fx.DrawStone(heel, tip, 1f - s, polish, stoneA);
 
             float d = (life - ThrustPortion) * Duration / TingWidthTicks;
-            float ting = (float)System.Math.Exp(-d * d) * env;
+            float ting = (float)System.Math.Exp(-d * d) * env * (0.55f + 0.45f * polish);
             if (ting > 0.03f)
-                Fx.DrawTing(glow, tip, 22f + 30f * polish, dir.ToRotation(), polish, ting * (0.55f + 0.45f * polish));
+                Fx.DrawTing(tip, dir, polish, ting);
         }
 
         private void DrawThrustTrail(Player player)
