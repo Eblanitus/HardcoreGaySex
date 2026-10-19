@@ -49,17 +49,20 @@ namespace FrostMelee.Content.Weapons
             SickleSprite.Geometry geo = SickleSprite.Get(held.type);
             bool flipped = player.direction == -1;
             Color light = Lighting.GetColor((int)player.itemLocation.X / 16, (int)player.itemLocation.Y / 16);
+            // Якорь — приклад в кисти, остриё — по углу дуги: угол спрайта (приклад→остриё)
+            // вычитаем, как во всех остальных отрисовках оружия (SickleBrace/Stab/SpinLayer)
+            float drawRot = arc.rotation - geo.AngleFor(flipped);
 
             if (held.type == ItemID.IceBlade)
             {
                 // Кроссфейд шершавый/отполированный для IceBlade
-                IceBladeVisual.DrawBlend(texture, player.itemLocation, geo, arc.rotation, flipped, light, 1f,
+                IceBladeVisual.DrawBlend(texture, player.itemLocation, geo, drawRot, flipped, light, 1f,
                     IceBladeVisual.Mix(player, held.type));
             }
             else
             {
                 Main.EntitySpriteDraw(texture, player.itemLocation - Main.screenPosition, null, light,
-                    arc.rotation, geo.ButtFor(flipped), 1f,
+                    drawRot, geo.ButtFor(flipped), 1f,
                     flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
             }
         }

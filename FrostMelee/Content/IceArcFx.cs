@@ -26,17 +26,6 @@ namespace FrostMelee.Content
         private const int Sparkles = 5;      // кристалликов вдоль линии
         private const float SparkleSpeed = 5f; // скорость мерцания
 
-        // Палитра по степени полировки клинка: P=0 (в инее) — бледный матовый
-        // мороз, P=1 (отполирован) — яркое бело-голубое сияние. Дуга и тычок
-        // берут цвета отсюда, поэтому эффект совпадает с состоянием клинка.
-        public static void PolishColors(float polish, out Color core, out Color tail, out Color edge)
-        {
-            polish = MathHelper.Clamp(polish, 0f, 1f);
-            core = Color.Lerp(new Color(160, 200, 225), new Color(255, 255, 255), polish);
-            tail = Color.Lerp(new Color(85, 125, 160), new Color(110, 195, 255), polish);
-            edge = Color.Lerp(new Color(115, 155, 185), new Color(175, 235, 255), polish);
-        }
-
         // Линия дуги: обод (масштаб ×1.06 — halo вокруг ядра) + ядро с дыханием.
         // rimOverride/coreOverride — цвета другой стихии (ледяной огонь Frostbrand)
         public static void DrawLine(Texture2D texture, Rectangle frame, Vector2 position, float rotation,

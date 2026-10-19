@@ -27,6 +27,25 @@ namespace FrostMelee.Content.Weapons
         public static readonly Color EdgeCore = new Color(245, 252, 255);     // белый блик
         public static readonly Color EdgeRim = new Color(120, 200, 255);      // голубой ореол
 
+        // Цвета самого клинка, снятые со спрайта Ice_Blade.png: бирюзовый лёд
+        public static readonly Color BladeTeal = new Color(3, 173, 192);      // тело клинка
+        public static readonly Color BladeTealDeep = new Color(2, 95, 115);   // тень клинка
+        public static readonly Color BladeCyan = new Color(54, 232, 252);     // блик клинка
+
+        // Палитра дуг самого клинка: тень → тело → блик, всё в бирюзе клинка.
+        // Всё, что меч оставляет в воздухе (шершавый сектор, лента, ванильная дуга, шлейф),
+        // берёт цвета отсюда — читается как его собственный лёд, а не как дуга косы.
+        public static void ArcColors(float polish, out Color core, out Color tail, out Color edge) {
+            polish = MathHelper.Clamp(polish, 0f, 1f);
+            core = Color.Lerp(BladeTeal, BladeCyan, 0.3f + 0.7f * polish);
+            tail = Color.Lerp(BladeTealDeep, BladeTeal, 0.15f + 0.7f * polish);
+            edge = Color.Lerp(BladeTealDeep, BladeCyan, 0.3f + 0.7f * polish);
+        }
+
+        // Линия дуги меча: светлая бирюза клинка (у ванили и косы линия белая)
+        public static Color ArcLineColor(float polish) =>
+            Color.Lerp(BladeTeal, Color.White, 0.3f + 0.4f * MathHelper.Clamp(polish, 0f, 1f));
+
         // Полировка владельца: 0 — весь в инее, 1 — отточен (та же кривая, что кроссфейд спрайта)
         // Полировка КОНКРЕТНОГО меча: у IceBlade и Frostbrand состояния независимы
         public static float PolishOf(Player player, int itemType) =>
@@ -124,36 +143,23 @@ namespace FrostMelee.Content.Weapons
             Rectangle body = tex.Frame(1, 4);
             Rectangle line = tex.Frame(1, 4, 0, 3);
             Vector2 origin = body.Size() / 2f;
-            Color shine = Color.Lerp(FrostMatte, EdgeRim, polish);
+            Color shine = Color.Lerp(BladeTealDeep, BladeTeal, polish);
 
             // тело: не плотная ванильная заливка, а полупрозрачное свечение формы взмаха
             // (как ореол у косы); слегка отстаёт от клинка — видно движение
             Main.EntitySpriteDraw(tex, pos, body, Additive(shine, fade * (0.16f + 0.12f * polish)),
                 rotation - dir * MathHelper.PiOver4 * 0.5f * (1f - progress), origin, scale, fx, 0f);
-            Main.EntitySpriteDraw(tex, pos, body, Additive(Color.Lerp(shine, EdgeCore, 0.4f), fade * (0.08f + 0.1f * polish)),
+            Main.EntitySpriteDraw(tex, pos, body, Additive(Color.Lerp(shine, BladeCyan, 0.4f), fade * (0.08f + 0.1f * polish)),
                 rotation, origin, scale * 0.975f, fx, 0f);
 
-            // правка: белые дуги. Шершавый — одна бледная матовая, отточенный — вторая внутри
-            Color lineCol = Color.Lerp(FrostMatte, Color.White, polish);
+            // правка: светлые бирюзовые дуги. Шершавый — одна тусклая, отточенный — вторая внутри
+            Color lineCol = ArcLineColor(polish);
             Main.EntitySpriteDraw(tex, pos, line, lineCol * (fade * (0.28f + 0.17f * polish)),
                 rotation + dir * 0.01f, origin, scale, fx, 0f);
             float second = Smooth01((polish - 0.4f) / 0.4f);
             if (second > 0.01f)
-                Main.EntitySpriteDraw(tex, pos, line, Color.White * (fade * 0.22f * second),
+                Main.EntitySpriteDraw(tex, pos, line, Color.Lerp(lineCol, BladeCyan, 0.5f) * (fade * 0.22f * second),
                     rotation - dir * 0.05f, origin, scale * 0.85f, fx, 0f);
-
-            // голова дуги — звёздочка там, где клинок режет воздух; на отточенном за ней
-            // ещё одна-две гаснущие
-            float sweep = Utils.Remap(progress, 0f, 1f, 0f, MathHelper.PiOver4) * dir;
-            float radius = (tex.Width * 0.5f - 5f) * scale;
-            int trailing = (int)Math.Round(2f * polish);
-            for (int i = 0; i <= trailing; i++) {
-                float ang = rotation + sweep - dir * i * 0.22f;
-                float k = 1f - i / (float)(trailing + 1);
-                Star(center + ang.ToRotationVector2() * radius,
-                    Utils.Remap(progress, 0f, 1f, 18f, 7f) * scale * k, 8f * scale * k, ang + MathHelper.PiOver2,
-                    shine, fade * k * (0.4f + 0.45f * polish));
-            }
         }
 
         // =====================================================================
@@ -186,98 +192,6 @@ namespace FrostMelee.Content.Weapons
             float along = (tip - heel).ToRotation();
             Star(at, 14f + 6f * polish, 7f + 4f * polish, along + MathHelper.PiOver2,
                 Color.Lerp(FrostMatte, EdgeRim, polish), alpha);
-        }
-
-        // «Дзинь» на острие: крупная звезда, длинный луч вдоль клинка
-        public static void DrawTing(Vector2 tip, Vector2 bladeDir, float polish, float alpha)
-        {
-            Star(tip, 24f + 12f * polish, 12f + 6f * polish, bladeDir.ToRotation(), EdgeRim, alpha);
-        }
-
-        // =====================================================================
-        // Тычок: клинок вспарывает воздух
-        // =====================================================================
-        // Рецепт ванильных колющих (Piercing Starlight / Daybreak): широкая «слеза» Extra 98
-        // слоями вдоль выпада — тёмное тело, светлая середина, белое ядро; у острия — клин
-        // рассечённого воздуха. Поверх — пиксельные линии скорости: сплошные бруски толщиной
-        // в пиксель спрайта Terraria (2 px), бегут назад вдоль кромок.
-        // Шершавый: матовое тело, бледные бруски, одна дорожка; отточенный: голубое сияние,
-        // белые бруски, две дорожки.
-        private const float ArtPixel = 2f;   // один пиксель рисунка Terraria в мировых px
-
-        private static Vector2 Snap(Vector2 v) =>
-            new Vector2((float)Math.Round(v.X / ArtPixel) * ArtPixel, (float)Math.Round(v.Y / ArtPixel) * ArtPixel);
-
-        // Сплошной брусок: от a длиной len вдоль dir, толщиной thick (мировые px)
-        private static void Bar(Vector2 a, Vector2 dir, float len, float thick, Color c)
-        {
-            Texture2D px = TextureAssets.MagicPixel.Value;
-            if (px == null || px.IsDisposed)
-                return;
-            Main.EntitySpriteDraw(px, Snap(a) - Main.screenPosition, new Rectangle(0, 0, 1, 1), c, dir.ToRotation(),
-                new Vector2(0f, 0.5f), new Vector2(Math.Max(ArtPixel, len), thick), SpriteEffects.None, 0f);
-        }
-
-        // Слеза Extra 98 вдоль rotation: длина len, ширина width (мировые px)
-        private static void Tear(Texture2D tex, Vector2 at, float rotation, float len, float width, Color c)
-        {
-            Main.EntitySpriteDraw(tex, at - Main.screenPosition, null, c, rotation + MathHelper.PiOver2, tex.Size() / 2f,
-                new Vector2(width / tex.Width, len / tex.Height), SpriteEffects.None, 0f);
-        }
-
-        public static void DrawThrustCut(Vector2 tip, Vector2 dir, float bladeLen, float halfWidth,
-            float flow, float polish, float alpha)
-        {
-            if (alpha <= 0.02f)
-                return;
-            Texture2D tex = TextureAssets.Extra[98].Value;
-            if (tex == null || tex.IsDisposed)
-                return;
-            Vector2 n = dir.RotatedBy(MathHelper.PiOver2);
-            float rot = dir.ToRotation();
-            Color shine = Color.Lerp(FrostMatte, EdgeRim, polish);
-            Color deep = Color.Lerp(new Color(90, 115, 140), new Color(40, 110, 230), polish);
-
-            // разрез: слоистая слеза от острия назад вдоль клинка и дальше
-            float len = bladeLen * 1.25f + 34f;
-            Vector2 mid = tip - dir * (len * 0.5f - 6f);
-            float width = 18f + 6f * polish;
-            Color body = polish < 0.5f ? deep * (alpha * 0.55f) : Additive(deep, alpha * 0.8f);
-            Tear(tex, mid, rot, len, width, body);
-            Tear(tex, mid + dir * 4f, rot, len * 0.85f, width * 0.6f, Additive(shine, alpha * (0.35f + 0.4f * polish)));
-            Tear(tex, mid + dir * 8f, rot, len * 0.7f, width * 0.25f,
-                Additive(Color.Lerp(FrostMatte, EdgeCore, polish), alpha * (0.3f + 0.6f * polish)));
-
-            // клин у острия: воздух расходится на две стороны
-            for (int side = -1; side <= 1; side += 2) {
-                Vector2 wedge = dir.RotatedBy(side * 0.5f);
-                Tear(tex, tip - wedge * 10f + n * side * 2f, wedge.ToRotation(), 22f + 8f * polish, 8f,
-                    Additive(shine, alpha * (0.45f + 0.4f * polish)));
-            }
-
-            // пиксельные линии скорости вдоль кромок: бегут назад и тают к хвосту
-            const float Period = 20f;
-            float tailLen = bladeLen + 30f;
-            int lanes = polish > 0.5f ? 2 : 1;
-            Color barCol = Color.Lerp(FrostMatte, EdgeCore, polish);
-            for (int lane = 0; lane < lanes; lane++) {
-                float gap = halfWidth + 8f + lane * 8f;
-                for (int side = -1; side <= 1; side += 2) {
-                    float phase = (flow + lane * 7f + (side > 0 ? 0f : Period * 0.5f)) % Period;
-                    for (float x = phase; x < tailLen; x += Period) {
-                        float k = x / tailLen;
-                        float a = alpha * (1f - k) * Smooth01(x / 8f) * (lane == 0 ? 1f : 0.65f);
-                        if (a <= 0.03f)
-                            continue;
-                        float widen = Math.Min(1f, x / (bladeLen * TipTaper));
-                        Vector2 at = tip - dir * x + n * side * (gap * (0.5f + 0.5f * widen) + Math.Max(0f, x - bladeLen) * 0.25f);
-                        float barLen = (10f + 8f * polish) * (1f - 0.4f * k);
-                        Color c = polish < 0.5f ? barCol * (a * 0.7f) : Additive(barCol, a * 0.9f);
-                        // брусок тянется назад от точки, толщина — 2 пикселя рисунка у первой дорожки
-                        Bar(at, -dir, barLen, lane == 0 ? ArtPixel * 2f : ArtPixel, c);
-                    }
-                }
-            }
         }
 
         public static void Unload()

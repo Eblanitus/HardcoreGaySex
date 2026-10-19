@@ -66,7 +66,7 @@ namespace FrostMelee.Content.Weapons
         // матовый морозный шлейф, отполированный — яркое сияние
         private void GlowColors(out Color core, out Color tail, out Color edge) {
             float polish = 1f - Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().IceFrostShown;
-            IceArcFx.PolishColors(polish, out core, out tail, out edge);
+            IceBladeFx.ArcColors(polish, out core, out tail, out edge);
         }
 
         public override void SetStaticDefaults() {
@@ -297,30 +297,7 @@ namespace FrostMelee.Content.Weapons
             GlowColors(out Color core, out Color tail, out Color edge);
 
             float head = Projectile.rotation;
-            float step = TrailTicks / (TrailPoints - 1);
-            int n = 1;
-            swooshAngles[0] = head;
-            swooshROut[0] = ArcLineRadius(Projectile.localAI[0]);
-            swooshRIn[0] = Math.Max(BladeReach * 0.2f, swooshROut[0] * TrailInnerFrac);
-            for (int i = 1; i < TrailPoints; i++) {
-                float ti = Projectile.localAI[0] - i * step;
-                if (ti < 0f)
-                    break;
-                float angle = ArcRotation(player, ti);
-                float delta = Math.Abs(angle - head);
-                if (delta > TrailMaxAngle) {
-                    // последняя точка — ровно по TrailMaxAngle, дальше ленту не тянем
-                    float prevDelta = Math.Abs(swooshAngles[n - 1] - head);
-                    float f = (TrailMaxAngle - prevDelta) / Math.Max(0.0001f, delta - prevDelta);
-                    swooshAngles[n] = MathHelper.Lerp(swooshAngles[n - 1], angle, MathHelper.Clamp(f, 0f, 1f));
-                    n++;
-                    break;
-                }
-                swooshAngles[n] = angle;
-                swooshROut[n] = ArcLineRadius(Math.Max(0f, ti));
-                swooshRIn[n] = Math.Max(BladeReach * 0.2f, swooshROut[n] * TrailInnerFrac);
-                n++;
-            }
+            int n = BuildTrailHistory(player, swooshAngles, swooshROut, swooshRIn);
 
             if (n >= 2) {
                 GraphicsDevice device = Main.graphics.GraphicsDevice;
@@ -337,12 +314,8 @@ namespace FrostMelee.Content.Weapons
                 IceRibbon.DrawEdgeCrystals(glow, swooshAngles, n, center, swooshROut, Projectile.localAI[0], env, core, tail);
             }
 
-            // яркая точка у острия — голова ленты
-            Vector2 tip = center + head.ToRotationVector2() * swooshROut[0];
-            Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(core, env), 0f,
-                glow.Size() / 2f, TrailHeadDot * 1.6f / glow.Width, SpriteEffects.None, 0f);
-
             // пик-вспышка: пятно + звезда у острия и ледяная нова вокруг игрока
+            Vector2 tip = center + head.ToRotationVector2() * swooshROut[0];
             float peak = PeakPulse(progress, maxAnim) * env;
             if (peak > 0.03f) {
                 Vector2 origin = glow.Size() / 2f;
@@ -483,13 +456,14 @@ namespace FrostMelee.Content.Weapons
             float polish = IceBladeFx.PolishOf(player, SwordItem);
             float keen = Smooth01((polish - KeenFrom) / KeenSpan);
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
-            if (keen < 0.99f)
-                IceBladeFx.DrawSwingArc(texture, Projectile.Center, Projectile.rotation, dir, scale * LineDrawScale, fx,
-                    progress, fade * (1f - keen), polish);
+            // Ванильный слеш — всегда: и на тупом, и на отточенном клинке он остаётся
+            IceBladeFx.DrawSwingArc(texture, Projectile.Center, Projectile.rotation, dir, scale * LineDrawScale, fx,
+                progress, fade, polish);
 
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             bool glowOk = glow != null && !glow.IsDisposed;
+            // Дуга серпа (лента по следу удара) — только после заточки, и тем ярче, чем острее
             if (keen > 0.01f && glowOk)
                 DrawKeenArc(player, texture, glow, scale, fx, fade, env, keen);
 
@@ -501,50 +475,54 @@ namespace FrostMelee.Content.Weapons
             float ramp = Smooth01((progress - HoneStart * 0.5f) / 0.08f);
             float stoneA = env * (0.5f + 0.5f * polish) * ramp * (1f - Smooth01((s - 0.9f) / 0.1f));
             IceBladeFx.DrawStone(heel, tip, s, polish, stoneA);
-
-            // «Дзинь»: у шершавого — звезда на острие, у отточенного — вспышка как пик у косы
-            if (tingTick >= 0f) {
-                float age = (Projectile.localAI[0] - tingTick) / TingTicks;
-                if (age < 1f) {
-                    float a = 1f - age;
-                    IceBladeFx.DrawTing(tip, bladeDir, polish, a * (0.55f + 0.45f * polish) * (1f - keen));
-                    if (keen > 0.01f && glowOk)
-                        DrawKeenFlash(glow, tip, bladeDir.ToRotation(), a * a * (3f - 2f * a) * keen);
-                }
-            }
         }
 
         // === Дуга косы на отточенном клинке ===
-        // Тот же набор, что у SickleArcProjectile: белая линия ×0.25, лента IceRibbon по
-        // сектору дуги (см. BuildKeenTrail), мягкий ореол вдоль неё, снежинки и мерцание на хвосте.
-        private const float KeenInnerFrac = 0.5f;     // внутренний край ленты: доля внешнего радиуса
+        // Тот же набор, что у SickleArcProjectile, и тот же двухслойный вид: у косы лента
+        // идёт по следу удара (BuildTrailHistory), а оружие метит отдельная дуга — у меча это
+        // белая линия (здесь) и шершавый сектор Excalibur (DrawSwingArc).
+        // Дальше: лента IceRibbon по следу, мягкий ореол вдоль неё, снежинки и мерцание на хвосте.
         private const float KeenHaloWidth = 56f;      // ореол у головы, px
         private const float KeenHaloWidthTail = 14f;  // ореол на хвосте, px
         private const float KeenHaloAlpha = 0.22f;
-        private const int KeenSnowflakes = 3;
-        private const float KeenSnowflakeSize = 18f;
-        private const int KeenTwinkles = 5;
-        private const float KeenTwinkleSize = 12f;
-        private const float KeenTwinkleSpeed = 0.55f;
 
         private const int KeenPoints = 28;
         private static readonly float[] keenAngles = new float[KeenPoints];
         private static readonly float[] keenROut = new float[KeenPoints];
         private static readonly float[] keenRIn = new float[KeenPoints];
 
-        // Лента лежит ровно на секторе текстуры Excalibur — там же, где белая линия, шершавая
-        // дуга и хитбокс: голова на +ArcAngleFront по ходу взмаха, хвост на -ArcAngleBack.
-        // Иначе (по истории клинка) лента тянулась бы позади клинка, а линия — впереди него.
-        private int BuildKeenTrail() {
-            float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
-            float head = Projectile.rotation + dir * ArcAngleFront;
-            float span = ArcAngleFront + ArcAngleBack;
-            float r = ArcLineRadius(Projectile.localAI[0]);
-            int n = keenAngles.Length;
-            for (int i = 0; i < n; i++) {
-                keenAngles[i] = head - dir * span * i / (n - 1);
-                keenROut[i] = r;
-                keenRIn[i] = r * KeenInnerFrac;
+        // История углов следа: голова — текущий угол дуги, дальше — углы за прошлые тики
+        // (ArcRotation). Радиусы растут вместе с дугой. Лента ложится по реальному пути взмаха,
+        // а не по фиксированному сектору; длина ограничена по тикам и по углу (TrailMaxAngle).
+        // Этим же строятся и шлейф, и лента отточенного клинка — как у косы.
+        private int BuildTrailHistory(Player player, float[] angles, float[] rOut, float[] rIn) {
+            float head = Projectile.rotation;
+            float step = TrailTicks / (angles.Length - 1);
+            int n = 1;
+            angles[0] = head;
+            rOut[0] = ArcLineRadius(Projectile.localAI[0]);
+            rIn[0] = Math.Max(BladeReach * 0.2f, rOut[0] * TrailInnerFrac);
+            for (int i = 1; i < angles.Length; i++) {
+                float ti = Projectile.localAI[0] - i * step;
+                if (ti < 0f)
+                    break;
+                float angle = head + MathHelper.WrapAngle(ArcRotation(player, ti) - head);
+                float r = ArcLineRadius(Math.Max(0f, ti));
+                float delta = Math.Abs(angle - head);
+                if (delta > TrailMaxAngle) {
+                    // последняя точка — ровно по TrailMaxAngle, дальше ленту не тянем
+                    float prevDelta = Math.Abs(angles[n - 1] - head);
+                    float f = MathHelper.Clamp((TrailMaxAngle - prevDelta) / Math.Max(0.0001f, delta - prevDelta), 0f, 1f);
+                    angles[n] = MathHelper.Lerp(angles[n - 1], angle, f);
+                    rOut[n] = MathHelper.Lerp(rOut[n - 1], r, f);
+                    rIn[n] = Math.Max(BladeReach * 0.2f, rOut[n] * TrailInnerFrac);
+                    n++;
+                    break;
+                }
+                angles[n] = angle;
+                rOut[n] = r;
+                rIn[n] = Math.Max(BladeReach * 0.2f, rOut[n] * TrailInnerFrac);
+                n++;
             }
             return n;
         }
@@ -560,18 +538,19 @@ namespace FrostMelee.Content.Weapons
         }
 
         private void DrawKeenArc(Player player, Texture2D texture, Texture2D glow, float scale, SpriteEffects fx, float fade, float env, float keen) {
-            Color core = IceArcFx.SwooshCore, tail = IceArcFx.SwooshTail, edge = IceArcFx.SwooshEdge;
+            IceBladeFx.ArcColors(IceBladeFx.PolishOf(player, SwordItem), out Color core, out Color tail, out Color edge);
 
-            // белая полупрозрачная линия, как у косы
+            // линейная дуга меча: светлая бирюза клинка (у ванили и косы она белая)
             Rectangle line = texture.Frame(1, 4, 0, 3);
-            Main.EntitySpriteDraw(texture, Projectile.Center - Main.screenPosition, line, Color.White * (0.25f * fade * keen),
+            Main.EntitySpriteDraw(texture, Projectile.Center - Main.screenPosition, line,
+                IceBladeFx.ArcLineColor(IceBladeFx.PolishOf(player, SwordItem)) * (0.25f * fade * keen),
                 Projectile.rotation, texture.Frame(1, 4).Size() / 2f, scale * LineDrawScale, fx, 0f);
 
             env *= keen;
             if (env <= 0.02f)
                 return;
             Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
-            int n = BuildKeenTrail();
+            int n = BuildTrailHistory(player, keenAngles, keenROut, keenRIn);
             if (n < 2)
                 return;
 
@@ -599,43 +578,6 @@ namespace FrostMelee.Content.Weapons
                     DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
             }
 
-            // яркая точка у головы
-            Main.EntitySpriteDraw(glow, KeenPoint(center, n, 0f, 1f) - Main.screenPosition, null, IceArcFx.Additive(core, env), 0f,
-                glow.Size() / 2f, TrailHeadDot * 1.6f / glow.Width, SpriteEffects.None, 0f);
-
-            // снежинки и мерцающие блёстки на хвосте
-            float time = Projectile.localAI[0];
-            for (int i = 0; i < KeenSnowflakes; i++) {
-                float t = (i + 0.5f) / KeenSnowflakes * 0.8f;
-                float radius = 0.72f + 0.26f * (float)Math.Sin(i * 2.1f);
-                float a = (1f - t) * env;
-                IceArcFx.DrawSparkle(glow, KeenPoint(center, n, t, radius), KeenSnowflakeSize * (1f - t * 0.4f),
-                    time * 0.12f + i * 1.3f, 3, IceArcFx.Additive(tail, a * 0.85f), IceArcFx.Additive(core, a));
-            }
-            for (int i = 0; i < KeenTwinkles; i++) {
-                float t = (i + 0.5f) / KeenTwinkles;
-                float tw = 0.5f + 0.5f * (float)Math.Sin(time * KeenTwinkleSpeed + i * 1.9f);
-                if (tw < 0.25f)
-                    continue;
-                float radius = 0.62f + 0.36f * Math.Abs((float)Math.Sin(i * 3.7f));
-                IceArcFx.DrawSparkle(glow, KeenPoint(center, n, t, radius), KeenTwinkleSize * tw, i + time * KeenTwinkleSpeed * 0.3f, 2,
-                    IceArcFx.Additive(core, 0.9f * tw * env * (1f - t * 0.6f)), IceArcFx.Additive(core, 0.9f * tw * env));
-            }
-        }
-
-        // Вспышка «дзинь» на отточенном клинке — как пик у косы: мягкое пятно + длинная звезда
-        private static void DrawKeenFlash(Texture2D glow, Vector2 tip, float axis, float peak) {
-            if (peak <= 0.03f)
-                return;
-            Vector2 origin = glow.Size() / 2f;
-            Vector2 pos = tip - Main.screenPosition;
-            Main.EntitySpriteDraw(glow, pos, null, IceArcFx.Additive(IceArcFx.SwooshEdge, peak * PeakFlashAlpha), 0f, origin,
-                PeakFlashSize * (0.7f + 0.5f * peak) / glow.Width, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, pos, null, IceArcFx.Additive(IceArcFx.SwooshCore, peak * PeakFlashAlpha), 0f, origin,
-                PeakFlashSize * 0.4f / glow.Width, SpriteEffects.None, 0f);
-            IceArcFx.DrawSparkle(glow, tip, PeakStarSize * peak, axis + MathHelper.PiOver4, 2,
-                IceArcFx.Additive(Color.Lerp(IceArcFx.SwooshTail, IceArcFx.SwooshCore, 0.5f), peak * 0.9f),
-                IceArcFx.Additive(IceArcFx.SwooshCore, peak));
         }
 
         // Хитбокс на момент time — сектор вокруг игрока: от центра до внешнего края линии
@@ -797,11 +739,12 @@ namespace FrostMelee.Content.Weapons
                 return false;
             }
             float lineScale = scale * LineDrawScale;
+            GlowColors(out Color arcCore, out Color arcTail, out _);
             IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
-                lineScale, spriteEffects, 0.3f * lerpTime, null, null);
+                lineScale, spriteEffects, 0.3f * lerpTime, arcTail, arcCore);
             Vector2 wedgeTip = owner.RotatedRelativePoint(owner.MountedCenter);
             IceArcFx.DrawSparkles(wedgeTip, Projectile.rotation,
-                Projectile.ai[0] >= 0f ? 1 : -1, LineTexOuter * lineScale, Projectile.localAI[0], lerpTime, null, null);
+                Projectile.ai[0] >= 0f ? 1 : -1, LineTexOuter * lineScale, Projectile.localAI[0], lerpTime, arcTail, arcCore);
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow != null && !glow.IsDisposed)
                 DrawSwoosh(owner, glow, percentageOfLife, maxAnim);

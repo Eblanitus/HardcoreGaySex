@@ -184,6 +184,16 @@ namespace FrostMelee.Content.Projectiles
                     break;
             }
 
+            // Меч может застрять в состоянии полёта, если OnTileCollide не пришёл
+            // (стык блоков, склон): визуально лежит, но подбор не срабатывает.
+            // Уже невредимый и почти остановившийся считаем лежащим.
+            if (State == StateFlying && harmless && Projectile.velocity.LengthSquared() < 0.25f)
+            {
+                State = StateLying;
+                lyingInit = false;
+                Projectile.netUpdate = true;
+            }
+
             TryPickup();
         }
 
