@@ -118,8 +118,6 @@ namespace FrostMelee.Content.Projectiles
         private bool stuckInit;
         private Point stuckTile;
         private bool cleanNpcHit;
-        // Попадание пиксельной зоной клинка (лезвием) в этом тике
-        private bool bladeZoneHit;
 
         private FrostTrailSystem.Trail frostTrail;
         private Vector2 lastTrailPos;
@@ -147,7 +145,6 @@ namespace FrostMelee.Content.Projectiles
 
         public override void AI()
         {
-            bladeZoneHit = false;
             if (!initialized)
             {
                 initialized = true;
@@ -439,7 +436,9 @@ namespace FrostMelee.Content.Projectiles
         private void SpawnIceWave(int itemType, bool isKill)
         {
             Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
-            if (!Weapons.SwordTypes.IsSwordId(itemType)) return;
+            // Ледяные свойства (волна, сосульки) — только Ice Blade:
+            // у Frostbrand их быть не должно
+            if (itemType != ItemID.IceBlade) return;
             // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
@@ -628,10 +627,7 @@ namespace FrostMelee.Content.Projectiles
             {
                 if (SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center,
                     Projectile.rotation, Projectile.rotation, false, Projectile.scale))
-                {
-                    bladeZoneHit = true; // лезвием, а не плашкой
                     return true;
-                }
                 return false;
             }
 
@@ -645,11 +641,10 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Меч: «лезвием» = попадание пиксельной зоной клинка.
-            // Серп: по-прежнему чистый удар остриём по скорости
-            cleanNpcHit = Weapons.SwordTypes.IsSwordId((int)Projectile.ai[2])
-                ? bladeZoneHit
-                : IsCleanHit(Projectile.velocity);
+            // Чистый удар («лезвием по ходу») — выравнивание оси на полёт,
+            // как у палок: у крученого меча пиксель-зона накрывает врага
+            // почти каждый кадр, из-за чего меч застревал при каждом касании
+            cleanNpcHit = IsCleanHit(Projectile.velocity);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
