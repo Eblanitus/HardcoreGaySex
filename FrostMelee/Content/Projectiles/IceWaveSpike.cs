@@ -116,11 +116,10 @@ namespace FrostMelee.Content.Projectiles
             float sizeMul = packed != 0f ? System.Math.Abs(packed) : 1f;
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
 
-            // Размер задаётся в ПИКСЕЛЯХ ВЫСОТЫ (32-60, рост садового гнома),
-            // а не в масштабе текстуры: перерисуешь сосульку любой высоты —
-            // код сам подстроится, размер в мире не изменится
-            float targetHeight = (32f + Projectile.ai[0] * 28f) * sizeMul;
-            float scale = grow * targetHeight / tex.Height;
+            // Масштаб 1:1 с текстурой, как у глазури: какой высоты png
+            // нарисуешь и запушишь, такой высоты сосулька и стоит в мире.
+            // ai[0] даёт личный разброс, sizeMul — градиент от меча к хвосту
+            float scale = grow * (0.8f + Projectile.ai[0] * 0.4f) * sizeMul;
 
             // Наклон в сторону появления: шип заваливается по ходу волны,
             // наклон нарастает вместе с ростом

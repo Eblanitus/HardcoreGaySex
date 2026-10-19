@@ -43,10 +43,12 @@ namespace FrostMelee.Content.Weapons
             if (!onBladeIce)
                 return;
 
-            if (Player.iceSkate)
+            if (HasSkates())
             {
-                // Коньки: хватка и сильный разгон, как на ванильном льду,
-                // плюс бафф потолка скорости от клинка
+                // Коньки на льду клинка: хватка (без скольжения) и ускорение x2.1,
+                // как в ванили. Потолок скорости в ванили коньки не меняют,
+                // но здесь он сознательная награда льда: без потолка в льде
+                // нет смысла, решено игроком
                 Player.slippy = false;
                 Player.runAcceleration *= 2.1f;
                 Player.maxRunSpeed *= 1.25f;
@@ -62,6 +64,25 @@ namespace FrostMelee.Content.Weapons
                 return;
 
             SpawnVisuals();
+        }
+
+        // Любые коньки: базовые, Искромётные ботинки, Ботинки земного
+        // покрова и прочие тиры из коньков. Ванильное поле iceSkate
+        // выставляется не всеми апгрейдами, поэтому читаем слоты
+        // аксессуаров напрямую (соц-слоты не дают эффектов и не читаются)
+        private bool HasSkates()
+        {
+            if (Player.iceSkate)
+                return true;
+
+            for (int i = 3; i < 3 + Player.maxAccessories; i++)
+            {
+                int t = Player.armor[i].type;
+                if (t == ItemID.IceSkates || t == ItemID.FrostsparkBoots || t == ItemID.TerrasparkBoots)
+                    return true;
+            }
+
+            return false;
         }
 
         // Стоим ли на живой глазури своей дорожки (тайл под ногами или соседний)
