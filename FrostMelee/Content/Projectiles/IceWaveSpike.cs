@@ -79,8 +79,10 @@ namespace FrostMelee.Content.Projectiles
             float grow = MathHelper.Clamp(age / 10f, 0f, 1f);
             grow = 1f - (1f - grow) * (1f - grow);
 
-            // Личный размер шипа: ai[0] = разброс, ai[1] = какой из трёх спрайтов
-            float scale = grow * (0.5f + Projectile.ai[0] * 0.7f);
+            // Личный размер шипа: ai[0] = разброс, ai[1] = какой из трёх спрайтов.
+            // Спрайт 200 px высотой, масштаб 0.16-0.30 даёт 32-60 px:
+            // ростом с садового гнома, как в ванильной атаке Deerclops
+            float scale = grow * (0.16f + Projectile.ai[0] * 0.14f);
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
 
             // Таяние: последние 14 тиков, нелинейно
