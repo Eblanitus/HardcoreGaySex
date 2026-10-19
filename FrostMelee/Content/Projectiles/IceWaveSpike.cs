@@ -113,7 +113,7 @@ namespace FrostMelee.Content.Projectiles
             // ai[2] упаковывает размер и направление: модуль = множитель
             // размера (1 у меча, меньше к хвосту), знак = направление волны
             float packed = Projectile.ai[2];
-            float sizeMul = packed != 0f ? MathHelper.Abs(packed) : 1f;
+            float sizeMul = packed != 0f ? System.Math.Abs(packed) : 1f;
             float scale = grow * (0.16f + Projectile.ai[0] * 0.14f) * sizeMul;
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
 
