@@ -98,6 +98,9 @@ namespace FrostMelee.Content.Weapons
         public override void AI() {
             Projectile.localAI[0]++;
             Player player = Main.player[Projectile.owner];
+            // Клинок взмаха рисуется этим снарядом (SwingBladeLayer): одинаковый
+            // угол у ленты и меча гарантирован источником, а не синхронизацией
+            player.GetModPlayer<SwordPlayer>().swingArc = Projectile;
             float maxAnim = Math.Max(1f, Projectile.ai[1]);
             GetArcState(player, Projectile.localAI[0], out float rotation, out float scale);
             Projectile.rotation = rotation;

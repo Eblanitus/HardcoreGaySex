@@ -40,6 +40,10 @@ public class SwordGlobalItem : GlobalItem
             item.noMelee = false;
             item.shootsEveryUse = true;
             item.autoReuse = true;
+            // Ванильный use-график меча выключен: клинок на взмахе рисует
+            // SwingBladeLayer углом дуги (один источник угла — один клинок).
+            // В покое предмет в руке рисует ваниль как обычно
+            item.noUseGraphic = true;
         }
 
         // Меч сам не бьёт: иначе он и дуга попадали по одной цели за взмах

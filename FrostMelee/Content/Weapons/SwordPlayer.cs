@@ -58,7 +58,9 @@ namespace FrostMelee.Content.Weapons
         private Vector2 armAimDir = Vector2.UnitX;
         // Поза броска (только локальный игрок)
         private int throwFollowTicks;
-        private float fireGlow;   // свечение Фростбранда от горящих рядом врагов                 // сколько тиков ещё идёт выброс/возврат
+        private float fireGlow;   // свечение Фростбранда от горящих рядом врагов
+        // Живая дуга взмаха этого игрока: SwingBladeLayer рисует клинок её углом
+        public Projectile swingArc;                 // сколько тиков ещё идёт выброс/возврат
         private Vector2 throwAimDir = Vector2.UnitX;  // линия броска, зафиксированная при вылете
         // Меч в руке в замахе: рисует SwordThrowPoseLayer. Кисть — смещением от центра игрока
         public bool PoseItemVisible;
