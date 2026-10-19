@@ -272,7 +272,7 @@ namespace FrostMelee.Content.Projectiles
             for (int i = 0; i < n; i++)
                 trailN[i] = nrm;
 
-            float polish = 1f - player.GetModPlayer<SwordPlayer>().IceFrostShown;
+            float polish = 1f - player.GetModPlayer<Weapons.SwordPlayer>().IceFrostShown;
             IceArcFx.PolishColors(polish, out Color core, out Color tail, out Color edge);
             StabRibbon.Draw(trailC, trailN, n, 11f, core, tail, edge, env);
 
