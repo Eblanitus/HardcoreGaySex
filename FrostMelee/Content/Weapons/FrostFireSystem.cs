@@ -41,8 +41,11 @@ namespace FrostMelee.Content.Weapons
 
         public override void Unload() => states.Clear();
 
+        // Горение = Frostburn или полное возгорание Frostburn2
+        // (в этой сборке tML Frostbite зовётся Frostburn2 — так же,
+        // как уже используют коса и амулеты этого мода)
         public static bool IsBurning(NPC npc) =>
-            npc.FindBuffIndex(BuffID.Frostburn) >= 0;
+            npc.FindBuffIndex(BuffID.Frostburn) >= 0 || npc.FindBuffIndex(BuffID.Frostburn2) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) =>
@@ -65,11 +68,9 @@ namespace FrostMelee.Content.Weapons
 
             if (st.stacks >= FullIgnitionStacks)
             {
-                // Полное возгорание: длинный Frostburn + Slow (тело сковано
-                // холодом) + вспышка. Отдельного «сильного» дебаффа в этой
-                // сборке tML нет, связка даёт то же ощущение
-                npc.AddBuff(BuffID.Frostburn, FullBurnTicks);
-                npc.AddBuff(BuffID.Slow, FullBurnTicks);
+                // Полное возгорание: настоящий Frostbite этой сборки
+                // (Frostburn2) на несколько секунд + вспышка
+                npc.AddBuff(BuffID.Frostburn2, FullBurnTicks);
                 st.stacks = 0;
                 Burst(npc.Center, 60f, false);
             }
