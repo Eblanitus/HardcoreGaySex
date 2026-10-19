@@ -399,44 +399,8 @@ namespace FrostMelee.Content.Projectiles
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
 
-            // Раскол льда: на полном разгоне, один раз на цель за выставление
-            if (braceSpeed01 < BraceShatterAt || !shatteredNpcs.Add(target.whoAmI))
-                return;
-
-            Vector2 center = target.Center;
-            for (int i = 0; i < Main.maxNPCs; i++)
-            {
-                NPC n = Main.npc[i];
-                if (!n.active || n.friendly || n.dontTakeDamage || n.immortal)
-                    continue;
-                if (Vector2.Distance(n.Center, center) <= BraceShatterRadius + Math.Max(n.width, n.height) * 0.5f)
-                    n.AddBuff(BuffID.Slow, BraceShatterSlowTicks);
-            }
-
-            shatterFlashPos = center;
-            shatterFlashStart = Main.GameUpdateCount;
-            shatterFlashActive = true;
-
-            if (Main.dedServ)
-                return;
-            SoundEngine.PlaySound(SoundID.Item27, center);
-            // Осколки раскола — настоящие летящие сосульки (только визуал: ai[0]=1)
-            for (int i = 0; i < BraceShatterShards; i++)
-            {
-                Vector2 dir = Main.rand.NextVector2Circular(1f, 1f);
-                if (dir.LengthSquared() < 0.01f)
-                    dir = Vector2.UnitX;
-                dir.Normalize();
-                Projectile.NewProjectile(Projectile.GetSource_FromThis(), center + dir * 12f,
-                    dir * BraceShatterSpeed * Main.rand.NextFloat(0.6f, 1.2f) + SpearDir * 1.5f,
-                    ModContent.ProjectileType<AmarokShardProjectile>(), 1, 0f, Projectile.owner, 1f);
-            }
-            for (int i = 0; i < 10; i++)
-            {
-                Dust d = Dust.NewDustPerfect(center, DustID.Frost,
-                    Vector2.UnitX.RotatedBy(i / 10f * MathHelper.TwoPi) * BraceShatterSpeed * 0.8f, 120, default, 1.6f);
-                d.noGravity = true;
-            }
+            // «Раскол льда» (веер сосулек на полном разгоне) убран по решению
+            // игрока: механика нигде не задумывалась, сосульки сыпались зря.
         }
 
         public override bool PreDraw(ref Color lightColor)

@@ -37,7 +37,10 @@ namespace FrostMelee.Content
 
         // Бросок: коса летит ВСЕГДА остриём (лезвием) вперёд, как копьё, и втыкается
         // в мягкий блок/врага на скорости. После отскока кувыркается (SickleThrowProjectile).
-        public static bool ThrownAlwaysTipFirst(int itemType) => true;
+        // Мечи — наоборот: крученый бросок как у палок (SwordTypes.ThrownAlwaysTipFirst = false),
+        // поэтому здесь остриём-вперёд летят только серпы.
+        public static bool ThrownAlwaysTipFirst(int itemType) =>
+            !Weapons.SwordTypes.IsSwordId(itemType);
 
         // Серп режет, а не расталкивает: тычки слабо отбрасывают цель
         public static float StabKnockbackMult(Item item) => 0.5f;
