@@ -5,7 +5,7 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Скольжение ледяного клинка: состояние + эффект + визуал.
+    // Скольжение ледяного клинка: состояние + эффект + визуал + рабочий лёд.
     //
     // Состояние: Sliding. Включается от IceSlideSystem.CanSlide (разгон >= 6 px/тик
     // вдоль выставленного копья, держится EngageHoldTicks тиков подряд — пики
@@ -13,23 +13,18 @@ namespace FrostMelee.Content.Weapons
     // (IceSlideSystem.StillCoasting): замедление не обрывает скольжение мгновенно,
     // но на скорости ниже CoastStopSpeed (почти шаг) оно честно заканчивается.
     //
-    // Точки выставления эффекта — по результату четырёх игровых проверок:
-    //   PostUpdate      — «ледяной» флаг slippy. Запись из этой точки доживает
-    //                     до движения следующего кадра; запись из
-    //                     PostUpdateRunSpeeds ваниль стирает до того, как
-    //                    flag прочитают (проверено: без PostUpdate чувства нет).
-    //                     Флаг взят под полный контроль: slippy = Sliding ИЛИ
-    //                     под ногами ванильный лёд. Поэтому липкости больше нет:
-    //                     состояние кончилось — флаг сразу вернулся к ванильному
-    //                     значению, а не живёт до прыжка, как раньше.
-    //   PostUpdateRunSpeeds — потолок скорости (maxRunSpeed *= SlideBoost):
-    //                     по документации tModLoader это единственный хук, где
-    //                     эта запись применяется к движению того же кадра.
+    // Рабочий лёд: своя дорожка глазури — это не только картинка. Стоя или идя
+    // по живой отметке (OnModIce), игрок получает настоящую ледяную физику:
+    // скольжение без коньков и хватку с ускорением с коньками.
     //
-    // Визуал: пока скользим, вытянутый вперёд меч «намораживает» слой льда на
-    // поверхности блоков (IceSheetSystem: отметки на сетке тайлов, рисуются
-    // в PostDrawTiles поверх любых блоков, освещаются светом мира, живут
-    // 4 секунды и тают). Плюс ледяная крошка из-под ног.
+    // Коньки (Player.iceSkate) на льду клинка работают как на ванильном льду:
+    //   без коньков — slippy: скользко, разгон x0.7, потолок скорости +15%;
+    //   с коньками — хватка (slippy выключен), разгон x2.1 и потолок +25%:
+    //   аксессуар реально баффает передвижение от клинка, а не гасит его.
+    // Ванильный лёд под ногами не трогаем: им владеет сама игра.
+    //
+    // Визуал: пока скользим, меч намораживает глазурь на блоках
+    // (IceSheetSystem.MarkSurface) и крошку из-под ног.
     public class IceSlidePlayer : ModPlayer
     {
         public bool Sliding;
@@ -43,10 +38,25 @@ namespace FrostMelee.Content.Weapons
                 return;
 
             UpdateState();
-            if (!Sliding)
+
+            bool onBladeIce = Sliding || OnModIce();
+            if (!onBladeIce)
                 return;
 
-            Player.maxRunSpeed *= IceSlideSystem.SlideBoost;
+            if (Player.iceSkate)
+            {
+                // Коньки: хватка и сильный разгон, как на ванильном льду,
+                // плюс бафф потолка скорости от клинка
+                Player.slippy = false;
+                Player.runAcceleration *= 2.1f;
+                Player.maxRunSpeed *= 1.25f;
+            }
+            else
+            {
+                // Без коньков: скользко, потолок скорости выше
+                Player.slippy = true;
+                Player.maxRunSpeed *= IceSlideSystem.SlideBoost;
+            }
 
             if (Main.dedServ)
                 return;
@@ -54,26 +64,14 @@ namespace FrostMelee.Content.Weapons
             SpawnVisuals();
         }
 
-        public override void PostUpdate()
+        // Стоим ли на живой глазури своей дорожки (тайл под ногами или соседний)
+        private bool OnModIce()
         {
-            if (Player.whoAmI != Main.myPlayer)
-                return;
-
-            // Владение флагом: скользим ИЛИ стоишь на ванильном льду.
-            // Между кадрами ничего не утекает и не застревает.
-            Player.slippy = Sliding || OnIceFloor();
-        }
-
-        // Под ногами ванильный лёд (там скольжение положено самой игрой)
-        private bool OnIceFloor()
-        {
+            int y = (int)((Player.Bottom.Y + 2f) / 16f);
             int x = (int)(Player.Center.X / 16f);
-            int y = (int)((Player.Bottom.Y + 4f) / 16f);
-            if (!WorldGen.InWorld(x, y))
-                return false;
-
-            Tile tile = Main.tile[x, y];
-            return tile.HasTile && TileID.Sets.IceSkateSlippery[tile.TileType];
+            return IceSheetSystem.HasLiveMark(x, y)
+                || IceSheetSystem.HasLiveMark(x - 1, y)
+                || IceSheetSystem.HasLiveMark(x + 1, y);
         }
 
         private void UpdateState()
@@ -116,17 +114,15 @@ namespace FrostMelee.Content.Weapons
             if (System.Math.Abs(Player.velocity.X) < IceSlideSystem.VisualMinSpeed)
                 return;
 
-            // Ледяной слой на сетке тайлов: отметки под ногами и чуть по ходу.
-            // IceSheetSystem нарисует их в PostDrawTiles поверх любых блоков,
-            // но до игрока — слой лежит на поверхности, а не висит над ней.
             if (Main.GameUpdateCount % 60 == 0)
                 Mod.Logger.Info("[IceSheet] скольжение активно, ставлю метки глазури");
 
+            // Ледяной слой на сетке тайлов: отметки под ногами и чуть по ходу
             int y = (int)((Player.Bottom.Y + 2f) / 16f);
             int x0 = (int)((Player.Left.X - 2f) / 16f);
             int x1 = (int)((Player.Right.X + 2f) / 16f);
             for (int x = x0; x <= x1; x++)
-                IceSheetSystem.MarkSurface(x, y, Player);
+                IceSheetSystem.MarkSurface(x, y);
 
             // Ледяная крошка из-под ног
             if (Main.rand.NextBool(3))

@@ -3,43 +3,39 @@ using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using System.Collections.Generic;
 using Terraria;
-using Terraria.GameContent;
 using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Ледяная глазурь: след скольжения как лёд на верхнем блоке. Рисуются
-    // ТОЛЬКО верхние 6 пикселей тайла (текстура IceCoat 16x6), а не вся
-    // плитка: блок не перекрашивается, по кромке лежит мокрая ледяная
-    // кромка, как блик на ванильном льду.
-    // Данные — отметки на сетке тайлов ((x, y) верхнего твёрдого тайла
-    // -> кадр истечения), ставятся IceSlidePlayer под ногами скользящего.
+    // Отметка льда на тайле: отдельно момент рождения и момент истечения.
+    // Created не сбрасывается повторными отметками, поэтому анимация
+    // появления не мигает под игроком и идёт один раз, плавно.
+    public struct IceMark
+    {
+        public int Created;
+        public int Expires;
+    }
+
+    // Ледяная глазурь скольжения и волны: отметки на сетке тайлов + отрисовка.
     //
-    // МЕТОД ОТРИСОВКИ (поменян после трёх неудачных итераций):
-    // раньше рисовали своим батчем в ModSystem.PostDrawTiles — в сборной
-    // пользователя альфа в этом конвейере не работала, и тайл целиком
-    // перекрашивался в белый при любых цифрах прозрачности.
-    // Теперь рисует IceSheetDrawer своим PreDraw — внутри ванильного батча
-    // снарядов, того самого, в котором у этого мода уже работают
-    // полупрозрачные кроссфейды клинков. Прозрачность текстуры и цвета
-    // там доказанно живая.
+    // Отрисовка — ModSystem.PostDrawTiles: этот хук вызывается всегда и не
+    // зависит от снарядов в кадре. Раньше рисовал снаряд-художник, но ваниль
+    // кульлит снаряды за экраном, и вместе с ним «пропадал» весь лёд,
+    // когда игрок вертелся и уезжал от места спавна художника.
     //
-    // Освещение из мира (Lighting.GetColor) с уводом в синеву,
-    // потолок альфы задаётся вызовом (IceSlideSystem.SheetCapAlpha).
+    // Прозрачность: появление — смусстеп от Created за AppearFrames,
+    // таяние — непрерывный смусстеп от остатка жизни. Оба умножаются
+    // на альфу вызова; освещение берётся из мира.
     //
-    // Ограничения сознательные:
-    //   - не кладём на склоны и полублоки: обмазка легла бы мимо поверхности;
-    //   - не кладём, если сверху уже стоит твёрдый тайл (поверхность не открыта);
-    //   - отметки клиентские: в мультиплеере чужую дорожку не видно.
+    // Лёд функционален: HasLiveMark используют скольжение и коньки
+    // (IceSlidePlayer) — стоя на своей дорожке, игрок скользит по-настоящему.
     public class IceSheetSystem : ModSystem
     {
-        public const int LifeFrames = 240;  // 4 секунды
-        public const int FadeFrames = 60;   // тает в последнюю секунду
-        public const int AppearFrames = 24; // намерзает за 0.4 секунды, смусстеп
+        public const int LifeFrames = 240;  // 4 секунды жизни
+        public const int AppearFrames = 24; // намерзание 0.4 с, смусстеп
 
-        private static readonly Dictionary<Point, int> marks = new();
+        private static readonly Dictionary<Point, IceMark> marks = new();
         private static Asset<Texture2D> coatTex;
-        private static int drawer = -1;
         private static bool loadWarned;
 
         public static bool Any => marks.Count > 0;
@@ -50,23 +46,20 @@ namespace FrostMelee.Content.Weapons
         public override void OnWorldUnload()
         {
             marks.Clear();
-            drawer = -1;
         }
 
         public override void Unload()
         {
             marks.Clear();
             coatTex = null;
-            drawer = -1;
             loadWarned = false;
         }
 
-        // Положить слой на поверхность: ищем сверху вниз первый твёрдый тайл
-        // с открытым верхом и отмечаем его. yStart — тайл под ногами игрока.
-        public static void MarkSurface(int x, int yStart, Player owner)
+        // Положить глазурь на поверхность: первый твёрдый тайл с открытым
+        // верхом по колонке. Повторная отметка продлевает срок, но НЕ
+        // сбрасывает Created — анимация появления не перезапускается.
+        public static void MarkSurface(int x, int yStart)
         {
-            // Предохранитель от разрастания словаря (например, на сервере,
-            // где художник не спавнится и чисткой никто не занимается)
             if (marks.Count > 1024)
                 PurgeExpired();
 
@@ -79,44 +72,39 @@ namespace FrostMelee.Content.Weapons
                 if (!tile.HasTile || !Main.tileSolid[tile.TileType])
                     continue;
 
-                // На склонах и полублоках шапка легла бы мимо поверхности
+                // На склонах и полублоках глазурь легла бы мимо поверхности
                 if (tile.Slope != 0 || tile.IsHalfBlock)
                     return;
 
-                // Поверхность должна быть открыта: сверху нет твёрдого тайла
+                // Поверхность открыта: сверху нет твёрдого тайла
                 Tile above = Main.tile[x, y - 1];
                 if (above.HasTile && Main.tileSolid[above.TileType])
                     return;
 
+                int now = (int)Main.GameUpdateCount;
                 Point key = new Point(x, y);
-                int until = (int)Main.GameUpdateCount + LifeFrames;
-                if (!marks.TryGetValue(key, out int old) || old < until)
-                    marks[key] = until;
-
-                EnsureDrawer(owner);
+                if (marks.TryGetValue(key, out IceMark old))
+                {
+                    old.Expires = System.Math.Max(old.Expires, now + LifeFrames);
+                    marks[key] = old;
+                }
+                else
+                {
+                    marks[key] = new IceMark { Created = now, Expires = now + LifeFrames };
+                }
                 return;
             }
         }
 
-        // Один скрытый снаряд-художник на всех: рисует дорожку в ванильном
-        // батче снарядов и живёт, пока есть отметины
-        private static void EnsureDrawer(Player owner)
+        // Живая ли глазурь на тайле: для рабочего льда дорожки
+        public static bool HasLiveMark(int x, int y)
         {
-            if (Main.dedServ)
-                return;
+            if (!marks.TryGetValue(new Point(x, y), out IceMark m))
+                return false;
 
-            if (drawer >= 0 && drawer < Main.maxProjectiles)
-            {
-                Projectile d = Main.projectile[drawer];
-                if (d.active && d.type == ModContent.ProjectileType<IceSheetDrawer>())
-                    return;
-            }
-
-            drawer = Projectile.NewProjectile(owner.GetSource_FromThis(), owner.Bottom,
-                Vector2.Zero, ModContent.ProjectileType<IceSheetDrawer>(), 0, 0f, owner.whoAmI);
+            return m.Expires > (int)Main.GameUpdateCount;
         }
 
-        // Убрать просроченное; вызывает художник каждый тик
         public static void PurgeExpired()
         {
             if (marks.Count == 0)
@@ -124,8 +112,8 @@ namespace FrostMelee.Content.Weapons
 
             int now = (int)Main.GameUpdateCount;
             List<Point> dead = null;
-            foreach (KeyValuePair<Point, int> kv in marks)
-                if (kv.Value - now <= 0)
+            foreach (KeyValuePair<Point, IceMark> kv in marks)
+                if (kv.Value.Expires - now <= 0)
                     (dead ??= new List<Point>()).Add(kv.Key);
 
             if (dead == null)
@@ -135,16 +123,13 @@ namespace FrostMelee.Content.Weapons
                 marks.Remove(p);
         }
 
-        // Рисование дорожки: вызывается из PreDraw снаряда-художника,
-        // то есть внутри ванильного батча снарядов с живой альфой
-        public static void DrawTrail()
+        public override void PostDrawTiles()
         {
-            if (marks.Count == 0)
+            if (Main.dedServ || marks.Count == 0)
                 return;
 
-            // Если текстура глазури не загрузилась (любой формат/путь),
-            // рисуем запасным magic pixel: лёд виден всегда, а в лог
-            // один раз пишем, что текстура не подхватилась
+            PurgeExpired();
+
             Texture2D tex = CoatTex.IsLoaded ? CoatTex.Value : null;
             if (tex == null && !loadWarned)
             {
@@ -153,12 +138,16 @@ namespace FrostMelee.Content.Weapons
             }
 
             int now = (int)Main.GameUpdateCount;
-            Rectangle screen = new Rectangle((int)Main.screenPosition.X - 32, (int)Main.screenPosition.Y - 32,
-                Main.screenWidth + 64, Main.screenHeight + 64);
+            Rectangle screen = new Rectangle((int)Main.screenPosition.X - 64, (int)Main.screenPosition.Y - 64,
+                Main.screenWidth + 128, Main.screenHeight + 128);
 
-            foreach (KeyValuePair<Point, int> kv in marks)
+            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+                Main.DefaultSamplerState, DepthStencilState.None, Main.Rasterizer, null,
+                Main.GameViewMatrix.TransformationMatrix);
+
+            foreach (KeyValuePair<Point, IceMark> kv in marks)
             {
-                int remain = kv.Value - now;
+                int remain = kv.Value.Expires - now;
                 if (remain <= 0)
                     continue;
 
@@ -166,35 +155,34 @@ namespace FrostMelee.Content.Weapons
                 if (!screen.Contains((int)world.X, (int)world.Y))
                     continue;
 
-                // Таяние НЕПРЕРЫВНОЕ и нелинейное: льдинка становится
-                // прозрачнее каждый тик всей своей жизни, а не обрывается в конце
+                // Появление: смусстеп от рождения отметки, однократно
+                int age = now - kv.Value.Created;
+                float ap = MathHelper.Clamp(age / (float)AppearFrames, 0f, 1f);
+                float appear = ap * ap * (3f - 2f * ap);
+
+                // Таяние: непрерывный смусстеп всей жизни
                 float t = (float)remain / LifeFrames;
                 float fade = t * t * (3f - 2f * t);
 
-                // Плавное появление: первые AppearFrames тиков альфа растёт
-                // смусстепом, лёд «намерзает», а не вспыхивает готовой полосой
-                int age = now - (kv.Value - LifeFrames);
-                float appear = age < AppearFrames ? age / (float)AppearFrames : 1f;
-                appear = appear * appear * (3f - 2f * appear);
                 Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
                 byte a = (byte)(IceSlideSystem.SheetCapAlpha * fade * appear);
                 Color c = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B, a);
 
-                // EntitySpriteDraw — тот же вызов, которым в моде рисуются
-                // рабочие полупрозрачные слои (кроссфейды клинков, копьё)
                 if (tex != null)
                 {
                     // Текстура игрока рисуется 1:1: её размер и есть покрытие
-                    Main.EntitySpriteDraw(tex, world - Main.screenPosition, null, c,
+                    Main.spriteBatch.Draw(tex, world - Main.screenPosition, null, c,
                         0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
                 }
                 else
                 {
-                    Main.EntitySpriteDraw(TextureAssets.MagicPixel.Value,
-                        world - Main.screenPosition, null, c, 0f, Vector2.Zero,
-                        new Vector2(16f, 5f), SpriteEffects.None, 0f);
+                    Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                        new Rectangle((int)(world.X - Main.screenPosition.X),
+                            (int)(world.Y - Main.screenPosition.Y), 16, 5), c);
                 }
             }
+
+            Main.spriteBatch.End();
         }
     }
 }

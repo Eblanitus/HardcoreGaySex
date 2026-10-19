@@ -76,8 +76,8 @@ namespace FrostMelee.Content.Projectiles
 
             // Волна намораживает глазурь за собой: земля замерзает по пути
             Point mark = Projectile.Center.ToTileCoordinates();
-            Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y, Main.player[Projectile.owner]);
-            Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y, Main.player[Projectile.owner]);
+            Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y);
+            Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y);
 
             // Ледяные пики по ходу волны: атака как у Deerclops, но мелкая.
             // Шаг чаще у длинной волны убийства
@@ -87,7 +87,7 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                    Main.rand.NextFloat(1f), 0f);
+                    Main.rand.NextFloat(1f), Main.rand.Next(3));
                 Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
             }
 
@@ -160,7 +160,7 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 sp = Projectile.Center + new Vector2(dir * i * 10f, 8f);
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                    Main.rand.NextFloat(1f), 0f);
+                    Main.rand.NextFloat(1f), Main.rand.Next(3));
                 Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
             }
         }
