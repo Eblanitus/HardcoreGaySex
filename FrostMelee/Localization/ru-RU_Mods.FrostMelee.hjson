@@ -10,6 +10,7 @@ Projectiles: {
 	// IceWaveProjectile.DisplayName: Ice Wave Projectile
 	// IceSlideDeco.DisplayName: Ice Slide Deco
 	// IceSheetDrawer.DisplayName: Ice Sheet Drawer
+	// IceWaveSpike.DisplayName: Ice Wave Spike
 }
 
 Stance: {
