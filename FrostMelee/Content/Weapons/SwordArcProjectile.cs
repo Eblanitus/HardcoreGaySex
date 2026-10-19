@@ -196,7 +196,9 @@ namespace FrostMelee.Content.Weapons
         // Инеевая роса вдоль линии дуги: кристаллики появляются чуть позади
         // движущейся головы — свежая полоса льда тут же осыпается снегом.
         private void SpawnFrostDust(Player player) {
-            Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
+            // Центр ленты — кисть, а не центр тела: клинок вращается вокруг
+            // руки, и лента на той же оси не отстаёт от меча ни на градус
+            Vector2 center = player.itemLocation;
             float radius = LineTexOuter * ArcScaleAt(Projectile.localAI[0]) * BodyDrawScale * LineDrawScale;
             if (radius <= 1f)
                 return;
@@ -414,7 +416,7 @@ namespace FrostMelee.Content.Weapons
 
             float progress = Projectile.localAI[0] / maxAnim;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            float polish = IceBladeFx.PolishOf(player);
+            float polish = IceBladeFx.PolishOf(player, SwordItem);
             float rough = 1f - polish;
             HoneLine(player, progress, out Vector2 butt, out Vector2 tip, out Vector2 glint, out Vector2 bladeDir);
             int sign = SwingSign();
@@ -455,10 +457,10 @@ namespace FrostMelee.Content.Weapons
         }
 
         // Удар по цели: срывает с кромки крошку / высекает искру (только визуал)
-        private static void HoneHitBurst(Player player, NPC target) {
+        private static void HoneHitBurst(Player player, NPC target, int swordItem) {
             if (Main.dedServ)
                 return;
-            float polish = IceBladeFx.PolishOf(player);
+            float polish = IceBladeFx.PolishOf(player, swordItem);
             Vector2 at = target.Hitbox.ClosestPointInRect(player.MountedCenter);
             Vector2 away = (at - player.MountedCenter).SafeNormalize(Vector2.UnitX);
             int chips = (int)Math.Round((1f - polish) * 2f);
@@ -479,7 +481,7 @@ namespace FrostMelee.Content.Weapons
         private void DrawHone(Player player, Texture2D texture, float scale, SpriteEffects fx, float progress, float fade, float maxAnim) {
             if (Main.dedServ)
                 return;
-            float polish = IceBladeFx.PolishOf(player);
+            float polish = IceBladeFx.PolishOf(player, SwordItem);
             float keen = Smooth01((polish - KeenFrom) / KeenSpan);
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
             if (keen < 0.99f)
@@ -760,7 +762,7 @@ namespace FrostMelee.Content.Weapons
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
             if (SwordItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish();
-                HoneHitBurst(Main.player[Projectile.owner], target);
+                HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
             }
             // Фростбранд: любой удар поджигает холодным огнём
             if (SwordItem == ItemID.Frostbrand) {

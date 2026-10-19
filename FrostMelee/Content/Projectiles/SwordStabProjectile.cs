@@ -288,7 +288,7 @@ namespace FrostMelee.Content.Projectiles
             float env = Env(life);
             if (env <= 0.05f)
                 return;
-            float polish = Fx.PolishOf(player);
+            float polish = Fx.PolishOf(player, (int)Projectile.ai[2]);
             float rough = 1f - polish;
             Vector2 dir = Projectile.velocity;
             BladeEnds(geo, out Vector2 heel, out Vector2 tip);
@@ -336,7 +336,7 @@ namespace FrostMelee.Content.Projectiles
             float a = Env(life) * Thrust(life);
             if (a <= 0.02f)
                 return;
-            float polish = Fx.PolishOf(player);
+            float polish = Fx.PolishOf(player, (int)Projectile.ai[2]);
             BladeEnds(geo, out Vector2 heel, out Vector2 tip);
             float flow = (Duration - Projectile.timeLeft) * FlowSpeed;
             Fx.DrawThrustCut(tip, Projectile.velocity, Vector2.Distance(heel, tip), Fx.BladeHalfWidth, flow, polish, a);
@@ -349,7 +349,7 @@ namespace FrostMelee.Content.Projectiles
             float env = Env(life);
             if (env <= 0.02f)
                 return;
-            float polish = Fx.PolishOf(player);
+            float polish = Fx.PolishOf(player, (int)Projectile.ai[2]);
             Vector2 dir = Projectile.velocity;
             BladeEnds(geo, out Vector2 heel, out Vector2 tip);
             float s = StoneProgress(life);

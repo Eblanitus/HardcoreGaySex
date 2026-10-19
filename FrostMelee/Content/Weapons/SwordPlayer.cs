@@ -77,8 +77,18 @@ namespace FrostMelee.Content.Weapons
         // Копьё замораживается, клинок размораживается и точится.
         // Визуал как у копья (кроссфейд Rough -> Ice_Blade), по той же механике.
         // Теряет леденистость ~10с боем, заледеневает ~30с без боя.
-        public float IceFrost = 1f; // 1 = весь в инее (Rough), 0 = отполирован
-        public float IceFrostShown = 1f;
+        // Состояние инея/полировки — СВОЁ у каждого меча: разморозил один,
+        // второй остаётся в своём состоянии (баг общего состояния убран)
+        private readonly System.Collections.Generic.Dictionary<int, float> frost = new();
+        private readonly System.Collections.Generic.Dictionary<int, float> frostShown = new();
+
+        public float GetFrost(int itemType) => frost.TryGetValue(itemType, out float v) ? v : 1f;
+        public float GetFrostShown(int itemType) => frostShown.TryGetValue(itemType, out float v) ? v : 1f;
+        private void SetFrost(int itemType, float v) { frost[itemType] = v; }
+
+        // Совместимость: состояние IceBlade для старых вызовов
+        public float IceFrost { get => GetFrost(ItemID.IceBlade); set => SetFrost(ItemID.IceBlade, value); }
+        public float IceFrostShown => GetFrostShown(ItemID.IceBlade);
         private const float IceFrostShownEase = 0.08f;
         public const int IceThawTicks = 600;   // 10 сек до 1->0 боем (если бить)
         public const int IceFreezeTicks = 1800; // 30 сек до 0->1 в покое
@@ -89,34 +99,38 @@ namespace FrostMelee.Content.Weapons
 
         // === Отдача полировки на все приёмы меча ===
         // P = 0 (весь в инее) .. 1 (отполирован): быстрее и больнее, но меньше отдача
-        public static float PolishOf(Player player) =>
-            1f - player.GetModPlayer<SwordPlayer>().IceFrost;
+        // Полировка конкретного меча: у каждого своя. Не-мечи — ноль
+        public static float PolishOf(Player player, Item item) =>
+            item != null && SwordTypes.IsSword(item)
+                ? 1f - player.GetModPlayer<SwordPlayer>().GetFrostShown(item.type)
+                : 0f;
 
-        public static float PolishDamageMult(Player player) =>
-            1f + 0.25f * PolishOf(player);      // до +25% урона
+        public static float PolishDamageMult(Player player, Item item) =>
+            1f + 0.25f * PolishOf(player, item);      // до +25% урона
 
-        public static float PolishKnockbackMult(Player player) =>
-            1f - 0.45f * PolishOf(player);       // до -45% отбрасывания
+        public static float PolishKnockbackMult(Player player, Item item) =>
+            1f - 0.45f * PolishOf(player, item);       // до -45% отбрасывания
 
-        public static float PolishSpeedMult(Player player) =>
-            1f - 0.15f * PolishOf(player);       // до -15% времени использования
+        public static float PolishSpeedMult(Player player, Item item) =>
+            1f - 0.15f * PolishOf(player, item);       // до -15% времени использования
 
         // Хуки ModPlayer возвращают множитель СКОРОСТИ (>1 = быстрее),
         // поэтому время использования делим на скоростной множитель
         public override float UseTimeMultiplier(Item item) =>
-            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player) : 1f;
+            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player, item) : 1f;
 
         public override float UseAnimationMultiplier(Item item) =>
-            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player) : 1f;
+            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player, item) : 1f;
 
         public void AddPolish()
         {
-            if (Player.whoAmI != Main.myPlayer || Player.HeldItem.type != ItemID.IceBlade) return;
+            if (Player.whoAmI != Main.myPlayer || !SwordTypes.IsSword(Player.HeldItem)) return;
             if (iceHitCooldown > 0) return;
-            IceFrost = MathHelper.Clamp(IceFrost - IcePolishPerHit, 0f, 1f);
-            iceHitCooldown = 10; // 10 тиков кулдаун между полировками (защита от мультихита дуги)
+            int key = Player.HeldItem.type;
+            SetFrost(key, MathHelper.Clamp(GetFrost(key) - IcePolishPerHit, 0f, 1f));
+            iceHitCooldown = 10; // 10 тиков кулдауна между полировками (защита от мультихита дуги)
             iceIdleTicks = 0;
-            Mod.Logger.Info($"[Polish] попадание: IceFrost={IceFrost:F2}");
+            Mod.Logger.Info($"[Polish] попадание: меч {key}, frost={GetFrost(key):F2}");
         }
 
         private void UpdateIceFrost()
@@ -125,37 +139,39 @@ namespace FrostMelee.Content.Weapons
 
             if (iceHitCooldown > 0) iceHitCooldown--;
 
-            // Плавный визуал
-            IceFrostShown += (IceFrost - IceFrostShown) * IceFrostShownEase;
-            if (System.Math.Abs(IceFrost - IceFrostShown) < 0.002f) IceFrostShown = IceFrost;
+            // Плавный визуал и заморозка в покое — у КАЖДОГО меча свои
+            foreach (int key in SwordTypes.Swords)
+            {
+                float f = GetFrost(key);
+                float shown = GetFrostShown(key);
+                shown += (f - shown) * IceFrostShownEase;
+                if (System.Math.Abs(f - shown) < 0.002f) shown = f;
+                frostShown[key] = shown;
 
-            // Диагностика полировки: переход через порог смены вида
-            bool roughNow = IceFrostShown >= 0.45f;
+                bool heldNow = HoldingSword && Player.HeldItem.type == key;
+                if (Player.dead)
+                {
+                    SetFrost(key, 1f);
+                }
+                else if (!heldNow || iceIdleTicks > 60)
+                {
+                    // вне рук или в покое — медленно заледеневает обратно
+                    if (f < 1f) SetFrost(key, MathHelper.Clamp(f + 1f / IceFreezeTicks, 0f, 1f));
+                }
+            }
+
+            // В бою точим только попаданиями (AddPolish). В покое — заледеневает.
+            iceIdleTicks++;
+
+            // Диагностика полировки: переход через порог смены вида (IceBlade)
+            bool roughNow = GetFrostShown(ItemID.IceBlade) >= 0.45f;
             if (roughNow != lastRoughLogged)
             {
                 lastRoughLogged = roughNow;
-                Mod.Logger.Info($"[Polish] вид: {(roughNow ? "шершавый" : "острый")}, IceFrostShown={IceFrostShown:F2}");
+                Mod.Logger.Info($"[Polish] вид: {(roughNow ? "шершавый" : "острый")}, shown={GetFrostShown(ItemID.IceBlade):F2}");
             }
 
-            bool holdingIceBlade = HoldingSword && Player.HeldItem.type == ItemID.IceBlade;
-            if (!holdingIceBlade) {
-                // вне рук — медленно заледеневает обратно
-                if (IceFrost < 1f) IceFrost = MathHelper.Clamp(IceFrost + 1f / IceFreezeTicks, 0f, 1f);
-                IceBladeVisual.UpdateView(IceFrostShown);
-                return;
-            }
-            if (Player.dead) {
-                IceFrost = 1f;
-                IceFrostShown = 1f;
-                IceBladeVisual.UpdateView(IceFrostShown);
-                return;
-            }
-            // В бою точим только попаданиями (AddPolish). В покое — заледеневает.
-            iceIdleTicks++;
-            if (iceIdleTicks > 60) {
-                if (IceFrost < 1f) IceFrost = MathHelper.Clamp(IceFrost + 1f / IceFreezeTicks, 0f, 1f);
-            }
-            IceBladeVisual.UpdateView(IceFrostShown);
+            IceBladeVisual.UpdateView(GetFrostShown(ItemID.IceBlade));
         }
 
         // Каденс тычков = эффективный каденс свинга × стихия (у меча резкие тычки)
@@ -640,14 +656,14 @@ namespace FrostMelee.Content.Weapons
             if (Math.Abs(dir.X) < StabSideDeadzone)
                 dir = new Vector2(StabSideDeadzone * Player.direction, dir.Y).SafeNormalize(Vector2.UnitX);
             armAimDir = dir;
-            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.StabDamageMult(held) * PolishDamageMult(Player)));
+            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.StabDamageMult(held) * PolishDamageMult(Player, held)));
             stabProj = Projectile.NewProjectile(
                 Player.GetSource_ItemUse(held),
                 Player.MountedCenter,
                 dir * 8f,
                 ModContent.ProjectileType<SwordStabProjectile>(),
                 damage,
-                held.knockBack * SwordTypes.StabKnockbackMult(held) * PolishKnockbackMult(Player),
+                held.knockBack * SwordTypes.StabKnockbackMult(held) * PolishKnockbackMult(Player, held),
                 Player.whoAmI,
                 duration, 0f, held.type);
         }
@@ -668,14 +684,14 @@ namespace FrostMelee.Content.Weapons
                 dir = new Vector2(dir.X >= 0 ? 1f : -1f, 0f);
             // Урон встречи: слабее взмаха за секунду, но растёт со скоростью сближения
             // (внутри снаряда ×0.4..×2.5 от скорости — см. SickleBraceProjectile)
-            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.SpearDamageMult(held) * PolishDamageMult(Player)));
+            int damage = Math.Max(1, (int)(Player.GetWeaponDamage(held) * SwordTypes.SpearDamageMult(held) * PolishDamageMult(Player, held)));
             spearProj = Projectile.NewProjectile(
                 Player.GetSource_ItemUse(held),
                 Player.MountedCenter + dir * 18f,
                 Vector2.Zero,
                 meetType,
                 damage,
-                held.knockBack * PolishKnockbackMult(Player),
+                held.knockBack * PolishKnockbackMult(Player, held),
                 Player.whoAmI,
                 0f, dir.ToRotation(), held.type);
         }
@@ -696,8 +712,8 @@ namespace FrostMelee.Content.Weapons
                 spawn,
                 dir * SickleThrowProjectile.ThrowSpeed,
                 ModContent.ProjectileType<SickleThrowProjectile>(),
-                Math.Max(1, (int)(Player.GetWeaponDamage(held) * PolishDamageMult(Player))),
-                held.knockBack * PolishKnockbackMult(Player),
+                Math.Max(1, (int)(Player.GetWeaponDamage(held) * PolishDamageMult(Player, held))),
+                held.knockBack * PolishKnockbackMult(Player, held),
                 Player.whoAmI,
                 -1f, 0f, held.type);
             if (index < 0 || index >= Main.maxProjectiles ||

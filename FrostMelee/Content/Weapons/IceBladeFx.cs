@@ -28,7 +28,11 @@ namespace FrostMelee.Content.Weapons
         public static readonly Color EdgeRim = new Color(120, 200, 255);      // голубой ореол
 
         // Полировка владельца: 0 — весь в инее, 1 — отточен (та же кривая, что кроссфейд спрайта)
-        public static float PolishOf(Player player) => 1f - IceBladeVisual.Mix(player, ItemID.IceBlade);
+        // Полировка КОНКРЕТНОГО меча: у IceBlade и Frostbrand состояния независимы
+        public static float PolishOf(Player player, int itemType) =>
+            itemType == ItemID.IceBlade
+                ? 1f - IceBladeVisual.Mix(player, ItemID.IceBlade)
+                : 1f - player.GetModPlayer<SwordPlayer>().GetFrostShown(itemType);
 
         public static float Smooth01(float x)
         {

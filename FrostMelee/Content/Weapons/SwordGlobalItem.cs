@@ -73,7 +73,7 @@ public class SwordGlobalItem : GlobalItem
             float adjustedItemScale = player.GetAdjustedItemScale(item);
             // Дуга — единственный удар взмаха: полный урон взмаха (со стихией меча).
             // К краю дуги урон падает — см. SwordArcProjectile.ModifyHitNPC
-            int arcDamage = Math.Max(1, (int)Math.Round(damage * SwordTypes.SwingDamageMult(item) * SwordPlayer.PolishDamageMult(player)));
+            int arcDamage = Math.Max(1, (int)Math.Round(damage * SwordTypes.SwingDamageMult(item) * SwordPlayer.PolishDamageMult(player, item)));
 
             // Размер дуги — от реальной длины клинка (рукоять → остриё по пикселям;
             // для мечей замер меч-специфичный: остриё дальний от угла, см. SickleSprite).
@@ -90,7 +90,7 @@ public class SwordGlobalItem : GlobalItem
                 new Vector2(player.direction, 0f),
                 arcType,
                 arcDamage,
-                knockback * SwordPlayer.PolishKnockbackMult(player),
+                knockback * SwordPlayer.PolishKnockbackMult(player, item),
                 player.whoAmI,
                 player.direction * player.gravDir,
                 Math.Max(1, player.itemAnimationMax),
