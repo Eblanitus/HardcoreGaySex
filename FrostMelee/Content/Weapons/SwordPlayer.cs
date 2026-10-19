@@ -100,6 +100,14 @@ namespace FrostMelee.Content.Weapons
         public static float PolishSpeedMult(Player player) =>
             1f - 0.15f * PolishOf(player);       // до -15% времени использования
 
+        // Хуки ModPlayer возвращают множитель СКОРОСТИ (>1 = быстрее),
+        // поэтому время использования делим на скоростной множитель
+        public override float UseTimeMultiplier(Item item) =>
+            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player) : 1f;
+
+        public override float UseAnimationMultiplier(Item item) =>
+            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player) : 1f;
+
         public void AddPolish()
         {
             if (Player.whoAmI != Main.myPlayer || Player.HeldItem.type != ItemID.IceBlade) return;
