@@ -42,7 +42,7 @@ namespace FrostMelee.Content.Weapons
         public override void Unload() => states.Clear();
 
         public static bool IsBurning(NPC npc) =>
-            npc.FindBuffIndex(BuffID.Frostburn) >= 0 || npc.FindBuffIndex(BuffID.Frostbite) >= 0;
+            npc.FindBuffIndex(BuffID.Frostburn) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) =>
@@ -65,8 +65,11 @@ namespace FrostMelee.Content.Weapons
 
             if (st.stacks >= FullIgnitionStacks)
             {
-                // Полное возгорание: сильное холодное пламя на несколько секунд
-                npc.AddBuff(BuffID.Frostbite, FullBurnTicks);
+                // Полное возгорание: длинный Frostburn + Slow (тело сковано
+                // холодом) + вспышка. Отдельного «сильного» дебаффа в этой
+                // сборке tML нет, связка даёт то же ощущение
+                npc.AddBuff(BuffID.Frostburn, FullBurnTicks);
+                npc.AddBuff(BuffID.Slow, FullBurnTicks);
                 st.stacks = 0;
                 Burst(npc.Center, 60f, false);
             }
@@ -113,18 +116,10 @@ namespace FrostMelee.Content.Weapons
             if (damage <= 0)
                 return;
 
-            float r2 = radius * radius;
-            for (int i = 0; i < Main.maxNPCs; i++)
-            {
-                NPC n = Main.npc[i];
-                if (!n.active || i == dead.whoAmI || n.friendly || n.immortal || n.dontTakeDamage)
-                    continue;
-                if (Vector2.DistanceSquared(n.Center, c) > r2)
-                    continue;
-
-                n.StrikeNPC(damage, 0f, n.Center.X < c.X ? -1 : 1);
-                Ignite(n, owner);
-            }
+            // Урон взрыва — blast-снарядом через ванильные коллизии:
+            // без прямых вызовов StrikeNPC, урон и мультихит-защита ванильные
+            Projectile.NewProjectile(Main.player[owner].GetSource_FromThis(), c, Vector2.Zero,
+                ModContent.ProjectileType<FrostFireBlast>(), damage, 0f, owner, radius);
         }
 
         // Сколько врагов горит рядом: для свечения меча в руке
