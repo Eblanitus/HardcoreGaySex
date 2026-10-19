@@ -23,9 +23,9 @@ namespace FrostMelee.Content.Projectiles
 
         private static Asset<Texture2D>[] Stages => stages ??= new[]
         {
-            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike0"),
-            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike1"),
-            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike2"),
+            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike0-export"),
+            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike1-export"),
+            ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceSpike2-export"),
         };
 
         public override void SetDefaults()
@@ -114,8 +114,13 @@ namespace FrostMelee.Content.Projectiles
             // размера (1 у меча, меньше к хвосту), знак = направление волны
             float packed = Projectile.ai[2];
             float sizeMul = packed != 0f ? System.Math.Abs(packed) : 1f;
-            float scale = grow * (0.16f + Projectile.ai[0] * 0.14f) * sizeMul;
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
+
+            // Размер задаётся в ПИКСЕЛЯХ ВЫСОТЫ (32-60, рост садового гнома),
+            // а не в масштабе текстуры: перерисуешь сосульку любой высоты —
+            // код сам подстроится, размер в мире не изменится
+            float targetHeight = (32f + Projectile.ai[0] * 28f) * sizeMul;
+            float scale = grow * targetHeight / tex.Height;
 
             // Наклон в сторону появления: шип заваливается по ходу волны,
             // наклон нарастает вместе с ростом
