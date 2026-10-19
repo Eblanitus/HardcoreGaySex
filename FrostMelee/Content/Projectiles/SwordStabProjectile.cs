@@ -200,14 +200,89 @@ namespace FrostMelee.Content.Projectiles
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
+            Player owner = Main.player[Projectile.owner];
             if (itemType == ItemID.IceBlade) {
-                float mix = Content.Weapons.IceBladeVisual.Mix(Main.player[Projectile.owner], itemType);
+                float mix = Content.Weapons.IceBladeVisual.Mix(owner, itemType);
                 Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, SickleSprite.Get(itemType), Projectile.rotation, flipped, lightColor, 1f, mix);
-                return false;
+            } else {
+                Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
+                    lightColor, Projectile.rotation, origin, 1f, effects, 0f);
             }
-            Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
-                lightColor, Projectile.rotation, origin, 1f, effects, 0f);
+
+            // Шлейф тычка: то же семейство эффекта, что у дуги взмаха —
+            // лента-шлейф за остриём и яркая голова, палитра от полировки
+            DrawThrustTrail(owner);
             return false;
+        }
+
+        // === Шлейф тычка: StabRibbon + вспышка острия, палитра как у дуги ===
+        private const int TrailPoints = 10;
+        private const float TrailTicks = 8f;
+        private static readonly Vector2[] trailC = new Vector2[TrailPoints];
+        private static readonly Vector2[] trailN = new Vector2[TrailPoints];
+
+        private static float Smooth01(float x)
+        {
+            x = MathHelper.Clamp(x, 0f, 1f);
+            return x * x * (3f - 2f * x);
+        }
+
+        // То же продвижение выпада, что в PreAI, но для произвольного момента life
+        private float ExtendAt(float life)
+        {
+            if (life < ThrustPortion)
+            {
+                float t = life / ThrustPortion;
+                return 1f - (1f - t) * (1f - t) * (1f - t);
+            }
+            float t2 = (life - ThrustPortion) / (1f - ThrustPortion);
+            return 1f - t2 * t2;
+        }
+
+        private void DrawThrustTrail(Player player)
+        {
+            if (Main.dedServ)
+                return;
+
+            float life = Life;
+            float env = Smooth01(life * 12f) * Smooth01((1f - life) * 6f);
+            if (env <= 0.02f)
+                return;
+
+            SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
+            Vector2 vel = Projectile.velocity;
+            float armRot = vel.ToRotation() - ArmLift * Projectile.spriteDirection - MathHelper.PiOver2;
+
+            // История острия аналитически: рука разгибалась по той же кривой,
+            // поэтому лента ложится ровно туда, где прошёл кончик клинка
+            int n = 0;
+            float step = TrailTicks / Duration / (TrailPoints - 1);
+            for (int i = 0; i < TrailPoints; i++)
+            {
+                float li = life - i * step;
+                if (li < 0f)
+                    break;
+                Vector2 hand = SickleSprite.HandGrip(player, ArmStretch(ExtendAt(li)), armRot);
+                trailC[n++] = hand + vel * (geo.Length - GripInset);
+            }
+            if (n < 2)
+                return;
+
+            Vector2 nrm = vel.RotatedBy(MathHelper.PiOver2);
+            for (int i = 0; i < n; i++)
+                trailN[i] = nrm;
+
+            float polish = 1f - player.GetModPlayer<SwordPlayer>().IceFrostShown;
+            IceArcFx.PolishColors(polish, out Color core, out Color tail, out Color edge);
+            StabRibbon.Draw(trailC, trailN, n, 11f, core, tail, edge, env);
+
+            // Голова шлейфа: яркая точка у острия, как у дуги взмаха
+            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
+            if (glow == null || glow.IsDisposed)
+                return;
+            Main.EntitySpriteDraw(glow, trailC[0] - Main.screenPosition, null,
+                IceArcFx.Additive(core, env), 0f, glow.Size() / 2f,
+                14f / glow.Width, SpriteEffects.None, 0f);
         }
     }
 }

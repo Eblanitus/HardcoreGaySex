@@ -62,11 +62,11 @@ namespace FrostMelee.Content.Weapons
         // true — показать пылью зону клинка (полный урон) и внешний край хитбокса
         public static bool DebugHitbox = false;
 
-        // Палитра ленты: чистый лёд
+        // Палитра ленты следует за полировкой клинка: шершавый меч даёт
+        // матовый морозный шлейф, отполированный — яркое сияние
         private void GlowColors(out Color core, out Color tail, out Color edge) {
-            core = IceArcFx.SwooshCore;
-            tail = IceArcFx.SwooshTail;
-            edge = IceArcFx.SwooshEdge;
+            float polish = 1f - Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().IceFrostShown;
+            IceArcFx.PolishColors(polish, out core, out tail, out edge);
         }
 
         public override void SetStaticDefaults() {
