@@ -1,0 +1,14 @@
+# Сборка .NET / tModLoader — не версионируется
+[Bb]in/
+[Oo]bj/
+
+# Локальные бэкапы и мусор редактора
+*.user
+*.suo
+.vs/
+.idea/
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
