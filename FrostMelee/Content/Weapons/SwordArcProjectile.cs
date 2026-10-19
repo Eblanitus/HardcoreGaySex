@@ -134,22 +134,18 @@ namespace FrostMelee.Content.Weapons
         // Пока идёт взмах, дуга идёт ЗА КЛИНКОМ: угол берём из боевой позы
         // ваниллы (itemLocation/itemRotation), так дуга не отстаёт от меча.
         // Без активного взмаха (хвост дуги) — старая линейная формула.
+        // Мастер-кривая взмаха: ОДНА формула угла для клинка (itemRotation
+        // в SwordPlayer), головы дуги и каждой точки ленты через её time.
+        // История ленты поэтому настоящая: прошлые time дают прошлые углы,
+        // шлейф тянется за клинком, а не схлопывается в текущий угол.
         private float ArcRotation(Player player, float time) {
-            if (!player.HeldItem.IsAir && player.itemAnimation > 0) {
-                SickleSprite.Geometry geo = SickleSprite.Get(player.HeldItem.type);
-                if (geo.Length > 1f) {
-                    // Берём не «от игрока до меча» (это рукоять, а не клинок), а само
-                    // направление клинка: приклад → остриё.
-                    // Ванилла рисует предмет при origin в УГЛУ кадра, но для вектора
-                    // это неважно — важны только точки приклада и острия и зеркалирование.
-                    // itemRotation уже в зеркальной системе взгляда, флип учтён в TipFor/ButtFor,
-                    // поэтому никаких +pi: именно из-за них дуга при взмахе влево уходила вправо.
-                    bool flipped = player.direction == -1;
-                    float itemRot = player.itemRotation;
-                    Vector2 bladeDir = (geo.TipFor(flipped) - geo.ButtFor(flipped)).RotatedBy(itemRot);
-                    if (bladeDir.LengthSquared() > 1f)
-                        return bladeDir.ToRotation();
-                }
+            if (!player.HeldItem.IsAir && player.itemAnimation > 0 && player.itemAnimationMax > 0) {
+                float maxAnim = player.itemAnimationMax;
+                float progress = MathHelper.Clamp(time, 0f, maxAnim) / maxAnim;
+                float theta = player.direction >= 0
+                    ? MathHelper.Pi * (1f + progress)
+                    : -MathHelper.Pi * progress;
+                return theta + player.fullRotation;
             }
             float percentageOfLife = MathHelper.Clamp(time, 0f, Math.Max(1f, Projectile.ai[1])) / Math.Max(1f, Projectile.ai[1]);
             return Projectile.velocity.ToRotation() + Projectile.ai[0] * MathHelper.Pi * percentageOfLife + player.fullRotation + MathHelper.Pi;
