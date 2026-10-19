@@ -345,6 +345,24 @@ namespace FrostMelee.Content.Weapons
             if (Player.whoAmI != Main.myPlayer)
                 return;
 
+            // Взмах меча: клинок и дуга идут по ОДНОЙ формуле угла.
+            // Ваниль рисует предмет в руке по своему itemRotation (своя кривая
+            // взмаха), дуга живёт по нашей кривой — из-за расхождения кривых
+            // лента визуально отставала от клинка. Перебиваем itemRotation
+            // нашей кривой: ванильный клинок и дуга становятся одним углом.
+            if (CurrentMode == Mode.Swing && HoldingSword && Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
+            {
+                float progress = 1f - Player.itemAnimation / (float)Player.itemAnimationMax;
+                float theta = Player.direction >= 0
+                    ? MathHelper.Pi * (1f + progress)
+                    : -MathHelper.Pi * progress;
+                theta += Player.fullRotation;
+                bool flipped = Player.direction == -1;
+                SickleSprite.Geometry geo = SickleSprite.Get(Player.HeldItem.type);
+                float baseAng = (geo.TipFor(flipped) - geo.ButtFor(flipped)).ToRotation();
+                Player.itemRotation = MathHelper.WrapAngle(theta - baseAng);
+            }
+
             // Фростбранд: чем больше врагов горит рядом, тем ярче светится меч
             if (HoldingSword && Player.HeldItem.type == ItemID.Frostbrand)
             {
