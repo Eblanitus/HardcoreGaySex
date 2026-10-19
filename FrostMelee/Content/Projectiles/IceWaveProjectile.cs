@@ -95,9 +95,11 @@ namespace FrostMelee.Content.Projectiles
                 {
                     float sizeMul = 1f - 0.55f * MathHelper.Clamp(Projectile.localAI[1] / maxTicks, 0f, 1f);
                     Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
+                    // ai[2] упаковывает размер и направление:
+                    // модуль = множитель размера, знак = направление волны
                     Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                         ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                        Main.rand.NextFloat(1f), Main.rand.Next(3), sizeMul, dir);
+                        Main.rand.NextFloat(1f), Main.rand.Next(3), sizeMul * dir);
                 }
             }
 
@@ -164,7 +166,7 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 sp = Projectile.Center + new Vector2(dir * i * 10f, 8f);
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                    Main.rand.NextFloat(1f), Main.rand.Next(3), 0.45f, dir);
+                    Main.rand.NextFloat(1f), Main.rand.Next(3), 0.45f * dir);
             }
         }
 

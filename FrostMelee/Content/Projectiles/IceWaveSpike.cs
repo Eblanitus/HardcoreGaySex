@@ -109,13 +109,16 @@ namespace FrostMelee.Content.Projectiles
             // ai[3] = направление волны (для наклона).
             // Спрайт 200 px высотой, базовый масштаб 0.16-0.30 даёт 32-60 px:
             // ростом с садового гнома, как в ванильной атаке Deerclops
-            float sizeMul = Projectile.ai[2] > 0f ? Projectile.ai[2] : 1f;
+            // ai[2] упаковывает размер и направление: модуль = множитель
+            // размера (1 у меча, меньше к хвосту), знак = направление волны
+            float packed = Projectile.ai[2];
+            float sizeMul = packed != 0f ? MathHelper.Abs(packed) : 1f;
             float scale = grow * (0.16f + Projectile.ai[0] * 0.14f) * sizeMul;
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
 
             // Наклон в сторону появления: шип заваливается по ходу волны,
             // наклон нарастает вместе с ростом
-            float dir = Projectile.ai[3] != 0f ? Projectile.ai[3] : 1f;
+            float dir = packed < 0f ? -1f : 1f;
             float rotation = dir * 0.22f * grow;
 
             // Таяние: последние 14 тиков, нелинейно
