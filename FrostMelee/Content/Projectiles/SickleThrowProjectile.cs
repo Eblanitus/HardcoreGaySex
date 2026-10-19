@@ -440,13 +440,18 @@ namespace FrostMelee.Content.Projectiles
             // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
-            // Спавним волну чуть выше земли, она сама прилипнет к поверхности
+            // Спавним волну на земле: ищем поверхность глубоко вниз.
+            // Враг высоко в воздухе и земли рядом нет — волны не будет:
+            // наземная атака не должна висеть в пустоте
             Vector2 spawn = Projectile.Center;
-            // Найти землю под собой для спавна волны
-            for (int i = 0; i < 12; i++) {
-                Point p = (spawn + new Vector2(0, i * 4)).ToTileCoordinates();
-                if (WorldGen.SolidTile(p.X, p.Y)) { spawn.Y = p.Y * 16 - 8; break; }
+            Point start = spawn.ToTileCoordinates();
+            bool found = false;
+            for (int i = 0; i < 80; i++) {
+                int y = start.Y + i;
+                if (!WorldGen.InWorld(start.X, y, 2)) break;
+                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f - 8f; found = true; break; }
             }
+            if (!found) return;
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
                 ModContent.ProjectileType<IceWaveProjectile>(), Math.Max(1, Projectile.damage / 3), 1f, Projectile.owner, isKill ? 1f : 0f, dir);
             if (isKill) {

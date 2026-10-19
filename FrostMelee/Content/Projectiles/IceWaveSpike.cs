@@ -47,9 +47,11 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.localAI[0] = 1f;
 
                 // Снап основания к поверхности: вниз до твёрдого тайла,
-                // основание шипа ставим ровно на его верхнюю кромку
+                // основание шипа ставим ровно на его верхнюю кромку.
+                // Земли в пределах 6 тайлов нет — шип не рождается в пустоте
                 Point p = Projectile.Center.ToTileCoordinates();
-                for (int i = 0; i < 3; i++)
+                bool snapped = false;
+                for (int i = 0; i < 6; i++)
                 {
                     int y = p.Y + i;
                     if (!WorldGen.InWorld(p.X, y, 2))
@@ -59,8 +61,31 @@ namespace FrostMelee.Content.Projectiles
                     if (t.HasTile && Main.tileSolid[t.TileType])
                     {
                         Projectile.Center = new Vector2(Projectile.Center.X, y * 16f);
+                        snapped = true;
                         break;
                     }
+                }
+
+                if (!snapped)
+                {
+                    Projectile.Kill();
+                    return;
+                }
+
+                // Частицы у основания: выброс из земли в момент рождения
+                for (int i = 0; i < 5; i++)
+                {
+                    float ang = -MathHelper.PiOver2 + Main.rand.NextFloat(-1.2f, 1.2f);
+                    Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.SnowflakeIce,
+                        ang.ToRotationVector2() * Main.rand.NextFloat(0.8f, 2.2f),
+                        120, default, Main.rand.NextFloat(0.7f, 1.2f));
+                    d.noGravity = true;
+                }
+                for (int i = 0; i < 3; i++)
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center + new Vector2(0f, 2f), DustID.Frost,
+                        new Vector2(Main.rand.NextFloat(-1.5f, 1.5f), -0.3f), 110, default, 0.9f);
+                    d.noGravity = true;
                 }
             }
 
@@ -79,11 +104,19 @@ namespace FrostMelee.Content.Projectiles
             float grow = MathHelper.Clamp(age / 10f, 0f, 1f);
             grow = 1f - (1f - grow) * (1f - grow);
 
-            // Личный размер шипа: ai[0] = разброс, ai[1] = какой из трёх спрайтов.
-            // Спрайт 200 px высотой, масштаб 0.16-0.30 даёт 32-60 px:
+            // Личный размер шипа: ai[0] = разброс, ai[1] = какой из трёх спрайтов,
+            // ai[2] = множитель дистанции (1 у меча, меньше к концу пробега),
+            // ai[3] = направление волны (для наклона).
+            // Спрайт 200 px высотой, базовый масштаб 0.16-0.30 даёт 32-60 px:
             // ростом с садового гнома, как в ванильной атаке Deerclops
-            float scale = grow * (0.16f + Projectile.ai[0] * 0.14f);
+            float sizeMul = Projectile.ai[2] > 0f ? Projectile.ai[2] : 1f;
+            float scale = grow * (0.16f + Projectile.ai[0] * 0.14f) * sizeMul;
             Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
+
+            // Наклон в сторону появления: шип заваливается по ходу волны,
+            // наклон нарастает вместе с ростом
+            float dir = Projectile.ai[3] != 0f ? Projectile.ai[3] : 1f;
+            float rotation = dir * 0.22f * grow;
 
             // Таяние: последние 14 тиков, нелинейно
             float fadeLin = Projectile.timeLeft < 14 ? Projectile.timeLeft / 14f : 1f;
@@ -94,7 +127,7 @@ namespace FrostMelee.Content.Projectiles
                 (byte)(255f * fade));
             Vector2 origin = new Vector2(tex.Width / 2f, tex.Height);
             Main.EntitySpriteDraw(tex, Projectile.Center - Main.screenPosition,
-                null, c, 0f, origin, scale, SpriteEffects.None, 0f);
+                null, c, rotation, origin, scale, SpriteEffects.None, 0f);
             return false;
         }
     }

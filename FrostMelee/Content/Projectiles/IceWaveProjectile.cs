@@ -72,30 +72,34 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.velocity.Y = 0f;
                 // чуть вверх чтобы не зарываться
                 Projectile.Center = new Vector2(Projectile.Center.X, tilePos.Y * 16 - 18);
+                Projectile.localAI[2] = 1f; // приземлилась
             }
 
-            // Волна намораживает глазурь за собой: земля замерзает по пути
-            Point mark = Projectile.Center.ToTileCoordinates();
-            Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y);
-            Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y);
+            // Пока волна падает к земле, шипов и глазури нет:
+            // осколки не появляются в воздухе
+            bool grounded = Projectile.localAI[2] > 0.5f;
 
-            // Ледяные пики по ходу волны: атака как у Deerclops, но мелкая.
-            // Шаг чаще у длинной волны убийства
-            int spikeEvery = longWave ? 4 : 6;
-            if ((int)Projectile.localAI[1] % spikeEvery == 0)
+            if (grounded)
             {
-                Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
-                Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
-                    ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                    Main.rand.NextFloat(1f), Main.rand.Next(3));
-                Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
-            }
+                // Волна намораживает глазурь за собой: земля замерзает по пути
+                Point mark = Projectile.Center.ToTileCoordinates();
+                Weapons.IceSheetSystem.MarkSurface(mark.X, mark.Y);
+                Weapons.IceSheetSystem.MarkSurface(mark.X + (int)dir, mark.Y);
 
-            // Гребень: куски льда вперёд по ходу
-            float crest = longWave ? 1.7f : 1.3f;
-            Dust ice = Dust.NewDustPerfect(Projectile.Center + new Vector2(dir * 10f, 6f), DustID.Ice,
-                new Vector2(dir * Main.rand.NextFloat(1f, 2.2f), -Main.rand.NextFloat(0.8f, 1.6f)), 100, default, crest);
-            ice.noGravity = true;
+                // Ледяные пики по ходу волны: атака как у Deerclops, но мелкая.
+                // Шаг чаще у длинной волны убийства.
+                // Размер шипа тем меньше, чем дальше от меча: ai[2] = множитель
+                // от 1 у точки появления до 0.45 в конце пробега; ai[3] = направление
+                int spikeEvery = longWave ? 4 : 6;
+                if ((int)Projectile.localAI[1] % spikeEvery == 0)
+                {
+                    float sizeMul = 1f - 0.55f * MathHelper.Clamp(Projectile.localAI[1] / maxTicks, 0f, 1f);
+                    Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
+                        ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
+                        Main.rand.NextFloat(1f), Main.rand.Next(3), sizeMul, dir);
+                }
+            }
 
             // Осколки вверх
             if (Main.rand.NextBool(2)) {
@@ -154,14 +158,13 @@ namespace FrostMelee.Content.Projectiles
                 d.noGravity = true;
             }
 
-            // Граница пробега: ещё три пика подряд
+            // Граница пробега: ещё три пика подряд, уже уменьшенного размера
             for (int i = 0; i < 3; i++)
             {
                 Vector2 sp = Projectile.Center + new Vector2(dir * i * 10f, 8f);
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
                     ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                    Main.rand.NextFloat(1f), Main.rand.Next(3));
-                Mod.Logger.Info($"[Wave] пик на тике {Projectile.localAI[1]}");
+                    Main.rand.NextFloat(1f), Main.rand.Next(3), 0.45f, dir);
             }
         }
 
