@@ -52,6 +52,10 @@ def tex_rect(im, part, face, overlay):
     return im.crop((bx + dx, by + dy, bx + dx + w, by + dy + h))
 
 
+NORMALS = {'front': (0, 0, 1), 'back': (0, 0, -1), 'right': (-1, 0, 0),
+           'left': (1, 0, 0), 'top': (0, 1, 0), 'bottom': (0, -1, 0)}
+
+
 def quad_points(center, half, face, grow=0.0):
     cx, cy, cz = center
     hx, hy, hz = (half[0] + grow, half[1] + grow, half[2] + grow)
@@ -118,6 +122,10 @@ def render(skin_path, yaw_deg, pitch_deg, out, size=420, bg=(216, 222, 232), sha
     quads = []
     for part, center, half, grow in BOXES:
         for face in FACES[part]['faces']:
+            n = NORMALS[face]
+            # back-face culling: keep only faces whose normal points at the camera
+            if n[0] * dirv[0] + n[1] * dirv[1] + n[2] * dirv[2] < 0:
+                continue
             pts = quad_points(center, half, face)
             sp = [project(p) for p in pts]
             depth = sum(p[2] for p in sp) / 4.0
