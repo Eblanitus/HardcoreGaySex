@@ -76,5 +76,6 @@ def closeup(path, out, scale=24):
 
 if __name__=='__main__':
     p = sys.argv[1] if len(sys.argv)>1 else 'skins/fly_skin.png'
-    sheet(p, 'skins/fly_preview.png')
-    closeup(p, 'skins/fly_head.png')
+    base = sys.argv[2] if len(sys.argv)>2 else p.replace('.png','')
+    sheet(p, base + '_preview.png')
+    closeup(p, base + '_head.png')
