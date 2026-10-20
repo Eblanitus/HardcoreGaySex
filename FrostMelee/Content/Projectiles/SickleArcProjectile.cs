@@ -325,8 +325,8 @@ namespace FrostMelee.Content.Projectiles
             modifiers.HitDirectionOverride = (Main.player[Projectile.owner].Center.X < target.Center.X) ? 1 : (-1);
         }
 
-        // === Ледяная коса: Frostbite на попадании + полоса инея за дугой (только лёд, смерть не трогаем) ===
-        private const int FrostbiteTicks = 270;       // 4.5 с Frostbite (BuffID.Frostburn2): вешает только сильный иней (FrostTrailSystem, зона добивания), не прямой удар
+        // === Ледяная коса: Frostburn на попадании + полоса инея за дугой (только лёд, смерть не трогаем) ===
+        private const int FrostburnTicks = 270;       // 4.5 с Frostburn: вешает только сильный иней (FrostTrailSystem, зона добивания), не прямой удар
         private const int FrostTrailTicks = 60;       // сколько тиков держится иней на месте (потом тает)
         private const int FrostTrailSlowTicks = 75;   // длительность Slow на цели, вошедшей в иней (один раз за взмах на цель)
         private const float FrostTrailDensity = 0.012f; // шанс искорки инея на каждую точку следа за тик (редкие, угасают с возрастом)
@@ -376,7 +376,7 @@ namespace FrostMelee.Content.Projectiles
         // Параметры для FrostTrailSystem (константы живут здесь, наверху класса)
         internal static int FrostLife => FrostTrailTicks;
         internal static int FrostSlowTicks => FrostTrailSlowTicks;
-        internal static int FrostbiteDuration => FrostbiteTicks;
+        internal static int FrostburnDuration => FrostburnTicks;
         internal static float FrostDensity => FrostTrailDensity;
         internal static float FrostRadius => FrostTrailRadius;
         internal static int FrostCheckEvery => FrostTrailCheckEvery;
@@ -1013,7 +1013,7 @@ namespace FrostMelee.Content.Projectiles
             public readonly List<float> Weight = new List<float>(); // плотность пятна: у блока 1, в воздухе меньше, в блоке 0 (не рисуем)
             public readonly HashSet<int> Slowed = new HashSet<int>();
             public bool Mine;
-            public bool Strong;   // сильный иней: от полной заморозки, другой вид, вешает Frostbite
+            public bool Strong;   // сильный иней: от полной заморозки, другой вид, вешает Frostburn
             public bool Open = true;
             public bool Visible = true;   // false — только механика (Slow), без пятен и искр инея
             public int Tick;
@@ -1202,9 +1202,9 @@ namespace FrostMelee.Content.Projectiles
                     if (box.Contains(t.Pos[i].ToPoint()))
                     {
                         npc.AddBuff(BuffID.Slow, SickleArcProjectile.FrostSlowTicks);
-                        // Сильный иней жжёт: тот же Frostbite, что на атаках
+                        // Сильный иней жжёт: тот же Frostburn, что на атаках
                         if (t.Strong)
-                            npc.AddBuff(BuffID.Frostburn2, SickleArcProjectile.FrostbiteDuration);
+                            npc.AddBuff(BuffID.Frostburn, SickleArcProjectile.FrostburnDuration);
                         t.Slowed.Add(n);
                         break;
                     }

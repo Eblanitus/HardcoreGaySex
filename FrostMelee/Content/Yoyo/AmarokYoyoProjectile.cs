@@ -45,8 +45,8 @@ namespace FrostMelee.Content.Yoyo
         private const float CloneFollowSpeed = 12f; // скорость догоняющего двойника
         private const int DetachCooldown = 45;      // отрыв сосульки не чаще, чем раз в это число тиков
         private const int HitCooldownBase = 10;     // тиков между ударами по цели, как ванила
-        private const float FrostbiteChance = 0.67f;
-        private const int FrostbiteTicks = 150;
+        private const float FrostburnChance = 0.67f;
+        private const int FrostburnTicks = 150;
 
         private State CurrentState = State.Out;
         private bool started;
@@ -450,8 +450,8 @@ namespace FrostMelee.Content.Yoyo
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            if (Main.rand.NextFloat() < FrostbiteChance)
-                target.AddBuff(BuffID.Frostburn2, FrostbiteTicks);
+            if (Main.rand.NextFloat() < FrostburnChance)
+                target.AddBuff(BuffID.Frostburn, FrostburnTicks);
             // Раз в DetachCooldown тиков, не чаще: циклы частых ударов круга
             // не спишут весь лёд за секунду
             if (detachCooldown > 0)

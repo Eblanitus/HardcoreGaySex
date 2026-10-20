@@ -7,9 +7,9 @@ using Terraria.Audio;
 namespace FrostMelee.Content.Projectiles
 {
     // Волна льда по поверхности от броска ледяного клинка.
-    // Идёт по земле как атака Deerclops, но сильно уменьшенная: короче, слабее,
-    // урон треть от броска и ещё x0.35, плюс Slow на секунду.
-    // При убийстве броском — длиннее и дольше (LongWaveTicks).
+    // Идёт по земле как атака Deerclops, но сильно уменьшенная: короче, слабее.
+    // Урон и Slow наносят сами ледяные шипы (IceWaveSpike) по видимому контуру;
+    // волна только несёт и расставляет их. При убийстве броском — длиннее и дольше.
     //
     // Проработка эффекта: волна НЕ только пыль.
     // - За собой она намораживает настоящую ледяную глазурь на блоках
@@ -29,20 +29,19 @@ namespace FrostMelee.Content.Projectiles
         {
             Projectile.width = 24;
             Projectile.height = 16;
-            Projectile.friendly = true;
+            Projectile.friendly = false; // урон наносят шипы, волна только расставляет их
+            Projectile.hostile = false;
             Projectile.DamageType = DamageClass.Melee;
             Projectile.penetrate = -1;
             Projectile.tileCollide = false;
             Projectile.ignoreWater = true;
             Projectile.timeLeft = 60;
-            Projectile.usesLocalNPCImmunity = true;
-            Projectile.localNPCHitCooldown = 20;
             Projectile.aiStyle = -1;
         }
 
         public override void AI()
         {
-            // ai[0] = longWave 0/1, ai[1] = dir X (-1/1)
+            // ai[0] = longWave 0/1, ai[1] = dir X (-1/1), ai[2] = урон одного шипа
             bool longWave = Projectile.ai[0] > 0.5f;
             if (longWave) {
                 maxTicks = 150; // волна убийства: 150 тиков * 4 px = ~600 px, 2.5 с
@@ -90,11 +89,13 @@ namespace FrostMelee.Content.Projectiles
                 {
                     float sizeMul = 1f - 0.55f * MathHelper.Clamp(Projectile.localAI[1] / maxTicks, 0f, 1f);
                     Vector2 sp = Projectile.Center + new Vector2(Main.rand.NextFloat(-6f, 6f), 8f);
-                    // ai[2] упаковывает размер и направление:
-                    // модуль = множитель размера, знак = направление волны
-                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
-                        ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
-                        Main.rand.NextFloat(1f), Main.rand.Next(3), sizeMul * dir);
+                    // Спавнит только владелец, шипы сами синхронизируются остальным
+                    if (Main.myPlayer == Projectile.owner)
+                    {
+                        Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
+                            ModContent.ProjectileType<IceWaveSpike>(), (int)Projectile.ai[2], IceWaveSpike.SpawnKnockback, Projectile.owner,
+                            Main.rand.NextFloat(1f), Main.rand.Next(3), sizeMul * dir);
+                    }
                 }
             }
 
@@ -123,25 +124,6 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox)
-        {
-            // чуть шире хитбокса для надёжности
-            Rectangle r = projHitbox;
-            r.Inflate(4, 4);
-            return r.Intersects(targetHitbox);
-        }
-
-        public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
-        {
-            // Эффект совсем маленький — только Slow на 1с, без урона бонуса
-            modifiers.SourceDamage *= 0.35f; // волна слабая
-        }
-
-        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
-        {
-            target.AddBuff(BuffID.Slow, 60); // 1 сек замедления
-        }
-
         public override void OnKill(int timeLeft)
         {
             // Конец волны: веер осколков, чтобы граница пробега читалась
@@ -156,11 +138,13 @@ namespace FrostMelee.Content.Projectiles
             }
 
             // Граница пробега: ещё три пика подряд, уже уменьшенного размера
+            if (Main.myPlayer != Projectile.owner)
+                return;
             for (int i = 0; i < 3; i++)
             {
                 Vector2 sp = Projectile.Center + new Vector2(dir * i * 10f, 8f);
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), sp, Vector2.Zero,
-                    ModContent.ProjectileType<IceWaveSpike>(), 0, 0f, Projectile.owner,
+                    ModContent.ProjectileType<IceWaveSpike>(), (int)Projectile.ai[2], IceWaveSpike.SpawnKnockback, Projectile.owner,
                     Main.rand.NextFloat(1f), Main.rand.Next(3), 0.45f * dir);
             }
         }

@@ -25,6 +25,13 @@ namespace FrostMelee.Content.Projectiles
         private const float ThrustPortion = 0.3f;
         private const float HitWindow = 0.45f;
 
+        // Дальность тычка: полный размер меча оставляем для замаха/удержания,
+        // но сам выпад не выпускает клинок на всю длину за локоть.
+        public const float StabReachMult = 0.7f;
+
+        public float BladeHalfLength =>
+            SickleSprite.Get((int)Projectile.ai[2]).Length * StabReachMult * 0.5f;
+
         public override void SetDefaults()
         {
             // Клонируем ванильное копьё: friendly, Melee, ownerHitCheck, penetrate и т.д.
@@ -46,6 +53,12 @@ namespace FrostMelee.Content.Projectiles
 
         // 0 → 1 за время жизни выпада
         private float Life => 1f - Projectile.timeLeft / (float)Duration;
+
+        public bool IsRetracting => Life >= ThrustPortion;
+
+        public float Retract01 => Life <= ThrustPortion
+            ? 0f
+            : MathHelper.Clamp((Life - ThrustPortion) / (1f - ThrustPortion), 0f, 1f);
 
         public override bool PreAI()
         {
@@ -99,8 +112,12 @@ namespace FrostMelee.Content.Projectiles
             // Геометрия реального спрайта (приклад/остриё по пикселям — SickleSprite).
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
             Vector2 hand = SickleSprite.HandGrip(player, stretch, armRot);
-            Vector2 butt = hand - Projectile.velocity * GripInset;
-            Projectile.Center = butt + Projectile.velocity * (geo.Length * 0.5f);
+            // Как у ванильных копий: клинок сам выезжает вперёд и уходит назад вдоль линии выпада.
+            // На пике (extend = 1) положение то же, что было, — дальность удара не меняется;
+            // на старте и на возврате клинок оттянут назад на PullBack длины меча
+            float bladeLength = geo.Length * StabReachMult;
+            Vector2 butt = hand - Projectile.velocity * (GripInset + bladeLength * PullBack * (1f - extend));
+            Projectile.Center = butt + Projectile.velocity * (bladeLength * 0.5f);
 
             // Поворот: вектор «приклад → остриё» спрайта ставим вдоль выпада.
             // При взгляде влево спрайт зеркалим (флип в PreDraw), угол — зеркального.
@@ -136,6 +153,9 @@ namespace FrostMelee.Content.Projectiles
         // Сколько рукояти торчит позади кисти (px)
         protected virtual float GripInset => 4f;
 
+        // Насколько клинок оттянут назад в начале и в конце выпада (доля длины меча)
+        private const float PullBack = 0.45f;
+
         // Выпад рукой: согнута на старте, прямая на пике выпада
         private static Player.CompositeArmStretchAmount ArmStretch(float extend)
         {
@@ -157,7 +177,7 @@ namespace FrostMelee.Content.Projectiles
             // Хитбокс — только кончик: отрезок длиной BladeHitLength, который кончается
             // РОВНО на видимом острие
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
+            float half = BladeHalfLength;
             Vector2 tipPos = Projectile.Center + dir * half;
             Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength, half * 2f);
             float collisionPoint = 0f;
@@ -186,7 +206,7 @@ namespace FrostMelee.Content.Projectiles
             // Фростбранд: поджигает; умер, пока горел, — взрыв холодного огня
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
                 bool wasBurning = Content.Weapons.FrostFireSystem.WasBurning(target);
-                Content.Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+                Content.Weapons.FrostFireSystem.Ignite(target);
                 if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
                     Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
             }
@@ -209,7 +229,8 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.Geometry geo = SickleSprite.Get(itemType);
             bool flipped = Projectile.spriteDirection == -1;
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            Vector2 drawPos = Projectile.Center - dir * (geo.Length * 0.5f);
+            float drawScale = StabReachMult;
+            Vector2 drawPos = Projectile.Center - dir * (geo.Length * drawScale * 0.5f);
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
@@ -218,10 +239,10 @@ namespace FrostMelee.Content.Projectiles
             // Blade
             if (itemType == ItemID.IceBlade) {
                 float mix = Content.Weapons.IceBladeVisual.Mix(owner, itemType);
-                Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, geo, Projectile.rotation, flipped, lightColor, 1f, mix);
+                Content.Weapons.IceBladeVisual.DrawBlend(texture, drawPos, geo, Projectile.rotation, flipped, lightColor, drawScale, mix);
             } else {
                 Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
-                    lightColor, Projectile.rotation, origin, 1f, effects, 0f);
+                    lightColor, Projectile.rotation, origin, drawScale, effects, 0f);
             }
 
             return false;
@@ -260,8 +281,9 @@ namespace FrostMelee.Content.Projectiles
         private void BladeEnds(SickleSprite.Geometry geo, out Vector2 heel, out Vector2 tip)
         {
             Vector2 dir = Projectile.velocity;
-            tip = Projectile.Center + dir * (geo.Length * 0.5f);
-            heel = Fx.HeelOf(Projectile.Center - dir * (geo.Length * 0.5f), tip);
+            float half = BladeHalfLength;
+            tip = Projectile.Center + dir * half;
+            heel = Fx.HeelOf(Projectile.Center - dir * half, tip);
         }
 
         // Ванильная основа: струи вдоль клинка и росчерк за остриём, под клинком
@@ -280,8 +302,11 @@ namespace FrostMelee.Content.Projectiles
             float s = StoneProgress(life);
             float t = 1f - s;
 
+            // Частицы очищения — только пока клинок реально очищается (после настоящей полировки)
+            bool cleaning = player.GetModPlayer<Content.Weapons.SwordPlayer>().IsPolishing((int)Projectile.ai[2]);
+
             // Под бруском поток сдирает наледь с кромок и уносит назад вдоль клинка
-            if (s > 0f && s < 1f) {
+            if (cleaning && s > 0f && s < 1f) {
                 int shavings = Fx.Count((0.3f + 0.7f * rough) * 0.9f * env);
                 for (int i = 0; i < shavings; i++) {
                     int side = Main.rand.NextBool() ? 1 : -1;
@@ -309,6 +334,8 @@ namespace FrostMelee.Content.Projectiles
             // с них наружу (не с острия, а по всей правленой длине)
             if (Projectile.localAI[1] == 0f && life >= ThrustPortion) {
                 Projectile.localAI[1] = 1f;
+                if (!cleaning)
+                    return;
                 int chips = (int)System.Math.Round(rough * 2f);
                 for (int i = 0; i < chips; i++) {
                     int side = i % 2 == 0 ? 1 : -1;

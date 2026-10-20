@@ -1,0 +1,290 @@
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using ReLogic.Content;
+using System;
+using System.Collections.Generic;
+using Terraria;
+using Terraria.GameContent;
+using Terraria.ID;
+using Terraria.ModLoader;
+
+namespace FrostMelee.Content.Weapons
+{
+    // Отметка льда на тайле: отдельно момент рождения и момент истечения.
+    // Created не сбрасывается повторными отметками, поэтому анимация
+    // появления не мигает под игроком и идёт один раз, плавно.
+    public struct IceMark
+    {
+        public int Created;
+        public int Expires;
+    }
+
+    // Ледяная глазурь скольжения и волны: отметки на сетке тайлов + отрисовка.
+    //
+    // Отрисовка — ModSystem.PostDrawTiles: этот хук вызывается всегда и не
+    // зависит от снарядов в кадре. Раньше рисовал снаряд-художник, но ваниль
+    // кульлит снаряды за экраном, и вместе с ним «пропадал» весь лёд,
+    // когда игрок вертелся и уезжал от места спавна художника.
+    //
+    // Вид: намерзание от Created за AppearFrames (рост + вспышка), таяние —
+    // последние MeltFrames жизни (см. блок «Вид глазури» ниже); освещение из мира.
+    //
+    // Лёд функционален: HasLiveMark используют скольжение и коньки
+    // (IceSlidePlayer) — стоя на своей дорожке, игрок скользит по-настоящему.
+    public class IceSheetSystem : ModSystem
+    {
+        public const int LifeFrames = 240;  // 4 секунды жизни
+        public const int AppearFrames = 24; // намерзание 0.4 с, смусстеп
+
+        private static readonly Dictionary<Point, IceMark> marks = new();
+        private static Asset<Texture2D> coatTex;
+        private static bool loadWarned;
+
+        public static bool Any => marks.Count > 0;
+
+        public static Asset<Texture2D> CoatTex =>
+            coatTex ??= ModContent.Request<Texture2D>("FrostMelee/Textures/Effects/IceCoat");
+
+        public override void OnWorldUnload()
+        {
+            marks.Clear();
+        }
+
+        public override void Unload()
+        {
+            marks.Clear();
+            coatTex = null;
+            loadWarned = false;
+        }
+
+        // Положить глазурь на поверхность: первый твёрдый тайл с открытым
+        // верхом по колонке. Повторная отметка продлевает срок, но НЕ
+        // сбрасывает Created — анимация появления не перезапускается.
+        public static void MarkSurface(int x, int yStart)
+        {
+            if (marks.Count > 1024)
+                PurgeExpired();
+
+            for (int y = yStart; y < yStart + 4; y++)
+            {
+                if (!WorldGen.InWorld(x, y, 2))
+                    return;
+
+                Tile tile = Main.tile[x, y];
+                if (!tile.HasTile || !Main.tileSolid[tile.TileType])
+                    continue;
+
+                // На склонах и полублоках глазурь легла бы мимо поверхности
+                if (tile.Slope != 0 || tile.IsHalfBlock)
+                    return;
+
+                // Поверхность открыта: сверху нет твёрдого тайла
+                Tile above = Main.tile[x, y - 1];
+                if (above.HasTile && Main.tileSolid[above.TileType])
+                    return;
+
+                int now = (int)Main.GameUpdateCount;
+                Point key = new Point(x, y);
+                if (marks.TryGetValue(key, out IceMark old))
+                {
+                    old.Expires = System.Math.Max(old.Expires, now + LifeFrames);
+                    marks[key] = old;
+                }
+                else
+                {
+                    marks[key] = new IceMark { Created = now, Expires = now + LifeFrames };
+                }
+                return;
+            }
+        }
+
+        // Живая ли глазурь на тайле: для рабочего льда дорожки
+        public static bool HasLiveMark(int x, int y)
+        {
+            if (!marks.TryGetValue(new Point(x, y), out IceMark m))
+                return false;
+
+            return m.Expires > (int)Main.GameUpdateCount;
+        }
+
+        public static void PurgeExpired()
+        {
+            if (marks.Count == 0)
+                return;
+
+            int now = (int)Main.GameUpdateCount;
+            List<Point> dead = null;
+            foreach (KeyValuePair<Point, IceMark> kv in marks)
+                if (kv.Value.Expires - now <= 0)
+                    (dead ??= new List<Point>()).Add(kv.Key);
+
+            if (dead == null)
+                return;
+
+            foreach (Point p in dead)
+                marks.Remove(p);
+        }
+
+        // === Вид глазури (только отрисовка: срок жизни, HasLiveMark и скольжение не трогает) ===
+        // Цвета — premultiplied: AlphaBlend в tModLoader ждёт RGB, уже умноженный на альфу.
+        // Раньше RGB шёл полной яркостью, а гасла только альфа — поэтому лёд на глаз не
+        // проявлялся и не таял, а светлым пятном держался до конца и резко пропадал.
+        //   намерзание — корка растёт из центра вширь и в толщину, поверх белая вспышка;
+        //   жизнь — по дорожке бежит блик, на корке изредка мигают искорки;
+        //   таяние — последние MeltFrames корка истончается, темнеет «мокрым» и гаснет, с неё идёт пар.
+        private const int MeltFrames = 120;   // таяние 2 с в конце жизни
+        private const int FlashFrames = 20;   // белая вспышка намерзания
+        private static readonly Color FlashCol = new Color(215, 245, 255);
+        private static readonly Color SheenCol = new Color(235, 250, 255);
+
+        private static float Smooth(float x)
+        {
+            x = MathHelper.Clamp(x, 0f, 1f);
+            return x * x * (3f - 2f * x);
+        }
+
+        // Стабильное число 0..1 на тайл: фаза искорок, чтобы они не мигали синхронно
+        private static float Hash(Point p) => (((p.X * 73856093) ^ (p.Y * 19349663)) & 0x7fffffff) % 1000 / 1000f;
+
+        private static Color Add(Color c, float a)
+        {
+            Color r = c * MathHelper.Clamp(a, 0f, 1f);
+            r.A = 0;
+            return r;
+        }
+
+        // Пар с тающей корки и искорка при рождении — пылью, вне отрисовки
+        public override void PostUpdateEverything()
+        {
+            if (Main.dedServ || marks.Count == 0)
+                return;
+            int now = (int)Main.GameUpdateCount;
+            Rectangle screen = new Rectangle((int)Main.screenPosition.X - 32, (int)Main.screenPosition.Y - 32,
+                Main.screenWidth + 64, Main.screenHeight + 64);
+            foreach (KeyValuePair<Point, IceMark> kv in marks)
+            {
+                Vector2 world = new Vector2(kv.Key.X * 16f, kv.Key.Y * 16f);
+                if (!screen.Contains((int)world.X, (int)world.Y))
+                    continue;
+                int remain = kv.Value.Expires - now;
+                int age = now - kv.Value.Created;
+                if (age == 1 && Main.rand.NextBool(2))
+                {
+                    Dust d = Dust.NewDustPerfect(world + new Vector2(Main.rand.NextFloat(4f, 28f), 0f), DustID.SnowflakeIce,
+                        new Vector2(Main.rand.NextFloat(-0.4f, 0.4f), -Main.rand.NextFloat(0.3f, 0.9f)), 100, default, 0.7f);
+                    d.noGravity = true;
+                }
+                if (remain > 0 && remain < MeltFrames && Main.rand.NextBool(70))
+                {
+                    Dust d = Dust.NewDustPerfect(world + new Vector2(Main.rand.NextFloat(2f, 30f), 1f), DustID.Frost,
+                        new Vector2(Main.rand.NextFloat(-0.15f, 0.15f), -Main.rand.NextFloat(0.2f, 0.5f)), 170, default, 0.6f);
+                    d.noGravity = true;
+                }
+            }
+        }
+
+        public override void PostDrawTiles()
+        {
+            if (Main.dedServ || marks.Count == 0)
+                return;
+
+            PurgeExpired();
+
+            Texture2D tex = CoatTex.IsLoaded ? CoatTex.Value : null;
+            if (tex == null && !loadWarned)
+            {
+                loadWarned = true;
+                ModContent.GetInstance<global::FrostMelee.FrostMelee>().Logger.Warn("[IceSheet] текстура IceCoat не загрузилась, рисую запасным пикселем");
+            }
+            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
+            if (glow != null && glow.IsDisposed)
+                glow = null;
+
+            int now = (int)Main.GameUpdateCount;
+            Rectangle screen = new Rectangle((int)Main.screenPosition.X - 64, (int)Main.screenPosition.Y - 64,
+                Main.screenWidth + 128, Main.screenHeight + 128);
+
+            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+                Main.DefaultSamplerState, DepthStencilState.None, Main.Rasterizer, null,
+                Main.GameViewMatrix.TransformationMatrix);
+
+            foreach (KeyValuePair<Point, IceMark> kv in marks)
+            {
+                int remain = kv.Value.Expires - now;
+                if (remain <= 0)
+                    continue;
+
+                Vector2 world = new Vector2(kv.Key.X * 16f, kv.Key.Y * 16f);
+                if (!screen.Contains((int)world.X, (int)world.Y))
+                    continue;
+
+                // Намерзание: однократно от рождения отметки
+                int age = now - kv.Value.Created;
+                float ap = MathHelper.Clamp(age / (float)AppearFrames, 0f, 1f);
+                float appear = Smooth(ap);
+                float grow = 1f - (1f - ap) * (1f - ap) * (1f - ap);   // ease-out: быстро схватывается, мягко доходит
+
+                // Таяние: только в конце жизни (повторная отметка продлевает срок — корка снова целая)
+                float melt = Smooth(remain / (float)MeltFrames);       // 1 — целая, 0 — растаяла
+
+                Color light = Lighting.GetColor(kv.Key.X, kv.Key.Y);
+                float lum = MathHelper.Clamp((light.R + light.G + light.B) / 765f * 1.4f, 0f, 1f);
+                Color ice = new Color((byte)(light.R * 0.72f), (byte)(light.G * 0.88f), light.B);
+                // тающий лёд темнеет и синеет — «мокрый»
+                Color wet = new Color((byte)(light.R * 0.45f), (byte)(light.G * 0.65f), (byte)(light.B * 0.9f));
+                float alpha = IceSlideSystem.SheetCapAlpha / 255f * appear * melt;
+                Color c = Color.Lerp(wet, ice, melt) * alpha;
+
+                if (tex == null)
+                {
+                    Main.spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                        new Rectangle((int)(world.X - Main.screenPosition.X),
+                            (int)(world.Y - Main.screenPosition.Y), 16, 5), new Rectangle(0, 0, 1, 1), c);
+                    continue;
+                }
+
+                // Корка стоит на поверхности: якорь — середина верхнего края текстуры
+                Vector2 origin = new Vector2(tex.Width * 0.5f, 0f);
+                Vector2 pos = world + new Vector2(tex.Width * 0.5f, 0f) - Main.screenPosition;
+                Vector2 scale = new Vector2(MathHelper.Lerp(0.3f, 1f, grow),
+                    MathHelper.Lerp(0.5f, 1f, grow) * MathHelper.Lerp(0.35f, 1f, melt));
+                Main.spriteBatch.Draw(tex, pos, null, c, 0f, origin, scale, SpriteEffects.None, 0f);
+
+                // Вспышка намерзания: белая, чуть шире корки, гаснет за FlashFrames
+                if (age < FlashFrames)
+                {
+                    float f = 1f - age / (float)FlashFrames;
+                    Main.spriteBatch.Draw(tex, pos, null, Add(FlashCol, f * f * 0.75f * Math.Max(lum, 0.35f)), 0f, origin,
+                        scale * new Vector2(1.08f, 1.15f), SpriteEffects.None, 0f);
+                }
+
+                // Блик бежит вдоль дорожки
+                float sheen = 0.5f + 0.5f * (float)System.Math.Sin(world.X * 0.045f - now * 0.11f);
+                sheen *= sheen; sheen *= sheen; sheen *= sheen;
+                if (sheen > 0.02f)
+                    Main.spriteBatch.Draw(tex, pos, null, Add(SheenCol, sheen * 0.45f * alpha * lum), 0f, origin,
+                        scale, SpriteEffects.None, 0f);
+
+                // Искорка: у каждого тайла своя фаза, мигает коротко
+                if (glow != null && melt > 0.5f)
+                {
+                    float h = Hash(kv.Key);
+                    float tw = (float)System.Math.Sin(now * 0.06f + h * 40f);
+                    if (tw > 0.9f)
+                    {
+                        float k = (tw - 0.9f) / 0.1f * alpha * lum;
+                        Vector2 sp = world + new Vector2(4f + h * 24f, 1.5f) - Main.screenPosition;
+                        Vector2 go = glow.Size() / 2f;
+                        float size = 9f;
+                        Main.spriteBatch.Draw(glow, sp, null, Add(SheenCol, k), 0f, go,
+                            new Vector2(size / glow.Width, size * 0.14f / glow.Height), SpriteEffects.None, 0f);
+                        Main.spriteBatch.Draw(glow, sp, null, Add(SheenCol, k), MathHelper.PiOver2, go,
+                            new Vector2(size * 0.7f / glow.Width, size * 0.14f / glow.Height), SpriteEffects.None, 0f);
+                    }
+                }
+            }
+
+            Main.spriteBatch.End();
+        }
+    }
+}

@@ -35,7 +35,7 @@ namespace FrostMelee.Content.Projectiles
         private static readonly Color IceTail = new Color(120, 210, 255);
         private static readonly Color IceEdge = new Color(40, 110, 230);
 
-        // === Только ледяное копьё: иней, Frostbite, раскол льда на полном разгоне ===
+        // === Только ледяное копьё: иней, Frostburn, раскол льда на полном разгоне ===
         private const int RimeCrystals = 14;          // кристалликов на лезвии при полном инее
         private const float RimeBladeFrac = 0.6f;    // доля длины копья от острия назад, покрытая инеем
         private const float RimeEdgeWidth = 8f;
@@ -146,14 +146,17 @@ namespace FrostMelee.Content.Projectiles
             // встреча выставлена и меч в руке. Держишь — жжёт, отпустил — гаснет.
             if ((int)Projectile.ai[2] == ItemID.Frostbrand
                 && Projectile.owner == Main.myPlayer
-                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand
-                && Main.GameUpdateCount % 5 == 0)
+                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
             {
-                Player jetOwner = Main.player[Projectile.owner];
-                Vector2 jetTip = Projectile.Center + SpearDir * (SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f);
-                int jetDmg = Math.Max(1, jetOwner.GetWeaponDamage(jetOwner.HeldItem) * 3 / 10);
-                Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * 9f,
-                    ModContent.ProjectileType<FrostFireJet>(), jetDmg, 0.5f, Projectile.owner);
+                float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
+                Vector2 jetBase = Projectile.Center - SpearDir * half;
+                Vector2 jetTip = Projectile.Center + SpearDir * half;
+                FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir);
+                if (Main.GameUpdateCount % 5 == 0)
+                {
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetBase, SpearDir * 4.5f,
+                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner);
+                }
             }
 
             if (Projectile.localAI[0] < DeployTicks)
@@ -412,7 +415,7 @@ namespace FrostMelee.Content.Projectiles
             }
             // Фростбранд: встреча тоже поджигает
             if (braceItem == ItemID.Frostbrand) {
-                Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+                Weapons.FrostFireSystem.Ignite(target);
             }
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);

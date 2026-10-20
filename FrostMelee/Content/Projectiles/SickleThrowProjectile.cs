@@ -126,6 +126,7 @@ namespace FrostMelee.Content.Projectiles
         private bool zoneSpawned;       // зона один раз за бросок
 
         private bool IsIce => (int)Projectile.ai[2] == ItemID.IceSickle;
+        private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
 
         public override void SetDefaults()
         {
@@ -223,6 +224,8 @@ namespace FrostMelee.Content.Projectiles
 
             if (IsIce)
                 RecordFrostTrail(speed);
+            if (IsFrostbrand)
+                EmitFrostJet();
 
             if (SickleArcProjectile.DebugHitbox && Projectile.owner == Main.myPlayer && Projectile.friendly)
                 SickleSprite.EmitDebugDust(SickleSprite.GetZone((int)Projectile.ai[2]), Projectile.Center,
@@ -432,6 +435,27 @@ namespace FrostMelee.Content.Projectiles
             lastTrailPos = Projectile.Center;
         }
 
+        // Огонь на летящем Frostbrand: тот же клинок, что рисует PreDraw,
+        // поэтому пламя не отрывается от брошенного меча.
+        private void EmitFrostJet()
+        {
+            if (State != StateFlying)
+                return;
+
+            SickleSprite.Geometry geo = Geo;
+            float half = geo.Length * 0.5f * Projectile.scale;
+            if (half <= 1f)
+                return;
+
+            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            Vector2 center = VisualCenter(geo);
+            Vector2 butt = center - axis * half;
+            Vector2 tip = center + axis * half;
+            FrostJetFx.EmitBlade(butt, tip, axis);
+            if (Main.GameUpdateCount % 2 == 0)
+                FrostJetFx.EmitJet(center, axis);
+        }
+
         private void CloseFrostTrail()
         {
             frostTrail?.Close();
@@ -464,8 +488,11 @@ namespace FrostMelee.Content.Projectiles
                 if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f - 8f; found = true; break; }
             }
             if (!found) return;
+            // Урон шипов: треть от броска, сами шипы домножат на 0.35 (как раньше волна).
+            // Волна урона не наносит — она только несёт и расставляет шипы.
+            int waveDamage = Math.Max(1, Projectile.damage / 3);
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
-                ModContent.ProjectileType<IceWaveProjectile>(), Math.Max(1, Projectile.damage / 3), 1f, Projectile.owner, isKill ? 1f : 0f, dir);
+                ModContent.ProjectileType<IceWaveProjectile>(), 0, 0f, Projectile.owner, isKill ? 1f : 0f, dir, waveDamage);
             if (isKill) {
                 // звук усиления
                 SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.7f }, spawn);
@@ -668,7 +695,7 @@ namespace FrostMelee.Content.Projectiles
                 // Фростбранд: поджигает; убил горящего — взрыв сильнее и шире тычкового
                 if (thrownItem == ItemID.Frostbrand) {
                     bool wasBurning = Weapons.FrostFireSystem.WasBurning(target);
-                    Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+                    Weapons.FrostFireSystem.Ignite(target);
                     if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
                         Weapons.FrostFireSystem.Explode(target, 200f, Projectile.damage * 7 / 10, Projectile.owner, true);
                 }

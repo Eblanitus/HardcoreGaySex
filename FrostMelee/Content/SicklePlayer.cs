@@ -28,7 +28,7 @@ namespace FrostMelee.Content
         public const float FrostPerBraceTick = 0.0037f; // выставленное копьё: набор за тик на максимальном разгоне (полная шкала ~4.5 с), растёт с разгоном
         public const float FrostBraceMinSpeed = 0.05f; // разгон (0..1), ниже которого набора нет (стоя шкала не копится и таяние не откладывается)
         public const float FrostSpendPerSwing = 0.143f; // взмах оставляет иней и снимает столько шкалы (~7 взмахов с полной до нуля)
-        public const float FrostStrongAt = 0.7f;       // шкала в начале взмаха, с которой иней сильный (Frostbite + Slow, другой вид)
+        public const float FrostStrongAt = 0.7f;       // шкала в начале взмаха, с которой иней сильный (Frostburn + Slow, другой вид)
         public const int FrostHoldTicks = 120;         // пауза после последнего набора до пассивного таяния (2 с)
         public const int FrostMeltTicks = 1680;        // пассивное таяние полной шкалы до нуля (28 с)
         public const float FrostDripChance = 0.05f;    // капля за тик при таянии на полной шкале (растёт со шкалой)

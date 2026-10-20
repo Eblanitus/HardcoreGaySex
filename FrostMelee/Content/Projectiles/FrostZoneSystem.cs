@@ -283,7 +283,7 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        // Slow обновляется, пока цель стоит в залитых клетках; сильный иней один раз вешает Frostbite
+        // Slow обновляется, пока цель стоит в залитых клетках; сильный иней один раз вешает Frostburn
         private static void SlowNpcs(Zone z)
         {
             for (int n = 0; n < Main.maxNPCs; n++)
@@ -301,7 +301,7 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 npc.AddBuff(BuffID.Slow, SickleArcProjectile.FrostSlowTicks);
                 if (z.Strong && z.Burned.Add(n))
-                    npc.AddBuff(BuffID.Frostburn2, SickleArcProjectile.FrostbiteDuration);
+                    npc.AddBuff(BuffID.Frostburn, SickleArcProjectile.FrostburnDuration);
             }
         }
 

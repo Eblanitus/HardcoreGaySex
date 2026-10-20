@@ -11,11 +11,8 @@ namespace FrostMelee.Content.Weapons
 {
     // Холодное пламя Фростбранда (FROSTBRAND_ИТОГ.md).
     //
-    // Общее правило — Горение: любой удар любым приёмом поджигает холодным
-    // огнём. Стаки 1-2 — обычный Frostburn; третий стак подряд — полное
-    // возгорание (Frostbite, «горит несколько секунд»). Сам урон-по-времени
-    // дают ванильные дебаффы: баланс и сетевая синхронизация — их.
-    // Стаки сбрасываются, если между ударами прошло больше StackWindow.
+    // Общее правило — Горение: любой удар любым приёмом накладывает
+    // Frostburn. Никаких стаков и отдельного «полного возгорания» нет.
     //
     // Смерть горящего врага от тычка или броска — взрыв холодного огня,
     // поджигающий и задевающий соседей (радиус и силу задаёт приём).
@@ -24,60 +21,42 @@ namespace FrostMelee.Content.Weapons
     // (SwordPlayer держит свечение по CountBurningNear).
     public class FrostFireSystem : ModSystem
     {
-        private const int StackWindow = 300;      // 5 с между ударами, иначе стаки с нуля
-        public const int BurnTicks = 180;         // 3 с обычного горения
-        public const int FullBurnTicks = 300;     // 5 с полного возгорания
-        public const int FullIgnitionStacks = 3;  // три удара — полностью загорается
+        public const int BurnTicks = 180;         // 3 с горения
 
-        private class State
+        private class BurstVisual
         {
-            public int stacks;
-            public int lastHit;
+            public Vector2 Center;
+            public float Radius;
+            public bool Big;
+            public int Age;
+            public int Life;
         }
 
-        private static readonly Dictionary<int, State> states = new();
+        private static readonly List<BurstVisual> bursts = new();
 
-        public override void OnWorldUnload() => states.Clear();
+        public override void OnWorldUnload()
+        {
+            bursts.Clear();
+        }
 
-        public override void Unload() => states.Clear();
+        public override void Unload()
+        {
+            bursts.Clear();
+        }
 
-        // Горение = Frostburn или полное возгорание Frostburn2
-        // (в этой сборке tML Frostbite зовётся Frostburn2 — так же,
-        // как уже используют коса и амулеты этого мода)
-        public static bool IsBurning(NPC npc) =>
-            npc.FindBuffIndex(BuffID.Frostburn) >= 0 || npc.FindBuffIndex(BuffID.Frostburn2) >= 0;
+        // Горит ли цель
+        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BuffID.Frostburn) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
-        public static bool WasBurning(NPC npc) =>
-            IsBurning(npc) || (states.TryGetValue(npc.whoAmI, out State st) && st.stacks > 0);
+        public static bool WasBurning(NPC npc) => IsBurning(npc);
 
-        // Удар любым приёмом Фростбранда: стак горения
-        public static void Ignite(NPC npc, int owner)
+        // Любой удар Фростбранда просто накладывает Frostburn
+        public static void Ignite(NPC npc)
         {
             if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
                 return;
 
-            int now = (int)Main.GameUpdateCount;
-            if (!states.TryGetValue(npc.whoAmI, out State st) || now - st.lastHit > StackWindow)
-            {
-                st = new State();
-                states[npc.whoAmI] = st;
-            }
-            st.lastHit = now;
-            st.stacks++;
-
-            if (st.stacks >= FullIgnitionStacks)
-            {
-                // Полное возгорание: настоящий Frostbite этой сборки
-                // (Frostburn2) на несколько секунд + вспышка
-                npc.AddBuff(BuffID.Frostburn2, FullBurnTicks);
-                st.stacks = 0;
-                Burst(npc.Center, 60f, false);
-            }
-            else
-            {
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
-            }
+            npc.AddBuff(BuffID.Frostburn, BurnTicks);
         }
 
         // Вспышка холодного огня: звук, кольцо пламени, свечение.
@@ -99,12 +78,53 @@ namespace FrostMelee.Content.Weapons
                 d.noGravity = true;
             }
 
+            Lighting.AddLight(center, big ? 0.9f : 0.6f, big ? 1.1f : 0.8f, 1.3f);
+            bursts.Add(new BurstVisual
+            {
+                Center = center,
+                Radius = radius,
+                Big = big,
+                Life = big ? 14 : 10
+            });
+        }
+
+        public override void PostUpdateEverything()
+        {
+            if (Main.dedServ || bursts.Count == 0)
+                return;
+
+            for (int i = bursts.Count - 1; i >= 0; i--)
+            {
+                BurstVisual b = bursts[i];
+                b.Age++;
+                if (b.Age >= b.Life)
+                    bursts.RemoveAt(i);
+            }
+        }
+
+        public override void PostDrawTiles()
+        {
+            if (Main.dedServ || bursts.Count == 0)
+                return;
+
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed)
                 return;
-            Main.EntitySpriteDraw(glow, center - Main.screenPosition, null,
-                new Color(120, 200, 255) * (big ? 0.9f : 0.6f), 0f, glow.Size() / 2f,
-                (big ? 90f : 55f) / glow.Width, SpriteEffects.None, 0f);
+
+            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp,
+                DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+
+            foreach (BurstVisual b in bursts)
+            {
+                float t = b.Age / (float)b.Life;
+                float fade = (1f - t) * (1f - t);
+                float scale = b.Radius * 2f / glow.Width;
+                Color color = new Color(120, 200, 255) * (fade * (b.Big ? 0.9f : 0.6f));
+                Main.EntitySpriteDraw(glow, b.Center - Main.screenPosition, null, color,
+                    0f, glow.Size() / 2f, scale, SpriteEffects.None, 0f);
+            }
+
+            Main.spriteBatch.End();
         }
 
         // Взрыв погибшего горящего врага: задевает и поджигает соседей.
@@ -139,27 +159,6 @@ namespace FrostMelee.Content.Weapons
                     cnt++;
             }
             return cnt;
-        }
-
-        // Чистка состояний мёртвых NPC
-        public override void PostUpdateNPCs()
-        {
-            if (states.Count == 0)
-                return;
-
-            List<int> dead = null;
-            foreach (KeyValuePair<int, State> kv in states)
-            {
-                NPC n = Main.npc[kv.Key];
-                if (!n.active || (!IsBurning(n) && (int)Main.GameUpdateCount - kv.Value.lastHit > StackWindow))
-                    (dead ??= new List<int>()).Add(kv.Key);
-            }
-
-            if (dead == null)
-                return;
-
-            foreach (int k in dead)
-                states.Remove(k);
         }
     }
 }

@@ -37,7 +37,7 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            Weapons.FrostFireSystem.Ignite(target, Projectile.owner);
+            Weapons.FrostFireSystem.Ignite(target);
         }
 
         public override bool PreDraw(ref Color lightColor) => false;

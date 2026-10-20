@@ -69,8 +69,8 @@ namespace FrostMelee.Content.Weapons
 
         // === Ледяной огонь на клинке Frostbrand ===
         // Горит там, где меч нарисован СЕЙЧАС: позу отдаёт TryGetBladeLine (замах,
-        // тычок, встреча, взмах, стойка). Брошенный меч не горит — в руке пусто.
-        // Во взмахе пыль по клинку уже сыплет дуга, поэтому здесь мы молчим.
+        // тычок, встреча, взмах, стойка). Летящий брошенный меч зажигает сам
+        // SickleThrowProjectile — в руке в это время пусто.
 
         public bool HoldingSword =>
             !Player.HeldItem.IsAir && SwordTypes.IsSword(Player.HeldItem);
@@ -124,16 +124,23 @@ namespace FrostMelee.Content.Weapons
         public override float UseAnimationMultiplier(Item item) =>
             SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player, item) : 1f;
 
-        public void AddPolish()
+        // true — клинок на этом попадании реально очистился (шкала инея упала)
+        public bool AddPolish()
         {
-            if (Player.whoAmI != Main.myPlayer || !SwordTypes.IsSword(Player.HeldItem)) return;
-            if (iceHitCooldown > 0) return;
+            if (Player.whoAmI != Main.myPlayer || !SwordTypes.IsSword(Player.HeldItem)) return false;
+            if (iceHitCooldown > 0) return false;
             int key = Player.HeldItem.type;
-            SetFrost(key, MathHelper.Clamp(GetFrost(key) - IcePolishPerHit, 0f, 1f));
+            float before = GetFrost(key);
+            SetFrost(key, MathHelper.Clamp(before - IcePolishPerHit, 0f, 1f));
             iceHitCooldown = 10; // 10 тиков кулдауна между полировками (защита от мультихита дуги)
             iceIdleTicks = 0;
             Mod.Logger.Info($"[Polish] попадание: меч {key}, frost={GetFrost(key):F2}");
+            return GetFrost(key) < before;
         }
+
+        // Клинок очищается прямо сейчас: после настоящей полировки видимый иней ещё
+        // сходит к новому значению. Только пока это идёт, сыплются частицы очищения
+        public bool IsPolishing(int itemType) => GetFrostShown(itemType) - GetFrost(itemType) > 0.003f;
 
         private void UpdateIceFrost()
         {
@@ -397,7 +404,9 @@ namespace FrostMelee.Content.Weapons
             PoseItemVisible = false;
             if (!HoldingSword || Player.dead)
                 return;
-            if (ApplyThrowPose())
+            bool throwing = ApplyThrowPose();
+            TrySpawnFrostJet();
+            if (throwing)
                 return;
 
             if (CurrentMode == Mode.Spear || CurrentMode == Mode.Stab)
@@ -422,6 +431,40 @@ namespace FrostMelee.Content.Weapons
                     SickleStabProjectile.HideBackArm(Player, weaponDir);
                 }
             }
+        }
+
+        private void TrySpawnFrostJet()
+        {
+            if (Player.HeldItem.type != ItemID.Frostbrand || CurrentMode == Mode.Spear)
+                return;
+            if (CurrentMode == Mode.Swing && Player.itemAnimation <= 0 && !PoseItemVisible)
+                return;
+            if (CurrentMode == Mode.Stab && !IsMyProjectile(stabProj, ModContent.ProjectileType<SwordStabProjectile>()))
+                return;
+            if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
+                return;
+
+            Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
+            float retract = CurrentMode == Mode.Stab ? StabRetract01() : 0f;
+            // Каждый тик: на быстром взмахе частицы раз в 2 тика дают разрывы,
+            // и огонь кажется прыгающим вслед за клинком.
+            FrostJetFx.EmitBlade(butt, tip, dir, 1f - 0.8f * retract);
+            if (retract > 0f || Main.GameUpdateCount % 2 != 0)
+                return;
+
+            Projectile.NewProjectile(Player.GetSource_ItemUse(Player.HeldItem), tip, dir * 4.5f,
+                ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Player.whoAmI);
+        }
+
+        public float StabRetractProgress => StabRetract01();
+
+        private float StabRetract01()
+        {
+            if (!IsMyProjectile(stabProj, ModContent.ProjectileType<SwordStabProjectile>()))
+                return 0f;
+            return Main.projectile[stabProj].ModProjectile is SwordStabProjectile stab
+                ? stab.Retract01
+                : 0f;
         }
 
         private static float LerpAngle(float a, float b, float t) =>
@@ -475,7 +518,7 @@ namespace FrostMelee.Content.Weapons
                 BladeLineIsProjectile = true;
                 return true;
             }
-            // 5. Взмах: настоящая ванильная поза (itemLocation/itemRotation)
+            // 5. Взмах: поза, которой SwingBladeLayer рисует клинок
             if (Player.itemAnimation > 0 && SwordArcProjectile.GetBladeLine(Player, out butt, out tip))
                 return true;
 
@@ -519,7 +562,10 @@ namespace FrostMelee.Content.Weapons
             Vector2 dir = projType == ModContent.ProjectileType<SwordStabProjectile>()
                 ? proj.velocity.SafeNormalize(Vector2.UnitX)
                 : Vector2.UnitX.RotatedBy(proj.ai[1]);
-            float half = SickleSprite.Get((int)proj.ai[2]).Length * 0.5f;
+            float half = projType == ModContent.ProjectileType<SwordStabProjectile>()
+                && proj.ModProjectile is SwordStabProjectile stab
+                ? stab.BladeHalfLength
+                : SickleSprite.Get((int)proj.ai[2]).Length * 0.5f;
             butt = proj.Center - dir * half;
             tip = proj.Center + dir * half;
             return true;

@@ -12,7 +12,7 @@ namespace FrostMelee.Content.Weapons
 {
     // Снаряд дуги для ледяных мечей (текстура — ванильная дуга меча Excalibur).
     // Копия WoodSwordArcProjectile (WoodSwordsOverhaul) + ледяной след:
-    // на swept-веер ложится слабый иней FrostTrailSystem (только Slow, без Frostbite).
+    // на swept-веер ложится слабый иней FrostTrailSystem (только Slow, без поджога).
     // Дуга — единственный удар взмаха (у самого меча хитбокс убран, см. SwordGlobalItem):
     // бьёт от рукояти до края нарисованной дуги, по каждой цели раз за взмах.
     // В зоне клинка — полный урон и отбрасывание, дальше к краю они падают до крошечных.
@@ -213,8 +213,8 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        // Настоящая линия лезвия в мире: по ванильной позе (itemLocation/itemRotation),
-        // работает только во время взмаха.
+        // Настоящая линия лезвия в мире — ровно та, которой SwingBladeLayer
+        // рисует клинок: якорь player.itemLocation, origin geo.ButtFor, масштаб 1.
         public static bool GetBladeLine(Player player, out Vector2 butt, out Vector2 tip) {
             butt = tip = default;
             if (player.HeldItem.IsAir || player.itemAnimation <= 0)
@@ -224,26 +224,12 @@ namespace FrostMelee.Content.Weapons
             catch { return false; }
             if (geo.Length <= 1f)
                 return false;
-            Texture2D itemTexture = TextureAssets.Item[player.HeldItem.type].Value;
             bool flipped = player.direction == -1;
-            // Ванильный origin предмета в руке — угол кадра, а не центр
-            // (PlayerDrawLayers: W/2 - W/2*direction по X, H по Y).
-            Vector2 origin = new Vector2(itemTexture.Width * 0.5f - itemTexture.Width * 0.5f * player.direction,
-                itemTexture.Height);
-            // itemRotation уже зеркальная, флип учтён в TipFor/ButtFor — +pi здесь лишний
-            float rot = player.itemRotation;
-            float scale = player.GetAdjustedItemScale(player.HeldItem);
-            butt = player.itemLocation + DrawOffset(geo.ButtFor(flipped), origin, flipped).RotatedBy(rot) * scale;
-            tip = player.itemLocation + DrawOffset(geo.TipFor(flipped), origin, flipped).RotatedBy(rot) * scale;
+            // itemRotation уже зеркальная, флип учтён в TipFor/ButtFor — +pi здесь лишний.
+            // Слой рисует от приклада, поэтому приклад и есть itemLocation.
+            butt = player.itemLocation;
+            tip = butt + (geo.TipFor(flipped) - geo.ButtFor(flipped)).RotatedBy(player.itemRotation);
             return true;
-        }
-
-        // Смещение точки спрайта от ванильного origin с учётом горизонтального флипа
-        private static Vector2 DrawOffset(Vector2 point, Vector2 origin, bool flipped) {
-            Vector2 local = point - origin;
-            if (flipped)
-                local.X = -local.X;
-            return local;
         }
 
         public override void OnKill(int timeLeft) {
@@ -396,8 +382,9 @@ namespace FrostMelee.Content.Weapons
             Vector2 tangent = radial.RotatedBy(MathHelper.PiOver2 * sign);
 
             // Под бликом воздух снимает с клинка: наледь — стружкой, металл — искрами.
-            // Всё летит назад, против хода клинка
-            if (env > 0.05f) {
+            // Всё летит назад, против хода клинка. Только пока клинок реально очищается
+            bool cleaning = player.GetModPlayer<SwordPlayer>().IsPolishing(SwordItem != 0 ? SwordItem : player.HeldItem.type);
+            if (env > 0.05f && cleaning) {
                 int shavings = IceBladeFx.Count(env * rough * 0.45f);
                 for (int i = 0; i < shavings; i++) {
                     Vector2 vel = -tangent * Main.rand.NextFloat(1.5f, 3.2f) + radial * Main.rand.NextFloat(0.3f, 1.4f);
@@ -415,6 +402,8 @@ namespace FrostMelee.Content.Weapons
             // с них наружу по всей длине (не сноп искр с острия)
             if (tingTick < 0f && HoneGlintAt(progress) >= 0.98f) {
                 tingTick = Projectile.localAI[0];
+                if (!cleaning)
+                    return;
                 Vector2 heel = IceBladeFx.HeelOf(butt, tip);
                 Vector2 across = bladeDir.RotatedBy(MathHelper.PiOver2);
                 int chips = (int)Math.Round(rough * 2f);
@@ -702,12 +691,13 @@ namespace FrostMelee.Content.Weapons
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
             if (SwordItem == ItemID.IceBlade) {
-                Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish();
-                HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
+                // крошка/искры с кромки — только если удар реально очистил клинок
+                if (Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish())
+                    HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
             }
             // Фростбранд: любой удар поджигает холодным огнём
             if (SwordItem == ItemID.Frostbrand) {
-                FrostFireSystem.Ignite(target, Projectile.owner);
+                FrostFireSystem.Ignite(target);
             }
         }
 
