@@ -26,6 +26,14 @@ namespace FrostMelee.Content.Projectiles
 
         public override void AI()
         {
+            // Встреча задаёт длину струи через ai[0]: живёт дольше — уходит дальше
+            if (Projectile.localAI[1] == 0f)
+            {
+                Projectile.localAI[1] = 1f;
+                if (Projectile.ai[0] >= 12f)
+                    Projectile.timeLeft = (int)Projectile.ai[0];
+            }
+
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             Player owner = Main.player[Projectile.owner];
             Weapons.SwordPlayer sword = owner.GetModPlayer<Weapons.SwordPlayer>();
@@ -84,8 +92,9 @@ namespace FrostMelee.Content.Projectiles
             float fade = Projectile.timeLeft < 5 ? Projectile.timeLeft / 5f : 1f;
             float pulse = 1f + 0.08f * (float)System.Math.Sin(Main.GameUpdateCount * 0.35f + Projectile.whoAmI * 1.7f);
             float flicker = 0.85f + 0.15f * (float)System.Math.Sin(Main.GameUpdateCount * 0.5f + Projectile.whoAmI);
-            float length = 22f * pulse;
-            float width = 16f * pulse;
+            float reachScale = MathHelper.Clamp(Projectile.ai[0] / 12f, 1f, 2.5f);
+            float length = 22f * pulse * reachScale;
+            float width = 16f * pulse * (0.9f + 0.1f * reachScale);
             float rotation = dir.ToRotation();
             Vector2 center = Projectile.Center - Main.screenPosition;
             Vector2 origin = glow.Size() / 2f;

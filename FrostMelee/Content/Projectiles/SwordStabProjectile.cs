@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -25,12 +26,18 @@ namespace FrostMelee.Content.Projectiles
         private const float ThrustPortion = 0.3f;
         private const float HitWindow = 0.45f;
 
-        // Дальность тычка: полный размер меча оставляем для замаха/удержания,
-        // но сам выпад не выпускает клинок на всю длину за локоть.
-        public const float StabReachMult = 0.7f;
+        // Длина самого выпада: меч остаётся полноразмерным в руке,
+        // но в тычке выдвигается только на эту долю длины.
+        public const float StabReachMult = 0.35f;
 
-        public float BladeHalfLength =>
-            SickleSprite.Get((int)Projectile.ai[2]).Length * StabReachMult * 0.5f;
+        public float BladeLength =>
+            SickleSprite.Get((int)Projectile.ai[2]).Length * StabReachMult;
+
+        public float BladeHalfLength => BladeLength * 0.5f;
+
+        // Тычок забирает горение: чем дольше цель горела, тем сильнее добивающий удар
+        private const float BurnDamageBonus = 0.6f;
+        private readonly Dictionary<int, int> takenBurn = new();
 
         public override void SetDefaults()
         {
@@ -174,20 +181,20 @@ namespace FrostMelee.Content.Projectiles
             if (Life > HitWindow)
                 return false;
 
-            // Хитбокс — только кончик: отрезок длиной BladeHitLength, который кончается
-            // РОВНО на видимом острие
+            // Хитбокс — всё видимое лезвие, а не только кончик:
+            // от рукояти до острия, чтобы удар не проходил сквозь середину меча
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            float half = BladeHalfLength;
-            Vector2 tipPos = Projectile.Center + dir * half;
-            Vector2 bladeStart = tipPos - dir * System.Math.Min(BladeHitLength, half * 2f);
+            SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
+            Vector2 tipPos = Projectile.Center + dir * (geo.FrontReach * StabReachMult);
+            Vector2 rearPos = Projectile.Center - dir * BladeHalfLength;
+            Vector2 bladeStart = Vector2.Lerp(rearPos, tipPos, 0.18f);
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 bladeStart, tipPos, BladeHitWidth, ref collisionPoint);
         }
 
-        // Бьющая часть у острия: длина вдоль меча и толщина (px)
-        private const float BladeHitLength = 14f;
-        private const float BladeHitWidth = 8f;
+        // Толщина хитбокса вдоль лезвия (px)
+        private const float BladeHitWidth = 10f;
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
@@ -196,6 +203,16 @@ namespace FrostMelee.Content.Projectiles
             // отбрасывания игрока (перчатки и т.п.)
             if (Projectile.knockBack <= 0f)
                 modifiers.DisableKnockback();
+
+            // Фростбранд: тычок вытягивает горение из цели и превращает его в урон
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
+                int burn = Content.Weapons.FrostFireSystem.TakeBurn(target);
+                if (burn > 0) {
+                    takenBurn[target.whoAmI] = burn;
+                    float ratio = burn / (float)Content.Weapons.FrostFireSystem.BurnTicks;
+                    modifiers.SourceDamage *= 1f + BurnDamageBonus * ratio;
+                }
+            }
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
@@ -203,13 +220,24 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish();
             }
-            // Фростбранд: поджигает; умер, пока горел, — взрыв холодного огня
+            // Фростбранд: забрал горение — бонусный урон; не горел — обычное поджигание.
+            // Умер от тычка с забранным горением — взрыв холодного огня.
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
-                bool wasBurning = Content.Weapons.FrostFireSystem.WasBurning(target);
-                Content.Weapons.FrostFireSystem.Ignite(target);
-                if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
+                bool tookBurn = takenBurn.Remove(target.whoAmI, out int burnTaken);
+                // анимация: холодное пламя стекается с врага в клинок (FrostDrainFx)
+                if (tookBurn)
+                    FrostDrainFx.Play(target, Main.player[Projectile.owner], burnTaken);
+                if (!tookBurn) {
+                    Content.Weapons.FrostFireSystem.Ignite(target);
+                } else if (target.life <= 0 && Projectile.owner == Main.myPlayer) {
                     Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
+                }
             }
+        }
+
+        public override void OnKill(int timeLeft)
+        {
+            takenBurn.Clear();
         }
 
         public override bool PreDraw(ref Color lightColor)
@@ -281,9 +309,8 @@ namespace FrostMelee.Content.Projectiles
         private void BladeEnds(SickleSprite.Geometry geo, out Vector2 heel, out Vector2 tip)
         {
             Vector2 dir = Projectile.velocity;
-            float half = BladeHalfLength;
-            tip = Projectile.Center + dir * half;
-            heel = Fx.HeelOf(Projectile.Center - dir * half, tip);
+            tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            heel = Fx.HeelOf(Projectile.Center - dir * (geo.Length * 0.5f), tip);
         }
 
         // Ванильная основа: струи вдоль клинка и росчерк за остриём, под клинком

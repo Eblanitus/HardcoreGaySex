@@ -50,6 +50,12 @@ namespace FrostMelee.Content.Projectiles
         // Авто-возврат через N тиков; 0 = никогда (доктрина: подбери сам)
         private const int AutoReturnTicks = 0;
 
+        // === Застрявший Frostbrand: разгорающаяся аура ===
+        private const int LodgedAuraGrowTicks = 120;   // 2 с до полного разгорания
+        private const float LodgedAuraMinRadius = 28f;
+        private const float LodgedAuraMaxRadius = 88f; // дальше не растёт
+        private const int LodgedBurnPulse = 15;        // как часто поджигать/продлевать
+
         // === Ледяная коса (только ItemID.IceSickle, серп смерти не трогаем) ===
         // Нелинейный полёт: резкий старт и плавное торможение (ease-out), дальность примерно прежняя
         private const float LaunchSpeedBoost = 1.4f;    // стартовая скорость x от ThrowSpeed
@@ -118,6 +124,8 @@ namespace FrostMelee.Content.Projectiles
         private bool stuckInit;
         private Point stuckTile;
         private bool cleanNpcHit;
+        private int lodgedAuraTicks;
+        private int lodgedBurnPulse;
 
         private FrostTrailSystem.Trail frostTrail;
         private Vector2 lastTrailPos;
@@ -279,6 +287,7 @@ namespace FrostMelee.Content.Projectiles
                     lodgeOffset = TipLodgeOffset(npc);
                 }
                 Projectile.Center = npc.Center + lodgeOffset;
+                UpdateLodgedFrostbrand(npc);
                 return;
             }
 
@@ -287,6 +296,8 @@ namespace FrostMelee.Content.Projectiles
             State = StateFlying;
             harmless = true;
             spinScale = 0.4f;
+            lodgedAuraTicks = 0;
+            lodgedBurnPulse = 0;
             Projectile.velocity = new Vector2(0f, -1.5f);
             Projectile.tileCollide = true;
             Projectile.netUpdate = true;
@@ -311,13 +322,18 @@ namespace FrostMelee.Content.Projectiles
             }
 
             if (stuckTile.X >= 0 && SolidTileAt(stuckTile.ToWorldCoordinates(8f, 8f), out _, out _))
+            {
+                UpdateLodgedFrostbrand(null);
                 return;
+            }
 
             // Опоры нет — серп выпадает
             stuckInit = false;
             State = StateFlying;
             harmless = true;
             spinScale = 0.4f;
+            lodgedAuraTicks = 0;
+            lodgedBurnPulse = 0;
             Projectile.velocity = new Vector2(0f, -1.5f);
             Projectile.tileCollide = true;
             Projectile.netUpdate = true;
@@ -395,6 +411,8 @@ namespace FrostMelee.Content.Projectiles
             Projectile.ai[0] = -1f;
             State = StateStuckTile;
             stuckInit = false;
+            lodgedAuraTicks = 0;
+            lodgedBurnPulse = 0;
             harmless = true;
             Projectile.friendly = false;
             Projectile.tileCollide = false;
@@ -454,6 +472,62 @@ namespace FrostMelee.Content.Projectiles
             FrostJetFx.EmitBlade(butt, tip, axis);
             if (Main.GameUpdateCount % 2 == 0)
                 FrostJetFx.EmitJet(center, axis);
+        }
+
+        // Застрявший Frostbrand разгорается: аура растёт до предела, поджигает соседей,
+        // а если клинок висит в враге — всё время обновляет ему Frostburn.
+        private void UpdateLodgedFrostbrand(NPC lodged)
+        {
+            if (!IsFrostbrand)
+                return;
+
+            lodgedAuraTicks++;
+            float grow = MathHelper.Clamp(lodgedAuraTicks / (float)LodgedAuraGrowTicks, 0f, 1f);
+            float radius = MathHelper.Lerp(LodgedAuraMinRadius, LodgedAuraMaxRadius, grow);
+
+            bool authority = Main.netMode != NetmodeID.MultiplayerClient || Projectile.owner == Main.myPlayer;
+            if (authority && ++lodgedBurnPulse >= LodgedBurnPulse)
+            {
+                lodgedBurnPulse = 0;
+                if (lodged != null && lodged.active)
+                    Weapons.FrostFireSystem.Ignite(lodged);
+
+                float r2 = radius * radius;
+                for (int i = 0; i < Main.maxNPCs; i++)
+                {
+                    NPC npc = Main.npc[i];
+                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                        continue;
+                    if (Vector2.DistanceSquared(npc.Center, Projectile.Center) <= r2)
+                        Weapons.FrostFireSystem.Ignite(npc);
+                }
+            }
+
+            if (Main.dedServ)
+                return;
+
+            Lighting.AddLight(Projectile.Center,
+                0.25f + 0.45f * grow,
+                0.45f + 0.7f * grow,
+                0.7f + 0.9f * grow);
+
+            SickleSprite.Geometry geo = Geo;
+            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            float half = geo.Length * 0.5f * Projectile.scale;
+            Vector2 butt = Projectile.Center - axis * half;
+            Vector2 tip = Projectile.Center + axis * half;
+            FrostJetFx.EmitBlade(butt, tip, axis, 0.35f + 0.65f * grow);
+
+            if (Main.GameUpdateCount % 4 != 0)
+                return;
+
+            int puffs = 1 + (int)Math.Round(grow * 2f);
+            for (int i = 0; i < puffs; i++)
+            {
+                Vector2 dir = Main.rand.NextFloat(MathHelper.TwoPi).ToRotationVector2();
+                Vector2 pos = Projectile.Center + dir * radius * Main.rand.NextFloat(0.55f, 1f);
+                FrostJetFx.EmitJet(pos, dir);
+            }
         }
 
         private void CloseFrostTrail()
@@ -731,6 +805,8 @@ namespace FrostMelee.Content.Projectiles
             harmless = true;
             Projectile.friendly = false;
             Projectile.tileCollide = false;
+            lodgedAuraTicks = 0;
+            lodgedBurnPulse = 0;
             lodgeInit = true;
             lodgeOffset = TipLodgeOffset(target);
             Projectile.netUpdate = true;

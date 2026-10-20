@@ -148,14 +148,21 @@ namespace FrostMelee.Content.Projectiles
                 && Projectile.owner == Main.myPlayer
                 && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
             {
+                // Чем дольше держишь встречу, тем дальше от острия тянется струя (до предела)
+                if (Projectile.localAI[1] < FrostJetGrowTicks)
+                    Projectile.localAI[1]++;
+                float grow = Projectile.localAI[1] / FrostJetGrowTicks;
+                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow);
+                int ticks = Math.Max(12, (int)Math.Ceiling(reach / FrostJetSpeed));
+
                 float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
                 Vector2 jetBase = Projectile.Center - SpearDir * half;
                 Vector2 jetTip = Projectile.Center + SpearDir * half;
                 FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir);
-                if (Main.GameUpdateCount % 5 == 0)
+                if (Main.GameUpdateCount % 4 == 0)
                 {
-                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetBase, SpearDir * 4.5f,
-                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner);
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed,
+                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
                 }
             }
 
@@ -202,6 +209,12 @@ namespace FrostMelee.Content.Projectiles
 
         private const float DeployTicks = 20f;   // ~0.33 с
         private const float DeployPullBack = 0.5f;
+
+        // Струя встречи: длина растёт от острия, пока держишь, и упирается в предел
+        private const int FrostJetGrowTicks = 90;
+        private const float FrostJetMinReach = 24f;
+        private const float FrostJetMaxReach = 96f;
+        private const float FrostJetSpeed = 4.5f;
         private const float ArmDrop = 0.35f;     // кисть у пояса, как у Lance
         private const float UpAngle = 0.75f;     // выше — вторая рука у тела
         private const float GripBehind = 0.06f;  // хват у самого приклада

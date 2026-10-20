@@ -203,8 +203,9 @@ namespace FrostMelee.Content
 
         // Лента по истории углов. Вызывать при ЗАКРЫТОМ spriteBatch (внутри End/Begin окна).
         // scrollBase — счётчик тиков для анимации штрихов; env — общая яркость 0..1.
+        // streaks = false — без бегущих штрихов: лента цельная, одним градиентом (дуга мечей)
         public static void Draw(GraphicsDevice device, float[] angles, int n, Vector2 center,
-            float[] rOut, float[] rIn, float scrollBase, float env, Color core, Color tail, Color edge)
+            float[] rOut, float[] rIn, float scrollBase, float env, Color core, Color tail, Color edge, bool streaks = true)
         {
             if (n < 2 || env <= 0.02f || !Ensure(device))
                 return;
@@ -215,7 +216,7 @@ namespace FrostMelee.Content
             device.DepthStencilState = DepthStencilState.None;
             device.RasterizerState = raster;
             RunPass(device, trailMask, SamplerState.LinearClamp, false, angles, n, center, rOut, rIn, scrollBase, env, core, tail, edge);
-            if (StreakAlpha > 0f)
+            if (streaks && StreakAlpha > 0f)
                 RunPass(device, streakMask, SamplerState.LinearWrap, true, angles, n, center, rOut, rIn, scrollBase, env, core, tail, edge);
         }
 

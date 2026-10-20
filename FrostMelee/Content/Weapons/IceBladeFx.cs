@@ -146,20 +146,21 @@ namespace FrostMelee.Content.Weapons
             Color shine = Color.Lerp(BladeTealDeep, BladeTeal, polish);
 
             // тело: не плотная ванильная заливка, а полупрозрачное свечение формы взмаха
-            // (как ореол у косы); слегка отстаёт от клинка — видно движение
+            // (как ореол у косы). Обе копии на одном угле — дуга цельная, без второго «призрака»
             Main.EntitySpriteDraw(tex, pos, body, Additive(shine, fade * (0.16f + 0.12f * polish)),
-                rotation - dir * MathHelper.PiOver4 * 0.5f * (1f - progress), origin, scale, fx, 0f);
+                rotation, origin, scale, fx, 0f);
             Main.EntitySpriteDraw(tex, pos, body, Additive(Color.Lerp(shine, BladeCyan, 0.4f), fade * (0.08f + 0.1f * polish)),
                 rotation, origin, scale * 0.975f, fx, 0f);
 
             // правка: светлые бирюзовые дуги. Шершавый — одна тусклая, отточенный — вторая внутри
             Color lineCol = ArcLineColor(polish);
             Main.EntitySpriteDraw(tex, pos, line, lineCol * (fade * (0.28f + 0.17f * polish)),
-                rotation + dir * 0.01f, origin, scale, fx, 0f);
+                rotation, origin, scale, fx, 0f);
             float second = Smooth01((polish - 0.4f) / 0.4f);
             if (second > 0.01f)
+                // вторая линия поверх первой (тот же угол, почти тот же радиус) — ярче, но одна дуга
                 Main.EntitySpriteDraw(tex, pos, line, Color.Lerp(lineCol, BladeCyan, 0.5f) * (fade * 0.22f * second),
-                    rotation - dir * 0.05f, origin, scale * 0.85f, fx, 0f);
+                    rotation, origin, scale * 0.985f, fx, 0f);
         }
 
         // =====================================================================

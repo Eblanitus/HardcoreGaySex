@@ -50,6 +50,24 @@ namespace FrostMelee.Content.Weapons
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) => IsBurning(npc);
 
+        // Сколько тиков горения осталось (0 — не горит)
+        public static int BurnRemaining(NPC npc)
+        {
+            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            return index < 0 ? 0 : npc.buffTime[index];
+        }
+
+        // Тычок забирает горение с цели: снимает бафф и возвращает остаток тиков
+        public static int TakeBurn(NPC npc)
+        {
+            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            if (index < 0)
+                return 0;
+            int ticks = npc.buffTime[index];
+            npc.DelBuff(index);
+            return ticks;
+        }
+
         // Любой удар Фростбранда просто накладывает Frostburn
         public static void Ignite(NPC npc)
         {

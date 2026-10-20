@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FrostMelee")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5e2c0d5359414c99ff78c7a175f8da01f004c760")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2728aec849f7b74d52126a6b8a3cd4b5206b85a4")]
 [assembly: System.Reflection.AssemblyProductAttribute("FrostMelee")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FrostMelee")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

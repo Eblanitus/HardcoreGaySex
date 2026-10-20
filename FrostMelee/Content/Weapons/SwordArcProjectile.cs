@@ -290,14 +290,13 @@ namespace FrostMelee.Content.Weapons
                 Main.spriteBatch.End();
                 try {
                     IceRibbon.Draw(device, swooshAngles, n, center, swooshROut, swooshRIn,
-                        Projectile.localAI[0], env, core, tail, edge);
+                        Projectile.localAI[0], env, core, tail, edge, streaks: false);
                 }
                 finally {
                     Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
                         DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
                 }
-                // инеевые кристаллы по внешнему краю ленты
-                IceRibbon.DrawEdgeCrystals(glow, swooshAngles, n, center, swooshROut, Projectile.localAI[0], env, core, tail);
+                // кристаллы по краю ленты убраны: отдельные пятна рвали дугу на куски
             }
 
             // пик-вспышка: пятно + звезда у острия и ледяная нова вокруг игрока
@@ -546,7 +545,8 @@ namespace FrostMelee.Content.Weapons
             // ореол под лентой: мягкие мазки по следу головы, сужаются и гаснут к хвосту
             Color haloCol = Color.Lerp(tail, edge, 0.5f);
             Vector2 prev = KeenPoint(center, n, 0f, 1f);
-            const int HaloSteps = 8;
+            // мазков много и они плотно перекрываются — ореол сплошной, без бусин
+            const int HaloSteps = 24;
             for (int j = 1; j <= HaloSteps; j++) {
                 float t0 = (j - 1) / (float)HaloSteps, t1 = j / (float)HaloSteps;
                 Vector2 next = KeenPoint(center, n, t1, 1f);
@@ -560,7 +560,7 @@ namespace FrostMelee.Content.Weapons
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             Main.spriteBatch.End();
             try {
-                IceRibbon.Draw(device, keenAngles, n, center, keenROut, keenRIn, Projectile.localAI[0], env, core, tail, edge);
+                IceRibbon.Draw(device, keenAngles, n, center, keenROut, keenRIn, Projectile.localAI[0], env, core, tail, edge, streaks: false);
             }
             finally {
                 Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
