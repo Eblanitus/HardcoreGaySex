@@ -332,10 +332,11 @@ namespace FrostMelee.Content.Weapons
         private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
         private const float FlameInnerFrac = 0.40f;    // ширина ленты: внешний край — остриё, внутренний — 0.40 его радиуса
         private const float FlameStreaks = 0.55f;      // потоки внутри тела ленты, а не полосы вместо него
-        private const int FlameHaloSteps = 24;         // мазков ореола
-        private const float FlameHaloWidth = 50f;      // ореол у острия, px
-        private const float FlameHaloWidthTail = 14f;  // ореол на хвосте, px
-        private const float FlameHaloAlpha = 0.15f;    // яркость ореола у головы → 0 на конце
+        private const int FlameBackTicks = 28;         // длина фонового слоя в записанных тиках (лента — FlameTrailTicks: фон заметно длиннее, как ореол копья 22 против 12)
+        private const float FlameBackWidth = 64f;      // ширина фона у головы, px
+        private const float FlameBackWidthTail = 16f;  // ширина фона на хвосте, px
+        private const float FlameBackAlpha = 0.20f;    // яркость фона у головы → 0 на конце
+        private const float FlameBackRadius = 0.96f;   // средняя линия фона: доля радиуса острия
         private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
         private const float FlameTongueSize = 34f;     // длина языка, px
 
@@ -398,11 +399,11 @@ namespace FrostMelee.Content.Weapons
         }
 
         // Дуга Фростбранда — холодное пламя по следу клинка. Набор слоёв как у
-        // дуги копья (ореол, лента с бегущими штрихами, головка у острия,
-        // детали на хвосте, пик-вспышка), но в палитре пламени и с показом
-        // запаса: густота огня = FlameFullness. Запас пуст — ореол и языки
-        // пропадают, остаётся бледная лента: взмах никого нового не подожжёт,
-        // и это видно сразу.
+        // дуги копья (фоновый слой, лента с бегущими штрихами, головка у
+        // острия, детали на хвосте, пик-вспышка), но в палитре пламени и с
+        // показом запаса: густота огня = FlameFullness. Запас пуст — фон и
+        // языки пропадают, остаётся бледная лента: взмах никого нового не
+        // подожжёт, и это видно сразу.
         private void DrawFlameArc(Player player, float progress, float maxAnim) {
             if (Main.dedServ)
                 return;
@@ -467,17 +468,25 @@ namespace FrostMelee.Content.Weapons
             if (n < 2)
                 return;
 
-            // Ореол под лентой (как у копья): мягкие широкие мазки по следу острия
-            if (full > 0.02f) {
-                Color haloCol = Color.Lerp(FlameTail, FlameEdge, 0.5f);
-                Vector2 prev = FlamePoint(center, n, 0f);
-                for (int j = 1; j <= FlameHaloSteps; j++) {
-                    float t0 = (j - 1) / (float)FlameHaloSteps, t1 = j / (float)FlameHaloSteps;
-                    Vector2 next = FlamePoint(center, n, t1);
+            // ФОНОВЫЙ слой дуги (как ореол у копья — первый из её двух слоёв):
+            // широкая мягкая дуга глубокого синего ПОД лентой. Главное — она
+            // заметно ДЛИННЕЕ ленты (FlameBackTicks записанных тиков против
+            // FlameTrailTicks у ленты; у копья 22 против 12) и шире её, поэтому
+            // выглядывает из-за ленты отдельной фоновой дугой и тянется дальше
+            // её хвоста. Прежний ореол шёл ровно по длине и ширине ленты и
+            // целиком прятался под ней — слоя не было видно (замечание владельца)
+            if (full > 0.02f && fbHasBlade && fbHistCount >= 2) {
+                Color backCol = Color.Lerp(FlameEdge, FlameTail, 0.3f);
+                int bgCap = Math.Min(fbHistCount, FlameBackTicks);
+                Vector2 prev = center + fbHistAngle[0].ToRotationVector2() * (fbHistRadius[0] * FlameBackRadius);
+                for (int i = 1; i < bgCap; i++) {
+                    float t0 = (i - 1) / (float)Math.Max(1, bgCap - 1);
+                    float t1 = i / (float)Math.Max(1, bgCap - 1);
+                    Vector2 next = center + fbHistAngle[i].ToRotationVector2() * (fbHistRadius[i] * FlameBackRadius);
                     IceArcFx.DrawSegment(glow, prev, next,
-                        MathHelper.Lerp(FlameHaloWidth, FlameHaloWidthTail, t0),
-                        MathHelper.Lerp(FlameHaloWidth, FlameHaloWidthTail, t1),
-                        IceArcFx.Additive(haloCol, FlameHaloAlpha * flameEnv * (1f - (t0 + t1) * 0.5f)));
+                        MathHelper.Lerp(FlameBackWidth, FlameBackWidthTail, t0),
+                        MathHelper.Lerp(FlameBackWidth, FlameBackWidthTail, t1),
+                        IceArcFx.Additive(backCol, FlameBackAlpha * flameEnv * (1f - (t0 + t1) * 0.5f)));
                     prev = next;
                 }
             }
