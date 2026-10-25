@@ -307,7 +307,6 @@ namespace FrostMelee.Content.Weapons
         private const float FlameHaloAlpha = 0.15f;    // яркость ореола у головы → 0 на конце
         private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
         private const float FlameTongueSize = 34f;     // длина языка, px
-        private const int FlameTwinkles = 4;           // искр-звёздочек по ленте
 
         private static readonly float[] fbAngles = new float[FlamePoints];
         private static readonly float[] fbROut = new float[FlamePoints];
@@ -349,10 +348,12 @@ namespace FrostMelee.Content.Weapons
             float glowBoost = 0.75f + 0.45f * sp.FireGlow; // горящие рядом подкармливают яркость
             float flameEnv = env * level * glowBoost;
 
-            // Горячая линия под всем: белый жар по кромке, синий обод.
-            // У пустого меча остаётся почти только она, бледная
+            // Горячая линия под всем: белый жар по кромке, голубой обод. Тихая:
+            // она жар внутри дуги, а не тёмный контур вокруг неё (обод рисуется
+            // чуть крупнее ядра и глубоким синим вылезал отдельной обводкой
+            // туда, где ленты уже нет). У пустого меча остаётся почти только она
             IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
-                scale * LineDrawScale, fx, 0.38f * fade * (0.3f + 0.7f * full), FlameEdge, FlameCore);
+                scale * LineDrawScale, fx, 0.22f * fade * (0.35f + 0.65f * full), FlameTail, FlameCore);
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed || env <= 0.02f)
@@ -364,12 +365,14 @@ namespace FrostMelee.Content.Weapons
             // Фаза мерцания и бега штрихов: минутный цикл (штрихи сдвигаются на
             // целое число повторов текстуры — стык цикла не виден)
             float gt = Main.GameUpdateCount % 3600;
-            // Лента шире обычной мечовой, а её внешний край дышит языками:
-            // радиус каждой точки слегка дрожит, к хвосту сильнее
+            // Радиус ленты — постоянный, как у копья: чистая полоса по кругу
+            // острия, а не растущая спираль-радуга на пол-оборота. Внешний край
+            // дышит языками: радиус каждой точки слегка дрожит, к хвосту сильнее
+            float outerNow = ArcLineRadius(Projectile.localAI[0]);
             for (int i = 0; i < n; i++) {
                 float t = i / (float)(n - 1);
-                float flick = 1f + 0.06f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
-                fbROut[i] *= flick;
+                float flick = 1f + 0.05f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
+                fbROut[i] = outerNow * flick;
                 fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
             }
 
@@ -425,17 +428,6 @@ namespace FrostMelee.Content.Weapons
                     Main.EntitySpriteDraw(glow, p0 - Main.screenPosition, null,
                         IceArcFx.Additive(c, 0.95f * tw * flameEnv * (1f - t * 0.5f)), tang, gorigin,
                         new Vector2(len / glow.Width, len * 0.16f / glow.Height), SpriteEffects.None, 0f);
-                }
-                // Искры-угли: маленькие звёздочки по ленте
-                for (int i = 0; i < FlameTwinkles; i++) {
-                    float t = (i + 0.5f) / FlameTwinkles;
-                    float tw = 0.5f + 0.5f * (float)Math.Sin(gt * 1.1f + i * 1.9f);
-                    if (tw < 0.35f)
-                        continue;
-                    Vector2 pos = FlamePoint(center, n, t, 0.8f + 0.2f * (float)Math.Abs(Math.Sin(i * 3.1f)));
-                    IceArcFx.DrawSparkle(glow, pos, 9f * tw, i + gt * 0.15f, 2,
-                        IceArcFx.Additive(FlameCore, 0.6f * tw * flameEnv * (1f - t * 0.6f)),
-                        IceArcFx.Additive(FlameCore, 0.6f * tw * flameEnv));
                 }
             }
 
