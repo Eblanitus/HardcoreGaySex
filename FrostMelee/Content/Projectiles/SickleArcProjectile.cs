@@ -861,10 +861,14 @@ namespace FrostMelee.Content.Projectiles
                 trailEffect.World = Matrix.Identity;
                 trailEffect.View = Main.GameViewMatrix.TransformationMatrix;
                 trailEffect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
+                // ВАЖНО: состояния ставим ПОСЛЕ End(). End() при сбросе батча
+                // переписывает Blend/Rasterizer своими (FNA SpriteBatch.PrepRenderState),
+                // и наш CullMode.None терялся: видеокарта отсекала треугольники
+                // ленты при вращении влево — хвоста у дуги не было видно.
+                Main.spriteBatch.End();
                 device.BlendState = trailBlend;
                 device.DepthStencilState = DepthStencilState.None;
                 device.RasterizerState = trailRaster;
-                Main.spriteBatch.End();
                 try
                 {
                     DrawTrailPass(device, false, n, center, rOut, rIn, Projectile.localAI[0], env, core, tail, edge);

@@ -512,8 +512,8 @@ namespace FrostMelee.Content.Weapons
             if (CurrentMode == Mode.Swing && HoldingSword && Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
             {
                 float progress = 1f - Player.itemAnimation / (float)Player.itemAnimationMax;
-                // Скорость взмаха — общая кривая дуги (у Фростбранда нелинейная:
-                // замах назад → разгон → торможение, как у копья)
+                // Скорость взмаха — общая кривая дуги (нелинейная у обоих мечей:
+                // рывок в начале, затухание к концу)
                 progress = SwordArcProjectile.SwingProgressCurve(progress, Player.HeldItem.type);
                 float theta = Player.direction >= 0
                     ? MathHelper.Pi * (1f + progress)
