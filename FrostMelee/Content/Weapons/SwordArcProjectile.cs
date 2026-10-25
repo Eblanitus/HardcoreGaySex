@@ -784,11 +784,14 @@ namespace FrostMelee.Content.Weapons
         private void DrawKeenArc(Player player, Texture2D texture, Texture2D glow, float scale, SpriteEffects fx, float fade, float env, float keen) {
             IceBladeFx.ArcColors(IceBladeFx.PolishOf(player, SwordItem), out Color core, out Color tail, out Color edge);
 
-            // линейная дуга меча: светлая бирюза клинка (у ванили и косы она белая)
+            // линейная дуга меча: светлая бирюза клинка (у ванили и косы она белая).
+            // Посадка как у сектора DrawSwingArc: голова линии — ровно на клинке,
+            // вся линия позади него
+            float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
             Rectangle line = texture.Frame(1, 4, 0, 3);
             Main.EntitySpriteDraw(texture, Projectile.Center - Main.screenPosition, line,
                 IceBladeFx.ArcLineColor(IceBladeFx.PolishOf(player, SwordItem)) * (0.25f * fade * keen),
-                Projectile.rotation, texture.Frame(1, 4).Size() / 2f, scale * LineDrawScale, fx, 0f);
+                Projectile.rotation - dir * IceArcFx.HeadAngle, texture.Frame(1, 4).Size() / 2f, scale * LineDrawScale, fx, 0f);
 
             DrawTrailRibbon(player, glow, env * keen, core, tail, edge);
         }
@@ -842,14 +845,18 @@ namespace FrostMelee.Content.Weapons
             Rectangle body = texture.Frame(1, 4);
             Rectangle line = texture.Frame(1, 4, 0, 3);
             Vector2 origin = body.Size() / 2f;
+            // Посадка веера как у Фростбранда и Ice Blade: передний край — ровно
+            // на клинке, веер целиком позади него
+            float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
+            float rot = Projectile.rotation - dir * IceArcFx.HeadAngle;
             // тело: полупрозрачное свечение формы взмаха, две копии на одном угле
             Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(tail, fade * 0.16f),
-                Projectile.rotation, origin, scale * LineDrawScale, fx, 0f);
+                rot, origin, scale * LineDrawScale, fx, 0f);
             Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(Color.Lerp(tail, core, 0.4f), fade * 0.08f),
-                Projectile.rotation, origin, scale * LineDrawScale * 0.975f, fx, 0f);
+                rot, origin, scale * LineDrawScale * 0.975f, fx, 0f);
             // линия по кромке взмаха
             Main.EntitySpriteDraw(texture, pos, line, core * (fade * 0.3f),
-                Projectile.rotation, origin, scale * LineDrawScale, fx, 0f);
+                rot, origin, scale * LineDrawScale, fx, 0f);
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow != null && !glow.IsDisposed)
