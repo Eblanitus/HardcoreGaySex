@@ -20,16 +20,16 @@ namespace FrostMelee.Content.Projectiles
     {
         public override string Texture => "Terraria/Images/Extra_" + ExtrasID.ThePerfectGlow;
 
-        // --- Настройка вида ---
-        private const int MinWisps = 4;           // языков пламени при слабом горении
-        private const int MaxWisps = 11;          // при полном
-        private const int TrailLen = 7;           // точек хвоста у языка
-        private const int Lifetime = 70;          // страховка: снаряд живёт не дольше
+        // --- Настройка вида (усилено по просьбе владельца: заметнее и ярче) ---
+        private const int MinWisps = 7;           // языков пламени при слабом горении
+        private const int MaxWisps = 18;          // при полном
+        private const int TrailLen = 10;          // точек хвоста у языка
+        private const int Lifetime = 100;         // страховка: снаряд живёт не дольше
         private const int RingTicks = 14;         // схлопывающееся кольцо на враге
-        private const int ChargeTicks = 22;       // вспышка клинка после поглощения
+        private const int ChargeTicks = 30;       // вспышка клинка после поглощения
         private static readonly Color Core = new Color(235, 250, 255);
-        private static readonly Color Flame = new Color(120, 200, 255);
-        private static readonly Color Deep = new Color(40, 110, 230);
+        private static readonly Color Flame = new Color(150, 220, 255);
+        private static readonly Color Deep = new Color(60, 140, 255);
 
         // Ручка вызова: вызывать у владельца, burnTicks — сколько горения забрано
         public static void Play(NPC target, Player owner, int burnTicks)
@@ -101,7 +101,7 @@ namespace FrostMelee.Content.Projectiles
                     Pos = origin + off,
                     Vel = outDir.RotatedByRandom(0.6f) * Main.rand.NextFloat(2.5f, 4.5f) - Vector2.UnitY * 1.2f,
                     Delay = Main.rand.Next(0, 9),
-                    Size = Main.rand.NextFloat(0.8f, 1.25f),
+                    Size = Main.rand.NextFloat(1.1f, 1.7f),
                     Phase = Main.rand.NextFloat(MathHelper.TwoPi),
                     Trail = new Vector2[TrailLen]
                 };
@@ -109,7 +109,7 @@ namespace FrostMelee.Content.Projectiles
                     wisps[i].Trail[k] = wisps[i].Pos;
             }
             if (!Main.dedServ)
-                SoundEngine.PlaySound(SoundID.Item28 with { Volume = 0.45f, Pitch = -0.3f + 0.2f * Ratio }, origin);
+                SoundEngine.PlaySound(SoundID.Item28 with { Volume = 0.55f, Pitch = -0.3f + 0.2f * Ratio }, origin);
         }
 
         public override void AI()
@@ -162,12 +162,12 @@ namespace FrostMelee.Content.Projectiles
                 w.Pos += w.Vel;
                 w.Trail[0] = w.Pos;
 
-                if (!Main.dedServ && Main.rand.NextBool(3))
+                if (!Main.dedServ && Main.rand.NextBool(2))
                 {
-                    Dust d = Dust.NewDustPerfect(w.Pos, DustID.IceTorch, -w.Vel * 0.15f, 100, default, Main.rand.NextFloat(0.7f, 1.1f) * w.Size);
+                    Dust d = Dust.NewDustPerfect(w.Pos, DustID.IceTorch, -w.Vel * 0.15f, 100, default, Main.rand.NextFloat(0.9f, 1.4f) * w.Size);
                     d.noGravity = true;
                 }
-                Lighting.AddLight(w.Pos, 0.15f, 0.35f, 0.55f);
+                Lighting.AddLight(w.Pos, 0.25f, 0.5f, 0.75f);
 
                 // влился в клинок
                 if (dist < 10f + w.Vel.Length())
@@ -177,19 +177,19 @@ namespace FrostMelee.Content.Projectiles
                     lastAbsorbTick = Age;
                     if (!Main.dedServ)
                     {
-                        for (int k = 0; k < 3; k++)
+                        for (int k = 0; k < 5; k++)
                         {
-                            Dust d = Dust.NewDustPerfect(target, DustID.IceTorch, Main.rand.NextVector2Circular(1.6f, 1.6f), 80, default, 1.1f);
+                            Dust d = Dust.NewDustPerfect(target, DustID.IceTorch, Main.rand.NextVector2Circular(2.2f, 2.2f), 80, default, 1.5f);
                             d.noGravity = true;
                         }
                         if (absorbed == 1)
-                            SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.35f, Pitch = 0.4f }, target);
+                            SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.45f, Pitch = 0.4f }, target);
                     }
                 }
             }
 
             if (absorbed > 0)
-                Lighting.AddLight(BladePoint(owner, 0.7f), new Vector3(0.3f, 0.6f, 0.9f) * ChargePulse());
+                Lighting.AddLight(BladePoint(owner, 0.7f), new Vector3(0.45f, 0.85f, 1.2f) * ChargePulse());
 
             // все влились и вспышка клинка отыграла — конец
             if (alive == 0 && Age - lastAbsorbTick > ChargeTicks)
@@ -221,7 +221,7 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
             Vector2 go = glow.Size() / 2f;
-            float bright = MathHelper.Lerp(0.65f, 1f, Ratio);
+            float bright = MathHelper.Lerp(0.85f, 1.15f, Ratio);
 
             // 1) кольцо холодного огня схлопывается в врага — горение «срывают»
             if (Age < RingTicks)
@@ -229,17 +229,20 @@ namespace FrostMelee.Content.Projectiles
                 float t = Age / (float)RingTicks;
                 float r = originRadius * MathHelper.Lerp(1.4f, 0.2f, t * t);
                 float a = (1f - t) * bright;
-                const int Seg = 14;
+                const int Seg = 18;
                 for (int i = 0; i < Seg; i++)
                 {
                     float ang = MathHelper.TwoPi * i / Seg + Age * 0.15f;
                     Vector2 p = origin + ang.ToRotationVector2() * r;
                     float tw = 0.7f + 0.3f * (float)Math.Sin(i * 2.1f + Age);
-                    Main.EntitySpriteDraw(glow, p - Main.screenPosition, null, Add(Flame, a * 0.8f * tw), ang,
-                        go, new Vector2(10f / glow.Width, 4f / glow.Height), SpriteEffects.None, 0f);
+                    Main.EntitySpriteDraw(glow, p - Main.screenPosition, null, Add(Flame, a * tw), ang,
+                        go, new Vector2(15f / glow.Width, 6f / glow.Height), SpriteEffects.None, 0f);
                 }
-                Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Deep, a * 0.5f), 0f,
+                Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Deep, a * 0.7f), 0f,
                     go, originRadius * 1.6f * (1f - 0.5f * t) / glow.Width, SpriteEffects.None, 0f);
+                // яркая вспышка в месте срыва пламени в первые мгновения
+                Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Core, a * 0.85f), 0f,
+                    go, originRadius * (1.1f - 0.6f * t) / glow.Width, SpriteEffects.None, 0f);
             }
 
             // 2) языки пламени: сужающийся хвост + яркая голова
@@ -255,16 +258,16 @@ namespace FrostMelee.Content.Projectiles
                     if (len < 0.5f)
                         continue;
                     float f = 1f - k / (float)TrailLen;
-                    float wdt = (3f + 7f * f) * w.Size;
+                    float wdt = (4f + 10f * f) * w.Size;
                     Color c = Color.Lerp(Deep, Flame, f);
-                    Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, Add(c, f * 0.7f * bright),
+                    Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, Add(c, f * 0.95f * bright),
                         d.ToRotation(), go, new Vector2((len + wdt) / glow.Width, wdt / glow.Height), SpriteEffects.None, 0f);
                 }
                 float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + w.Phase);
-                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.8f * bright), 0f,
-                    go, 14f * w.Size * flick / glow.Width, SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Core, 0.9f * bright), 0f,
-                    go, 6f * w.Size / glow.Width, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.95f * bright), 0f,
+                    go, 20f * w.Size * flick / glow.Width, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Core, bright), 0f,
+                    go, 9f * w.Size / glow.Width, SpriteEffects.None, 0f);
             }
 
             // 3) клинок принял пламя: свечение вдоль клинка и звезда у острия
@@ -275,11 +278,11 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 d = tip - butt;
                 float len = d.Length();
                 Vector2 mid = Vector2.Lerp(butt, tip, 0.6f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.6f), d.ToRotation(),
-                    go, new Vector2(len * 1.1f / glow.Width, 16f / glow.Height), SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.5f), d.ToRotation(),
-                    go, new Vector2(len * 0.8f / glow.Width, 5f / glow.Height), SpriteEffects.None, 0f);
-                float star = 26f * pulse;
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.9f), d.ToRotation(),
+                    go, new Vector2(len * 1.1f / glow.Width, 22f / glow.Height), SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.75f), d.ToRotation(),
+                    go, new Vector2(len * 0.8f / glow.Width, 8f / glow.Height), SpriteEffects.None, 0f);
+                float star = 38f * pulse;
                 for (int r = 0; r < 2; r++)
                     Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse), d.ToRotation() + MathHelper.PiOver2 * r,
                         go, new Vector2(star / glow.Width, star * 0.12f / glow.Height), SpriteEffects.None, 0f);
