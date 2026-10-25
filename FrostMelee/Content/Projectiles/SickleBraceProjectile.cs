@@ -424,7 +424,7 @@ namespace FrostMelee.Content.Projectiles
         {
             int braceItem = (int)Projectile.ai[2];
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
-                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish();
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
             // Фростбранд: встреча тоже поджигает
             if (braceItem == ItemID.Frostbrand) {

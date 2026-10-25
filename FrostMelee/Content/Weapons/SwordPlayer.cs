@@ -116,20 +116,27 @@ namespace FrostMelee.Content.Weapons
         public static float PolishSpeedMult(Player player, Item item) =>
             1f - 0.15f * PolishOf(player, item);       // до -15% времени использования
 
-        // Хуки ModPlayer возвращают множитель СКОРОСТИ (>1 = быстрее),
-        // поэтому время использования делим на скоростной множитель
+        // Хуки ModPlayer УМНОЖАЮТ время использования/анимации
+        // (tML: TotalUseTime = useTime × UseTimeMultiplier, аналогично анимация):
+        // <1 = быстрее. PolishSpeedMult — уже множитель ВРЕМЕНИ (0.85 при полной
+        // полировке), возвращаем как есть. Раньше здесь стояло 1f / PolishSpeedMult —
+        // отполированный меч получался на ~18% МЕДЛЕННЕЕ шершавого вместо быстрее.
         public override float UseTimeMultiplier(Item item) =>
-            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player, item) : 1f;
+            SwordTypes.IsSword(item) ? PolishSpeedMult(Player, item) : 1f;
 
         public override float UseAnimationMultiplier(Item item) =>
-            SwordTypes.IsSword(item) ? 1f / PolishSpeedMult(Player, item) : 1f;
+            SwordTypes.IsSword(item) ? PolishSpeedMult(Player, item) : 1f;
 
-        // true — клинок на этом попадании реально очистился (шкала инея упала)
-        public bool AddPolish()
+        // true — клинок на этом попадании реально очистился (шкала инея упала).
+        // Тип меча задаёт ВЫЗВАВШИЙ (снаряд, который попал), а не HeldItem:
+        // брошенный клинок бьёт позже броска, когда в руке уже другое оружие, —
+        // по HeldItem полировка падала на чужой меч (бросил Ice Blade, в руках
+        // Frostbrand — точился Frostbrand, у которого полировки быть не должно).
+        public bool AddPolish(int itemType)
         {
-            if (Player.whoAmI != Main.myPlayer || !SwordTypes.IsSword(Player.HeldItem)) return false;
+            if (Player.whoAmI != Main.myPlayer || !SwordTypes.IsSwordId(itemType)) return false;
             if (iceHitCooldown > 0) return false;
-            int key = Player.HeldItem.type;
+            int key = itemType;
             float before = GetFrost(key);
             SetFrost(key, MathHelper.Clamp(before - IcePolishPerHit, 0f, 1f));
             iceHitCooldown = 10; // 10 тиков кулдауна между полировками (защита от мультихита дуги)

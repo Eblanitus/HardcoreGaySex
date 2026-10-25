@@ -26,12 +26,15 @@ namespace FrostMelee.Content.Projectiles
         private const float ThrustPortion = 0.3f;
         private const float HitWindow = 0.45f;
 
-        // Длина самого выпада: меч остаётся полноразмерным в руке,
-        // но в тычке выдвигается только на эту долю длины.
+        // Амплитуда выдвига в тычке: меч полноразмерный (масштаб 1, как во взмахе
+        // и встрече), но вдоль линии выпада сдвигается между оттянутой и выдвинутой
+        // позой только на эту долю своей длины. Раньше эта же константа резала
+        // масштаб спрайта и хитбокс — в тычке меч рисовался миниатюрным (0.35)
+        // и колол лишь на треть клинка.
         public const float StabReachMult = 0.35f;
 
         public float BladeLength =>
-            SickleSprite.Get((int)Projectile.ai[2]).Length * StabReachMult;
+            SickleSprite.Get((int)Projectile.ai[2]).Length;
 
         public float BladeHalfLength => BladeLength * 0.5f;
 
@@ -119,12 +122,12 @@ namespace FrostMelee.Content.Projectiles
             // Геометрия реального спрайта (приклад/остриё по пикселям — SickleSprite).
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
             Vector2 hand = SickleSprite.HandGrip(player, stretch, armRot);
-            // Как у ванильных копий: клинок сам выезжает вперёд и уходит назад вдоль линии выпада.
-            // На пике (extend = 1) положение то же, что было, — дальность удара не меняется;
-            // на старте и на возврате клинок оттянут назад на PullBack длины меча
-            float bladeLength = geo.Length * StabReachMult;
-            Vector2 butt = hand - Projectile.velocity * (GripInset + bladeLength * PullBack * (1f - extend));
-            Projectile.Center = butt + Projectile.velocity * (bladeLength * 0.5f);
+            // Как у ванильных копий: полноразмерный клинок сам выезжает вперёд и уходит
+            // назад вдоль линии выпада. На пике (extend = 1) приклад у кисти, и остриё
+            // достаёт на всю длину клинка; на старте и на возврате клинок оттянут назад
+            // на StabReachMult своей длины.
+            Vector2 butt = hand - Projectile.velocity * (GripInset + geo.Length * StabReachMult * (1f - extend));
+            Projectile.Center = butt + Projectile.velocity * (geo.Length * 0.5f);
 
             // Поворот: вектор «приклад → остриё» спрайта ставим вдоль выпада.
             // При взгляде влево спрайт зеркалим (флип в PreDraw), угол — зеркального.
@@ -160,9 +163,6 @@ namespace FrostMelee.Content.Projectiles
         // Сколько рукояти торчит позади кисти (px)
         protected virtual float GripInset => 4f;
 
-        // Насколько клинок оттянут назад в начале и в конце выпада (доля длины меча)
-        private const float PullBack = 0.45f;
-
         // Выпад рукой: согнута на старте, прямая на пике выпада
         private static Player.CompositeArmStretchAmount ArmStretch(float extend)
         {
@@ -185,7 +185,7 @@ namespace FrostMelee.Content.Projectiles
             // от рукояти до острия, чтобы удар не проходил сквозь середину меча
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
-            Vector2 tipPos = Projectile.Center + dir * (geo.FrontReach * StabReachMult);
+            Vector2 tipPos = Projectile.Center + dir * geo.FrontReach;
             Vector2 rearPos = Projectile.Center - dir * BladeHalfLength;
             Vector2 bladeStart = Vector2.Lerp(rearPos, tipPos, 0.18f);
             float collisionPoint = 0f;
@@ -218,7 +218,7 @@ namespace FrostMelee.Content.Projectiles
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
-                Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish();
+                Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
             }
             // Фростбранд: забрал горение — бонусный урон; не горел — обычное поджигание.
             // Умер от тычка с забранным горением — взрыв холодного огня.
@@ -257,7 +257,7 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.Geometry geo = SickleSprite.Get(itemType);
             bool flipped = Projectile.spriteDirection == -1;
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            float drawScale = StabReachMult;
+            float drawScale = 1f; // полноразмерный меч, как во взмахе и встрече
             Vector2 drawPos = Projectile.Center - dir * (geo.Length * drawScale * 0.5f);
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;

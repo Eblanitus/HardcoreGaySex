@@ -63,9 +63,14 @@ namespace FrostMelee.Content.Weapons
         public static bool DebugHitbox = false;
 
         // Палитра ленты следует за полировкой клинка: шершавый меч даёт
-        // матовый морозный шлейф, отполированный — яркое сияние
+        // матовый морозный шлейф, отполированный — яркое сияние.
+        // Полировка — именно ЭТОГО меча (SwordItem), а не IceFrostShown:
+        // то свойство всегда смотрит на Ice Blade, и дуга Frostbrand
+        // раньше ярчела от заточки чужого клинка.
         private void GlowColors(out Color core, out Color tail, out Color edge) {
-            float polish = 1f - Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().IceFrostShown;
+            Player owner = Main.player[Projectile.owner];
+            int item = SwordItem != 0 ? SwordItem : owner.HeldItem.type;
+            float polish = 1f - owner.GetModPlayer<SwordPlayer>().GetFrostShown(item);
             IceBladeFx.ArcColors(polish, out core, out tail, out edge);
         }
 
@@ -692,7 +697,7 @@ namespace FrostMelee.Content.Weapons
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) {
             if (SwordItem == ItemID.IceBlade) {
                 // крошка/искры с кромки — только если удар реально очистил клинок
-                if (Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish())
+                if (Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish(SwordItem))
                     HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
             }
             // Фростбранд: любой удар поджигает холодным огнём
