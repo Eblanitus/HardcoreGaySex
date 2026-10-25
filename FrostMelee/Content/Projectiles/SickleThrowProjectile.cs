@@ -92,11 +92,6 @@ namespace FrostMelee.Content.Projectiles
             57   // пепел
         };
 
-        // Лучи от хитбокса вдоль полёта: центр и углы
-        private static readonly Vector2[] ProbeOffsets = {
-            Vector2.Zero, new Vector2(-5f, -5f), new Vector2(5f, -5f), new Vector2(-5f, 5f), new Vector2(5f, 5f)
-        };
-
         // Номер броска для блокировки предмета (задаёт SicklePlayer, только у владельца)
         public int Token;
 
@@ -372,11 +367,11 @@ namespace FrostMelee.Content.Projectiles
         private bool IsPointHit(Vector2 velocity)
         {
             // Втыкание кувыркающегося меча (решение владельца): не только
-            // идеально кончиком, а когда острие впереди центра меча по ходу
-            // полёта — вся передняя половина кувырка. В момент втыкания меч
-            // доворачивается остриём строго по полёту (иначе при оси поперёк
-            // тело оказалось бы внутри блока — старый баг). Прилетел рукоятью
-            // вперёд (острие в задней половине) — втыкаться нечем: отскок
+            // идеально кончиком по полёту, а когда острие впереди центра меча
+            // по ходу полёта — вся передняя половина кувырка. Втыкается меч
+            // под своим настоящим углом, вдоль собственной оси, без всякого
+            // доворота. Прилетел рукоятью вперёд (острие в задней половине) —
+            // втыкаться нечем: отскок
             if (harmless)
                 return false;
             if (velocity.Length() < StickMinSpeed)
@@ -391,47 +386,61 @@ namespace FrostMelee.Content.Projectiles
             if (!IsPointHit(oldVelocity))
                 return false;
 
-            Vector2 dir = oldVelocity.SafeNormalize(Vector2.UnitY);
-            float reach = oldVelocity.Length() + FlightBox;
-            float nearest = float.MaxValue, centerDist = -1f;
-            float[] dists = new float[ProbeOffsets.Length];
-            int[] types = new int[ProbeOffsets.Length];
-            for (int i = 0; i < ProbeOffsets.Length; i++)
+            // Честное втыкание БЕЗ доворота (доворот до оси полёта — костыль,
+            // замечание владельца): меч остаётся под углом, под которым
+            // прилетел, а кончик уходит в землю вдоль СОБСТВЕННОЙ оси клинка.
+            // Ищем, где ось клинка пересекает поверхность: кончик уже внутри —
+            // шагаем назад до выхода; ещё снаружи — шагаем вперёд до встречи
+            SickleSprite.Geometry geo = Geo;
+            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            Vector2 tip = Projectile.Center + axis * geo.FrontReach;
+            Vector2 contact;
+            int contactType;
+            if (SolidTileAt(tip, out _, out contactType))
             {
-                dists[i] = -1f;
-                for (float d = 0f; d <= reach; d += 1f)
+                contact = tip;
+                bool exited = false;
+                for (float d = 1f; d <= 48f; d += 1f)
                 {
-                    if (!SolidTileAt(Projectile.Center + ProbeOffsets[i] + dir * d, out _, out types[i]))
+                    Vector2 p = tip - axis * d;
+                    if (!SolidTileAt(p, out _, out int t))
+                    {
+                        exited = true;
+                        break;
+                    }
+                    contact = p;
+                    contactType = t;
+                }
+                if (!exited)
+                    return false; // клинок целиком в земле — не втыкание, а закапывание
+            }
+            else
+            {
+                contact = tip;
+                contactType = -1;
+                bool found = false;
+                float reach = oldVelocity.Length() + 20f;
+                for (float d = 1f; d <= reach; d += 1f)
+                {
+                    Vector2 p = tip + axis * d;
+                    if (!SolidTileAt(p, out _, out int t))
                         continue;
-                    dists[i] = d;
-                    nearest = Math.Min(nearest, d);
+                    contact = p;
+                    contactType = t;
+                    found = true;
                     break;
                 }
+                if (!found)
+                    return false; // кончик земли не достал (чиркнул боком) — не втыкается
             }
-            if (nearest == float.MaxValue)
-                return false;
+            if (!SoftTiles.Contains(contactType))
+                return false; // камень, руда, кирпич, платформа: отскок
 
-            for (int i = 0; i < ProbeOffsets.Length; i++)
-            {
-                if (dists[i] >= 0f && dists[i] <= nearest + 4f && !SoftTiles.Contains(types[i]))
-                    return false; // камень, руда, кирпич, платформа: отскок
-            }
-            centerDist = dists[0] >= 0f ? dists[0] : nearest + 5f;
-
-            // Доворот остриём по ходу полёта: кувыркающийся меч мог прилететь
-            // под углом до 90°, а втыкается всегда ровно остриём. Заглубление
-            // считается по этой же оси (= dir), поэтому тело внутри блока не
-            // оказывается — та самая причина, почему ось нельзя было брать
-            // из текущего rotation
-            Projectile.rotation = dir.ToRotation();
-            SickleSprite.Geometry geo = Geo;
-            Vector2 axis = dir;
             float embed = Math.Min(StickEmbedDepth, geo.Length * 0.4f);
-            Vector2 contact = Projectile.Center + dir * centerDist;
-
             SoundEngine.PlaySound(SoundID.Dig with { Volume = 0.7f, Pitch = 0.2f }, contact);
-            // Острие (самая дальняя точка лезвия), а не центроид: рисунок торчит за ним на FrontOverhang
-            Projectile.Center = contact - axis * (geo.FrontReach - embed);
+            // Кончик — на embed глубже поверхности вдоль оси, центр — от него.
+            // Угол (rotation) не трогаем вообще
+            Projectile.Center = contact + axis * embed - axis * geo.FrontReach;
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = -1f;
             State = StateStuckTile;
@@ -829,9 +838,9 @@ namespace FrostMelee.Content.Projectiles
                 return;
             }
 
-            // Застреваем во враге остриём по ходу полёта
-            if (Projectile.velocity != Vector2.Zero)
-                Projectile.rotation = Projectile.velocity.ToRotation();
+            // Застреваем во враге как прилетел: кончик внутри цели
+            // (TipLodgeOffset), угол — настоящий угол попадания.
+            // Доворота до оси полёта нет — это костыль (замечание владельца)
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = target.whoAmI;
             State = StateLodged;
