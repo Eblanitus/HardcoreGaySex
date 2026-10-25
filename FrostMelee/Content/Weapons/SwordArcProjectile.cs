@@ -154,7 +154,7 @@ namespace FrostMelee.Content.Weapons
         // Функцию обязаны звать ВСЕ места с формулой угла взмаха: ArcRotation
         // здесь и itemRotation в SwordPlayer.PostUpdate — иначе клинок, дуга
         // и хитбокс разойдутся по разным кривым.
-        public const float SwingEaseOutPower = 2.6f;  // резкость старта взмаха
+        public const float SwingEaseOutPower = 1.8f;  // резкость старта взмаха (1 — линейно; владелец выбрал середину между линейным и резким 2.6)
 
         public static float SwingProgressCurve(float progress, int itemType) {
             progress = MathHelper.Clamp(progress, 0f, 1f);
