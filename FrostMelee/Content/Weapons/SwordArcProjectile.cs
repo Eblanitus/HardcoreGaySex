@@ -727,7 +727,7 @@ namespace FrostMelee.Content.Weapons
         private static readonly float[] keenRIn = new float[KeenPoints];
 
         // История углов следа: голова — текущий угол дуги, дальше — прошлые углы
-        // (ArcRotation). Радиусы растут вместе с дугой. Лента ложится по реальному пути взмаха,
+        // (ArcRotation). Радиус у ленты единый текущий — кольцом по краю веера. Лента ложится по реальному пути взмаха,
         // а не по фиксированному сектору; длина ограничена по доле взмаха и по углу (TrailMaxAngle).
         // Этим же строятся и шлейф, и лента отточенного клинка — как у косы.
         private int BuildTrailHistory(Player player, float[] angles, float[] rOut, float[] rIn) {
@@ -741,9 +741,15 @@ namespace FrostMelee.Content.Weapons
             // при старой линейной скорости — нелинейна только скорость головы.
             float pNow = SwingProgressCurve(MathHelper.Clamp(Projectile.localAI[0] / maxAnim, 0f, 1f), SwordItem);
             float stepP = TrailTicks / maxAnim / (angles.Length - 1);
+            // Радиус — ЕДИНЫЙ текущий на всей длине ленты, как у Фростбранда:
+            // лента кольцом ложится на внешний край веера, дуги стакаются по
+            // высоте на всей длине, а не только у головы. Раньше радиус брался по
+            // времени каждой точки — лента шла спиралью внутрь к хвосту и на
+            // хвосте заметно расходилась с веером (две дуги разного размера)
+            float rNow = ArcLineRadius(Projectile.localAI[0]);
             int n = 1;
             angles[0] = head;
-            rOut[0] = ArcLineRadius(Projectile.localAI[0]);
+            rOut[0] = rNow;
             rIn[0] = Math.Max(BladeReach * 0.2f, rOut[0] * TrailInnerFrac);
             for (int i = 1; i < angles.Length; i++) {
                 float pi = pNow - i * stepP;
@@ -751,20 +757,19 @@ namespace FrostMelee.Content.Weapons
                     break;
                 float ti = SwingProgressInverse(pi) * maxAnim;
                 float angle = head + MathHelper.WrapAngle(ArcRotation(player, ti) - head);
-                float r = ArcLineRadius(Math.Max(0f, ti));
                 float delta = Math.Abs(angle - head);
                 if (delta > TrailMaxAngle) {
                     // последняя точка — ровно по TrailMaxAngle, дальше ленту не тянем
                     float prevDelta = Math.Abs(angles[n - 1] - head);
                     float f = MathHelper.Clamp((TrailMaxAngle - prevDelta) / Math.Max(0.0001f, delta - prevDelta), 0f, 1f);
                     angles[n] = MathHelper.Lerp(angles[n - 1], angle, f);
-                    rOut[n] = MathHelper.Lerp(rOut[n - 1], r, f);
+                    rOut[n] = rNow;
                     rIn[n] = Math.Max(BladeReach * 0.2f, rOut[n] * TrailInnerFrac);
                     n++;
                     break;
                 }
                 angles[n] = angle;
-                rOut[n] = r;
+                rOut[n] = rNow;
                 rIn[n] = Math.Max(BladeReach * 0.2f, rOut[n] * TrailInnerFrac);
                 n++;
             }
