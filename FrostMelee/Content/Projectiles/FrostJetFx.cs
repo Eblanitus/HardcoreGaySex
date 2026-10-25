@@ -116,8 +116,15 @@ namespace FrostMelee.Content.Projectiles
             }
 
             if (intensity >= 0.35f)
-                EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
-                    0.2f, 0.6f, 0.3f, 12, 17, 0.24f, 0.34f, false);
+            {
+                Particle trail = EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
+                    0.2f, 0.6f, 0.3f, 9, 13, 0.24f, 0.34f, false);
+                // Свободная частица клинка В РУКЕ уносит часть скорости клинка:
+                // без этого на быстром начале взмаха она остаётся висеть там,
+                // где родилась, и выглядит отставшей (замечание владельца)
+                if (anchored && trail != null)
+                    trail.Velocity += bladeVelocity * 0.5f;
+            }
 
             if (Main.rand.NextFloat() < 0.1f * intensity)
             {
@@ -130,11 +137,17 @@ namespace FrostMelee.Content.Projectiles
                     ? dir * Main.rand.NextFloat(1f, 2.2f) + perp * Main.rand.NextFloat(-0.4f, 0.4f)
                     : dir * Main.rand.NextFloat(0.1f, 0.35f) + perp * Main.rand.NextFloat(-0.15f, 0.15f);
                 velocity += new Vector2(0f, -Main.rand.NextFloat(0.1f, anchored ? 0.6f : 0.35f));
+                if (anchored)
+                    velocity += bladeVelocity * 0.3f;
                 Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f) * emitSizeScale);
             }
         }
 
-        public static void EmitJet(Vector2 center, Vector2 dir)
+        // baseVelocity — скорость самой струи: частицы уносят её часть и летят
+        // вместе с веером. Без этого они рождались почти неподвижными, и пока
+        // клинок уходил дальше, позади взмаха оставались висеть сгустки
+        // «отставшего» пламени (замечание владельца, обведённые сгустки)
+        public static void EmitJet(Vector2 center, Vector2 dir, Vector2 baseVelocity = default)
         {
             if (Main.dedServ)
                 return;
@@ -142,26 +155,27 @@ namespace FrostMelee.Content.Projectiles
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 perp = new Vector2(-dir.Y, dir.X);
 
-            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.02f, 0.06f, 0.09f, 6, 9, 0.26f, 0.36f);
-            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.01f, 0.05f, 0.09f, 6, 9, 0.26f, 0.36f);
-            EmitJetParticle(center, dir, perp, FlameKind.Near, 0f, 0.15f, 0.12f, 7, 10, 0.28f, 0.38f);
-            EmitJetParticle(center, dir, perp, FlameKind.Near, 0.04f, 0.2f, 0.12f, 7, 10, 0.28f, 0.38f);
-            EmitJetParticle(center, dir, perp, FlameKind.Halo, 0.05f, 0.35f, 0.22f, 9, 13, 0.36f, 0.48f);
+            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.02f, 0.06f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
+            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.01f, 0.05f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
+            EmitJetParticle(center, dir, perp, FlameKind.Near, 0f, 0.15f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
+            EmitJetParticle(center, dir, perp, FlameKind.Near, 0.04f, 0.2f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
+            EmitJetParticle(center, dir, perp, FlameKind.Halo, 0.05f, 0.35f, 0.22f, 9, 13, 0.36f, 0.48f, baseVelocity);
 
             if (Main.rand.NextFloat() < 0.5f)
-                EmitJetParticle(center, dir, perp, FlameKind.Trail, 0.25f, 0.7f, 0.3f, 12, 17, 0.24f, 0.34f);
+                EmitJetParticle(center, dir, perp, FlameKind.Trail, 0.25f, 0.7f, 0.3f, 9, 13, 0.24f, 0.34f, baseVelocity);
 
             if (Main.rand.NextFloat() < 0.08f)
             {
                 Vector2 position = center + perp * Main.rand.NextFloat(-3.5f, 3.5f) + dir * Main.rand.NextFloat(0f, 4f);
                 Vector2 velocity = dir * Main.rand.NextFloat(1.2f, 2.2f)
                     + perp * Main.rand.NextFloat(-0.45f, 0.45f)
-                    + new Vector2(0f, -Main.rand.NextFloat(0.2f, 0.7f));
-                Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 24), Main.rand.NextFloat(0.08f, 0.14f));
+                    + new Vector2(0f, -Main.rand.NextFloat(0.2f, 0.7f))
+                    + baseVelocity * 0.4f;
+                Add(position, velocity, FlameKind.Spark, Main.rand.Next(11, 17), Main.rand.NextFloat(0.08f, 0.14f));
             }
         }
 
-        private static void EmitLineParticle(Vector2 butt, Vector2 tip, Vector2 dir, Vector2 perp,
+        private static Particle EmitLineParticle(Vector2 butt, Vector2 tip, Vector2 dir, Vector2 perp,
             FlameKind kind, float along, float speedMin, float speedMax, float sideSpeed,
             int lifeMin, int lifeMax, float sizeMin, float sizeMax, bool anchored)
         {
@@ -195,15 +209,24 @@ namespace FrostMelee.Content.Projectiles
                     _ => 0.008f
                 };
             }
+            return p;
         }
 
         private static void EmitJetParticle(Vector2 center, Vector2 dir, Vector2 perp,
             FlameKind kind, float speedMin, float speedMax, float sideSpeed,
-            int lifeMin, int lifeMax, float sizeMin, float sizeMax)
+            int lifeMin, int lifeMax, float sizeMin, float sizeMax, Vector2 baseVelocity)
         {
             Vector2 position = center + perp * Main.rand.NextFloat(-4f, 4f) + dir * Main.rand.NextFloat(-2f, 2.5f);
+            float inherit = kind switch
+            {
+                FlameKind.Blade => 0.9f,
+                FlameKind.Near => 0.8f,
+                FlameKind.Halo => 0.65f,
+                _ => 0.55f
+            };
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
-                + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed);
+                + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed)
+                + baseVelocity * inherit;
             Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax));
         }
 
@@ -312,7 +335,10 @@ namespace FrostMelee.Content.Projectiles
                     p.Along = MathHelper.Clamp(p.Along - p.Flow, 0.02f, 0.96f);
                     Vector2 perp = new Vector2(-bladeDir.Y, bladeDir.X);
                     Vector2 anchor = Vector2.Lerp(bladeButt, bladeTip, p.Along) + perp * p.Side;
-                    float follow = 1f - (float)System.Math.Exp(-p.Coupling * 0.35f);
+                    // 0.5, а не 0.35: взмах Фростбранда теперь стартует рывком
+                    // (нелинейная скорость), и мягкий догон давал видимый
+                    // шлейф отстающего пламени за клинком
+                    float follow = 1f - (float)System.Math.Exp(-p.Coupling * 0.5f);
                     float wobble = (float)System.Math.Sin((p.Age + p.Wobble) * 0.55f) * 1.1f;
                     p.Position = Vector2.Lerp(p.Position, anchor, follow)
                         + perp * wobble
