@@ -54,6 +54,7 @@ namespace FrostMelee.Content.Projectiles
         private const int LodgedAuraGrowTicks = 120;   // 2 с до полного разгорания
         private const float LodgedAuraMinRadius = 28f;
         private const float LodgedAuraMaxRadius = 88f; // дальше не растёт
+        private const int LodgedHeatTicks = 480;       // «долго сидит»: ещё 8 с пламя только густеет (картинка)
         private const int LodgedBurnPulse = 15;        // как часто поджигать/продлевать
 
         // === Ледяная коса (только ItemID.IceSickle, серп смерти не трогаем) ===
@@ -508,10 +509,16 @@ namespace FrostMelee.Content.Projectiles
             if (Main.dedServ)
                 return;
 
+            // Вторая, медленная стадия разгорания — только картинка: аура и
+            // поджог предел уже набрали (grow за 2 с), а пламя на клинке,
+            // если меч долго сидит, ещё ~8 секунд густеет, крупнеет и светит
+            // сильнее (просьба владельца: «побольше эффекта, когда долго сидит»)
+            float heat = MathHelper.Clamp((lodgedAuraTicks - LodgedAuraGrowTicks) / (float)LodgedHeatTicks, 0f, 1f);
+            float light = 1f + 0.4f * heat;
             Lighting.AddLight(Projectile.Center,
-                0.25f + 0.45f * grow,
-                0.45f + 0.7f * grow,
-                0.7f + 0.9f * grow);
+                (0.25f + 0.45f * grow) * light,
+                (0.45f + 0.7f * grow) * light,
+                (0.7f + 0.9f * grow) * light);
 
             SickleSprite.Geometry geo = Geo;
             Vector2 axis = Projectile.rotation.ToRotationVector2();
@@ -522,7 +529,11 @@ namespace FrostMelee.Content.Projectiles
             // по воздуху вокруг меча больше нет: огонь по воздуху не
             // распространяется (замечание владельца). Сама аура-поджог по
             // радиусу выше работает как работала — убрана только картинка
-            FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow);
+            // На второй половине «нагрева» пламени вдвое больше (второй проход),
+            // а сами языки крупнее — до +70% размера при полном heat
+            int passes = heat >= 0.5f ? 2 : 1;
+            for (int pass = 0; pass < passes; pass++)
+                FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow, 1f + 0.7f * heat);
         }
 
         private void CloseFrostTrail()

@@ -10,7 +10,9 @@ namespace FrostMelee.Content.Projectiles
 {
     public class FrostJetFx : ModSystem
     {
-        private const int MaxParticles = 160;
+        // 280, а не 160: долго торчащий меч на второй стадии разгорания
+        // выпускает вдвое больше частиц и не должен выжирать весь запас
+        private const int MaxParticles = 280;
         private const int BladeGraceTicks = 2;
 
         private enum FlameKind
@@ -51,22 +53,26 @@ namespace FrostMelee.Content.Projectiles
         private static Vector2 bladeVelocity;
         private static uint bladeFrame;
         private static bool bladeLineValid;
+        // Крупность частиц на время текущего вызова EmitBlade*: читается в
+        // EmitLineParticle и искрах. Всё это клиентская косметика в одном
+        // потоке внутри тика — статиком безопасно
+        private static float emitSizeScale = 1f;
 
         // Огонь на клинке В РУКЕ (взмах/тычок/встреча): частицы привязаны к линии
         // клинка и тянутся за ней. Линия одна на всех (bladeButt/bladeTip),
         // поэтому так горит только один меч за раз — тот, что в руке
-        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true);
+        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true, sizeScale);
 
         // Огонь на БРОШЕННОМ клинке (летит или застрял): частицы рождаются на
         // лезвии и гаснут на месте, ни к чему не привязаны и общую линию не
         // трогают. Привязывать нельзя: линия одна, и меч в руке с застрявшим
         // мечом начнут дёргать частицы друг к другу — огонь летает между ними
         // «как электричество» (баг, замеченный владельцем на Дирклопсе)
-        public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false);
+        public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false, sizeScale);
 
-        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored)
+        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored, float sizeScale)
         {
             if (Main.dedServ)
                 return;
@@ -74,6 +80,7 @@ namespace FrostMelee.Content.Projectiles
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 perp = new Vector2(-dir.Y, dir.X);
             intensity = MathHelper.Clamp(intensity, 0.15f, 1f);
+            emitSizeScale = MathHelper.Clamp(sizeScale, 0.5f, 2.5f);
 
             if (anchored)
             {
@@ -123,7 +130,7 @@ namespace FrostMelee.Content.Projectiles
                     ? dir * Main.rand.NextFloat(1f, 2.2f) + perp * Main.rand.NextFloat(-0.4f, 0.4f)
                     : dir * Main.rand.NextFloat(0.1f, 0.35f) + perp * Main.rand.NextFloat(-0.15f, 0.15f);
                 velocity += new Vector2(0f, -Main.rand.NextFloat(0.1f, anchored ? 0.6f : 0.35f));
-                Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f));
+                Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f) * emitSizeScale);
             }
         }
 
@@ -162,7 +169,7 @@ namespace FrostMelee.Content.Projectiles
             Vector2 position = Vector2.Lerp(butt, tip, along) + perp * side;
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
                 + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed);
-            Particle p = Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax));
+            Particle p = Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax) * emitSizeScale);
             if (anchored)
             {
                 p.Anchored = true;
