@@ -16,7 +16,7 @@ namespace WoodSwordsOverhaul
 		private static readonly Dictionary<int, Asset<Texture2D>> originalTextures = new();
 
 		public override void Load() {
-			Logger.Info("Wood Swords: Overhaul v2.0 loaded (приёмы палок, заточки, индикатор).");
+			Logger.Info("WoodSwordsOverhaul:HardcoreMelee v2.1 loaded (приёмы палок, заточки, индикатор).");
 
 			// Жёстко подменяем текстуры ванильных деревянных мечей на наши палки
 			OverrideWoodSwordTextures();

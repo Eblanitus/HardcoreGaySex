@@ -14,7 +14,7 @@ using WoodSwordsOverhaul.Content.Projectiles;
 namespace WoodSwordsOverhaul.Content
 {
     // Мозг системы приёмов палки (см. ФИЛОСОФИЯ.md):
-    // ЛКМ зажать — взмах (ванильный, дугу спавнит WoodSwordsGlobalItem)
+    // ЛКМ зажать — взмах (наша кривая скорости и кисть; дугу спавнит WoodSwordsGlobalItem)
     // ПКМ тап — тумблер копья
     // ПКМ зажать >порога — тычки кинжалом
     // ПКМ зажата + клик ЛКМ — бросок (замах играет после клика)
@@ -23,9 +23,6 @@ namespace WoodSwordsOverhaul.Content
     {
         public const int TapThresholdTicks = 18;   // ~300мс при 60 TPS — порог тап/зажатие
         public const int ThrowHoldTicks = 6;       // задержка клик → вылет (замах)
-        // Кактусовая палка во взмахе: ванильный спрайт висит дальше руки, сдвигаем его
-        // вдоль клинка к рукояти на это число пикселей (подстройка: 1–3 px)
-        public const float CactusSwingHandInset = 2f;
         // Поза броска: замах назад за ThrowHoldTicks, выброс вперёд при вылете, возврат руки
         public const int ThrowFollowTicks = 14;     // сколько тиков длится выброс + возврат после вылета
         private const float ThrowWindupBack = 2.4f; // рука в замахе: угол назад-вверх от линии броска (рад)
@@ -64,6 +61,10 @@ namespace WoodSwordsOverhaul.Content
         public bool PoseItemVisible;
         public Vector2 PoseHandOffset;
         public Vector2 PoseItemDir = Vector2.UnitX;
+
+        // Активная дуга взмаха (ставит WoodSwordArcProjectile.AI каждый тик):
+        // палку во взмахе рисует StickSwingLayer углом этой дуги
+        public Projectile swingArc;
 
         public bool HoldingStick =>
             !Player.HeldItem.IsAir && StickTypes.IsWoodSword(Player.HeldItem);
@@ -256,12 +257,36 @@ namespace WoodSwordsOverhaul.Content
                 return;
             if (ApplyThrowPose())
                 return;
-            // Кактусовая палка во взмахе: сдвиг ванильного спрайта к руке. Только взмах
-            // и только кактус — тычок, копьё, заточки и остальные палки не трогаем.
+            // Взмах: палка и дуга идут по ОДНОЙ формуле угла (как у FrostMelee).
+            // Ванилла рисует предмет по своему itemRotation и ставит его позицию
+            // (itemLocation) тремя ступенями по третям анимации — на нашей
+            // ease-out кривой последняя ступень (~2/3 пути) роняет рукоять вниз,
+            // когда палка уже почти остановилась: покадрово это прыжок рукояти
+            // вглубь игрока. Поэтому угол, рука и кисть здесь наши: предмет
+            // перебит нашей кривой (StickSwingLayer рисует палку углом дуги от
+            // приклада по StickSprite, ванильная картинка выключена —
+            // noUseGraphic), композитная рука вытянута вдоль палки, а приклад
+            // стоит на её кисти гладкой дугой вокруг плеча. Бывший сдвиг
+            // кактусовой палки к руке потому и убран: приклад по геометрии
+            // спрайта точен у всех палок, включая кактус.
             if (Player.itemAnimation > 0)
             {
-                if (CurrentMode == Mode.Swing && Player.HeldItem.type == ItemID.CactusSword)
-                    Player.itemLocation -= CactusSwingBladeDir() * CactusSwingHandInset;
+                if (CurrentMode == Mode.Swing && Player.itemAnimationMax > 0)
+                {
+                    float progress = 1f - Player.itemAnimation / (float)Player.itemAnimationMax;
+                    progress = WoodSwordArcProjectile.SwingProgressCurve(progress);
+                    float theta = Player.direction >= 0
+                        ? MathHelper.Pi * (1f + progress)
+                        : -MathHelper.Pi * progress;
+                    theta += Player.fullRotation;
+                    bool flipped = Player.direction == -1;
+                    StickSprite.Geometry geo = StickSprite.Get(Player.HeldItem.type);
+                    Player.itemRotation = MathHelper.WrapAngle(theta - geo.AngleFor(flipped));
+
+                    float armRot = theta - MathHelper.PiOver2;
+                    Player.SetCompositeArmFront(true, Player.CompositeArmStretchAmount.Full, armRot);
+                    Player.itemLocation = StickSprite.HandGrip(Player, Player.CompositeArmStretchAmount.Full, armRot);
+                }
                 return;
             }
 
@@ -361,17 +386,6 @@ namespace WoodSwordsOverhaul.Content
                 PoseHandOffset = StickSprite.HandGrip(Player, stretch, armRot) - Player.Center;
             }
             return true;
-        }
-
-        // Направление клинка (от приклада к острию) в мире во время взмаха кактусовой палки.
-        // Геометрия спрайта — по пикселям (StickSprite); зеркалим при direction = -1 и
-        // поворачиваем на угол взмаха предмета.
-        private Vector2 CactusSwingBladeDir()
-        {
-            StickSprite.Geometry geo = StickSprite.Get(ItemID.CactusSword);
-            Vector2 blade = (geo.Tip - geo.Butt).SafeNormalize(new Vector2(1f, -1f));
-            blade.X *= Player.direction;
-            return blade.RotatedBy(Player.itemRotation).SafeNormalize(Vector2.UnitX);
         }
 
         private bool IsMyProjectile(int index, int type)

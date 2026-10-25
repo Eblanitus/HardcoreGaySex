@@ -83,6 +83,9 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 		public override void AI() {
 			Projectile.localAI[0]++;
 			Player player = Main.player[Projectile.owner];
+			// Клинок взмаха рисуется от этой дуги (StickSwingLayer): одинаковый
+			// угол у дуги и палки гарантирован источником, а не синхронизацией
+			player.GetModPlayer<StickPlayer>().swingArc = Projectile;
 			float maxAnim = Math.Max(1f, Projectile.ai[1]);
 			GetArcState(player, Projectile.localAI[0], out float rotation, out float scale);
 			Projectile.rotation = rotation;
@@ -92,7 +95,11 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 			if (DebugHitbox && Projectile.owner == Main.myPlayer)
 				ShowHitbox(player);
 
-			if (Projectile.localAI[0] >= maxAnim) {
+			// Конец взмаха — строго вместе с анимацией руки: при itemAnimation == 0
+			// игра уже вернула руку в обычную позу, и доживающий кадр дуги давал
+			// прыжок рукояти (урок FrostMelee, покадровый разбор владельца)
+			if (Projectile.localAI[0] >= maxAnim
+				|| (Projectile.owner == Main.myPlayer && player.itemAnimation <= 0)) {
 				Projectile.Kill();
 			}
 
@@ -103,11 +110,23 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 			Projectile.EmitEnchantmentVisualsAt(rectangle.TopLeft(), rectangle.Width, rectangle.Height);
 		}
 
+		// === Скорость взмаха: нелинейная, как у FrostMelee (серия HardcoreMelee) ===
+		// Быстрый старт, замедляющийся конец (ease-out: 1-(1-t)^степень).
+		// Функцию обязаны звать ВСЕ места с формулой угла взмаха: GetArcState
+		// здесь и itemRotation в StickPlayer.PostUpdate — иначе клинок, дуга
+		// и хитбокс разойдутся по разным кривым.
+		public const float SwingEaseOutPower = 1.8f;  // резкость старта взмаха (1 — линейно)
+
+		public static float SwingProgressCurve(float progress) {
+			progress = MathHelper.Clamp(progress, 0f, 1f);
+			return 1f - (float)Math.Pow(1f - progress, SwingEaseOutPower);
+		}
+
 		// Поворот и масштаб дуги на момент time (тиков от спавна) —
 		// одна формула для отрисовки (AI) и для хитбокса (Colliding)
 		private void GetArcState(Player player, float time, out float rotation, out float scale) {
 			float percentageOfLife = time / Math.Max(1f, Projectile.ai[1]);
-			rotation = Projectile.velocity.ToRotation() + Projectile.ai[0] * MathHelper.Pi * percentageOfLife + player.fullRotation + MathHelper.Pi;
+			rotation = Projectile.velocity.ToRotation() + Projectile.ai[0] * MathHelper.Pi * SwingProgressCurve(percentageOfLife) + player.fullRotation + MathHelper.Pi;
 
 			scale = (ArcScaleStart + percentageOfLife * ArcScaleGrowth) * Projectile.ai[2];
 		}
