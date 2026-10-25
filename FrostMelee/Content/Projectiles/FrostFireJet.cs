@@ -42,7 +42,9 @@ namespace FrostMelee.Content.Projectiles
             // если игрок сразу после взмаха начинал тычок
 
             if (Projectile.timeLeft % 2 == 0)
-                FrostJetFx.EmitJet(Projectile.Center, dir);
+                // Скорость снаряда — частицам: пламя летит вместе со струёй,
+                // а не остаётся висеть в месте рождения позади взмаха
+                FrostJetFx.EmitJet(Projectile.Center, dir, Projectile.velocity);
 
             // Пыль редкая: веер взмаха спавнит струй много, и частая пыль
             // каждой складывалась в рой крестиков, забивавший саму дугу.
