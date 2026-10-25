@@ -84,6 +84,12 @@ namespace FrostMelee.Content.Weapons
             Main.netMode == NetmodeID.SinglePlayer || Player.whoAmI == Main.myPlayer;
         public bool HoldsFlame(NPC npc) => flameHolders.ContainsKey(npc.whoAmI);
         public int FreeFlames => Math.Max(0, MaxFlames - flameHolders.Count - wispCount);
+
+        // Какая доля огня при мече и игроке (запас + живые огоньки), а не сидит
+        // на врагах. Дуга взмаха по ней показывает, есть ли чем поджигать
+        public float FlameFullness => FlameAuthority
+            ? MathHelper.Clamp((FreeFlames + wispCount) / (float)MaxFlames, 0f, 1f)
+            : 1f;
         public void AddFlameHolder(NPC npc) => flameHolders[npc.whoAmI] = npc.Center;
 
         private int FlameDamage()

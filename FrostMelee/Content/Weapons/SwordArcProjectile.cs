@@ -62,21 +62,6 @@ namespace FrostMelee.Content.Weapons
         // true — показать пылью зону клинка (полный урон) и внешний край хитбокса
         public static bool DebugHitbox = false;
 
-        // Палитра ленты следует за «яркостью» клинка: тусклый даёт матовый
-        // морозный шлейф, яркий — сияние. Что такое яркость, у мечей разное:
-        // у Ice Blade — его полировка (именно ЭТОГО меча по SwordItem, а не
-        // IceFrostShown), у Frostbrand полировки нет — он ярчеет от числа
-        // горящих рядом врагов (FireGlow), как и пламя на его клинке.
-        private void GlowColors(out Color core, out Color tail, out Color edge) {
-            Player owner = Main.player[Projectile.owner];
-            int item = SwordItem != 0 ? SwordItem : owner.HeldItem.type;
-            SwordPlayer sp = owner.GetModPlayer<SwordPlayer>();
-            float polish = item == ItemID.Frostbrand
-                ? MathHelper.Clamp(0.25f + 0.75f * sp.FireGlow, 0f, 1f)
-                : 1f - sp.GetFrostShown(item);
-            IceBladeFx.ArcColors(polish, out core, out tail, out edge);
-        }
-
         public override void SetStaticDefaults() {
             Main.projFrames[Type] = 4;
         }
@@ -123,12 +108,12 @@ namespace FrostMelee.Content.Weapons
                 && Projectile.localAI[0] % 2 == 0)
                 SpawnArcJets(player);
 
-            // Визуал (все клиенты): Ice Blade точится об воздух, остальные — иней вдоль дуги
+            // Визуал (все клиенты): Ice Blade точится об воздух, Фростбранд сыплет угли пламени
             if (!Main.dedServ) {
                 if (IsIceBlade(player))
                     UpdateHone(player, maxAnim);
                 else
-                    SpawnFrostDust(player);
+                    SpawnFlameSparks(player, maxAnim);
             }
 
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
@@ -230,24 +215,45 @@ namespace FrostMelee.Content.Weapons
 
         private static readonly float[] FrostTrailRadii = new float[] { 0.5f, 0.8f, 1f };
 
-        // Инеевая роса вдоль линии дуги: кристаллики появляются чуть позади
-        // движущейся головы — свежая полоса льда тут же осыпается снегом.
-        private void SpawnFrostDust(Player player) {
-            // Центр ленты — кисть, а не центр тела: клинок вращается вокруг
-            // руки, и лента на той же оси не отстаёт от меча ни на градус
+        // Фростбранд: угли холодного пламени вдоль дуги (частицы в AI, как искры
+        // у копья). Густота — от запаса огня: пустой меч почти не сыплет, только
+        // редкую морозную пыль голого клинка. На пике взмаха — сноп с острия.
+        private void SpawnFlameSparks(Player player, float maxAnim) {
+            // Центр — кисть, а не центр тела: клинок вращается вокруг руки,
+            // и угли на той же оси не отстают от меча ни на градус
             Vector2 center = player.itemLocation;
             float radius = LineTexOuter * ArcScaleAt(Projectile.localAI[0]) * BodyDrawScale * LineDrawScale;
             if (radius <= 1f)
                 return;
+            float full = player.GetModPlayer<SwordPlayer>().FlameFullness;
             int dir = Projectile.ai[0] >= 0f ? 1 : -1;
-            for (int i = 0; i < 2; i++) {
-                float back = MathHelper.ToRadians(Main.rand.NextFloat(0f, 45f));   // от головы к хвосту
-                float ang = IceArcFx.HeadAngleOf(Projectile.rotation, dir) - dir * back;
-                Vector2 at = center + ang.ToRotationVector2() * radius * Main.rand.NextFloat(0.9f, 1.06f);
-                Dust d = Dust.NewDustPerfect(at, Main.rand.NextBool(3) ? DustID.SnowflakeIce : DustID.Frost,
-                    Main.rand.NextVector2Circular(0.8f, 0.8f), 110, default, Main.rand.NextFloat(0.7f, 1.2f));
+            float headAng = IceArcFx.HeadAngleOf(Projectile.rotation, dir);
+
+            int embers = full > 0.02f ? 2 + (Main.rand.NextFloat() < full ? 1 : 0) : 0;
+            for (int i = 0; i < embers; i++) {
+                float back = MathHelper.ToRadians(Main.rand.NextFloat(0f, 60f));   // от головы к хвосту
+                float ang = headAng - dir * back;
+                Vector2 at = center + ang.ToRotationVector2() * radius * Main.rand.NextFloat(0.7f, 1.05f);
+                // Угли сносит назад против хода взмаха и чуть вверх, как искры пламени
+                Vector2 drift = (ang - dir * MathHelper.PiOver2).ToRotationVector2() * Main.rand.NextFloat(0.4f, 1.2f);
+                drift.Y -= 0.25f;
+                Dust d = Dust.NewDustPerfect(at, DustID.IceTorch, drift, 100, default, Main.rand.NextFloat(1f, 1.6f));
                 d.noGravity = true;
-                d.fadeIn = 0.35f;
+                d.fadeIn = 0.4f;
+            }
+            if (embers == 0 && Main.rand.NextBool(2)) {
+                Vector2 at = center + headAng.ToRotationVector2() * radius * Main.rand.NextFloat(0.85f, 1.05f);
+                Dust d = Dust.NewDustPerfect(at, DustID.Frost, Main.rand.NextVector2Circular(0.5f, 0.5f), 140, default, Main.rand.NextFloat(0.8f, 1.1f));
+                d.noGravity = true;
+            }
+            // Ровно в тик пика — сноп углей с острия
+            if (full > 0.02f && (int)Projectile.localAI[0] == (int)(maxAnim * PeakAt)
+                && GetBladeLine(player, out _, out Vector2 tip)) {
+                for (int i = 0; i < 10; i++) {
+                    Dust d = Dust.NewDustPerfect(tip, DustID.IceTorch, Main.rand.NextVector2Circular(3.2f, 3.2f), 100,
+                        default, Main.rand.NextFloat(1.1f, 1.8f));
+                    d.noGravity = true;
+                }
             }
         }
 
@@ -275,12 +281,11 @@ namespace FrostMelee.Content.Weapons
             frostTrail = null;
         }
 
-        // === Лента-шлейф взмаха, головная точка и пик-вспышка: тот же IceRibbon, что у серпа ===
-        // История углов — ArcRotation на столько тиков назад (TrailTicks), впереди головы только
+        // === Лента по истории углов: общая для дуги Фростбранда и отточенного Ice Blade ===
+        // История — ArcRotation на столько тиков назад (TrailTicks), впереди головы только
         // текущая точка. Радиусы по ArcScaleAt каждого момента: лента растёт вместе с дугой.
         private const float TrailTicks = 14f;        // на сколько тиков назад тянется лента
         private const float TrailMaxAngle = 2.2f;    // рад: лента не оборачивается вокруг игрока
-        private const int TrailPoints = 16;          // точек ленты
         private const float TrailInnerFrac = 0.55f;  // внутренний край ленты: доля радиуса от внешнего
         private const float TrailHeadDot = 18f;      // размер яркой точки у острия, px
         private const float PeakAt = 0.5f;           // доля взмаха, где пик
@@ -289,9 +294,23 @@ namespace FrostMelee.Content.Weapons
         private const float PeakFlashAlpha = 0.7f;   // её яркость
         private const float PeakStarSize = 64f;      // длина лучей звезды вспышки, px
 
-        private static readonly float[] swooshAngles = new float[TrailPoints];
-        private static readonly float[] swooshROut = new float[TrailPoints];
-        private static readonly float[] swooshRIn = new float[TrailPoints];
+        // --- Дуга Фростбранда: палитра холодного пламени (та же, что у огоньков и забора) ---
+        private static readonly Color FlameCore = new Color(240, 252, 255); // белый жар
+        private static readonly Color FlameTail = new Color(150, 220, 255); // голубое пламя
+        private static readonly Color FlameEdge = new Color(50, 120, 255);  // глубокий синий
+        private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
+        private const float FlameInnerFrac = 0.35f;    // лента шире обычной: внутренний край ближе к руке
+        private const int FlameHaloSteps = 24;         // мазков ореола
+        private const float FlameHaloWidth = 60f;      // ореол у острия, px
+        private const float FlameHaloWidthTail = 16f;  // ореол на хвосте, px
+        private const float FlameHaloAlpha = 0.22f;    // яркость ореола у головы → 0 на конце
+        private const int FlameTongues = 5;            // язычков-всполохов на хвосте ленты
+        private const float FlameTongueSize = 30f;     // длина языка, px
+        private const int FlameTwinkles = 4;           // искр-звёздочек по ленте
+
+        private static readonly float[] fbAngles = new float[FlamePoints];
+        private static readonly float[] fbROut = new float[FlamePoints];
+        private static readonly float[] fbRIn = new float[FlamePoints];
 
         private static float Smooth01(float x) {
             x = MathHelper.Clamp(x, 0f, 1f);
@@ -313,42 +332,132 @@ namespace FrostMelee.Content.Weapons
             return Math.Max(LineTexOuter * ArcScaleAt(time) * BodyDrawScale * LineDrawScale, BladeReach);
         }
 
-        private void DrawSwoosh(Player player, Texture2D glow, float progress, float maxAnim) {
+        // Дуга Фростбранда — холодное пламя по следу клинка. Набор слоёв как у
+        // дуги копья (горячая линия, ореол, лента с бегущими штрихами, головка
+        // у острия, детали на хвосте, пик-вспышка), но в палитре пламени и с
+        // показом запаса: густота огня = FlameFullness. Запас пуст — ореол и
+        // языки пропадают, остаются едва видимая лента и бледная линия: взмах
+        // никого нового не подожжёт, и это видно сразу.
+        private void DrawFlameArc(Player player, Texture2D texture, Vector2 position, Vector2 origin, float scale, SpriteEffects fx, float progress, float fade, float maxAnim) {
+            if (Main.dedServ)
+                return;
+            SwordPlayer sp = player.GetModPlayer<SwordPlayer>();
+            float full = sp.FlameFullness;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            if (env <= 0.02f || Main.dedServ)
+            float level = 0.15f + 0.85f * full;            // пустой меч — едва видимый холодный след
+            float glowBoost = 0.75f + 0.45f * sp.FireGlow; // горящие рядом подкармливают яркость
+            float flameEnv = env * level * glowBoost;
+
+            // Горячая линия под всем: белый жар по кромке, синий обод.
+            // У пустого меча остаётся почти только она, бледная
+            IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
+                scale * LineDrawScale, fx, 0.38f * fade * (0.3f + 0.7f * full), FlameEdge, FlameCore);
+
+            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
+            if (glow == null || glow.IsDisposed || env <= 0.02f)
                 return;
             Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
-            GlowColors(out Color core, out Color tail, out Color edge);
+            int n = BuildTrailHistory(player, fbAngles, fbROut, fbRIn);
+            if (n < 2)
+                return;
+            // Фаза мерцания и бега штрихов: минутный цикл (штрихи сдвигаются на
+            // целое число повторов текстуры — стык цикла не виден)
+            float gt = Main.GameUpdateCount % 3600;
+            // Лента шире обычной мечовой, а её внешний край дышит языками:
+            // радиус каждой точки слегка дрожит, к хвосту сильнее
+            for (int i = 0; i < n; i++) {
+                float t = i / (float)(n - 1);
+                float flick = 1f + 0.06f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
+                fbROut[i] *= flick;
+                fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+            }
 
+            // Ореол под лентой (как у копья): мягкие широкие мазки по следу острия
+            if (full > 0.02f) {
+                Color haloCol = Color.Lerp(FlameTail, FlameEdge, 0.5f);
+                Vector2 prev = FlamePoint(center, n, 0f);
+                for (int j = 1; j <= FlameHaloSteps; j++) {
+                    float t0 = (j - 1) / (float)FlameHaloSteps, t1 = j / (float)FlameHaloSteps;
+                    Vector2 next = FlamePoint(center, n, t1);
+                    IceArcFx.DrawSegment(glow, prev, next,
+                        MathHelper.Lerp(FlameHaloWidth, FlameHaloWidthTail, t0),
+                        MathHelper.Lerp(FlameHaloWidth, FlameHaloWidthTail, t1),
+                        IceArcFx.Additive(haloCol, FlameHaloAlpha * flameEnv * (1f - (t0 + t1) * 0.5f)));
+                    prev = next;
+                }
+            }
+
+            // Лента: градиент + бегущие штрихи — потоки пламени вдоль взмаха
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            Main.spriteBatch.End();
+            try {
+                IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
+                    gt, flameEnv, FlameCore, FlameTail, FlameEdge, streaks: true);
+            }
+            finally {
+                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+            }
+
+            Vector2 gorigin = glow.Size() / 2f;
             float head = Projectile.rotation;
-            int n = BuildTrailHistory(player, swooshAngles, swooshROut, swooshRIn);
+            Vector2 tip = center + head.ToRotationVector2() * fbROut[0];
 
-            if (n >= 2) {
-                GraphicsDevice device = Main.graphics.GraphicsDevice;
-                Main.spriteBatch.End();
-                try {
-                    IceRibbon.Draw(device, swooshAngles, n, center, swooshROut, swooshRIn,
-                        Projectile.localAI[0], env, core, tail, edge, streaks: false);
+            // Головка у острия: яркая капля жара, дрожит как пламя
+            float headFlick = 0.85f + 0.15f * (float)Math.Sin(gt * 2.3f);
+            Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null,
+                IceArcFx.Additive(FlameCore, flameEnv), 0f, gorigin,
+                TrailHeadDot * 1.6f * headFlick / glow.Width, SpriteEffects.None, 0f);
+
+            if (full > 0.02f) {
+                // Языки на хвосте: короткие вытянутые всполохи вдоль хода ленты
+                for (int i = 0; i < FlameTongues; i++) {
+                    float t = (i + 0.5f) / FlameTongues * 0.85f;
+                    float tw = 0.5f + 0.5f * (float)Math.Sin(gt * 1.4f + i * 2.4f);
+                    if (tw < 0.3f)
+                        continue;
+                    Vector2 p0 = FlamePoint(center, n, t);
+                    Vector2 p1 = FlamePoint(center, n, Math.Min(1f, t + 0.06f));
+                    float tang = (p0 - p1).ToRotation(); // по ходу взмаха: от хвоста к голове
+                    float len = FlameTongueSize * tw * (1f - t * 0.3f);
+                    Color c = Color.Lerp(FlameTail, FlameCore, 0.35f + 0.4f * tw);
+                    Main.EntitySpriteDraw(glow, p0 - Main.screenPosition, null,
+                        IceArcFx.Additive(c, 0.8f * tw * flameEnv * (1f - t * 0.5f)), tang, gorigin,
+                        new Vector2(len / glow.Width, len * 0.16f / glow.Height), SpriteEffects.None, 0f);
                 }
-                finally {
-                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
-                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                // Искры-угли: маленькие звёздочки по ленте
+                for (int i = 0; i < FlameTwinkles; i++) {
+                    float t = (i + 0.5f) / FlameTwinkles;
+                    float tw = 0.5f + 0.5f * (float)Math.Sin(gt * 1.1f + i * 1.9f);
+                    if (tw < 0.35f)
+                        continue;
+                    Vector2 pos = FlamePoint(center, n, t, 0.8f + 0.2f * (float)Math.Abs(Math.Sin(i * 3.1f)));
+                    IceArcFx.DrawSparkle(glow, pos, 11f * tw, i + gt * 0.15f, 2,
+                        IceArcFx.Additive(FlameCore, 0.85f * tw * flameEnv * (1f - t * 0.6f)),
+                        IceArcFx.Additive(FlameCore, 0.85f * tw * flameEnv));
                 }
-                // кристаллы по краю ленты убраны: отдельные пятна рвали дугу на куски
             }
 
-            // пик-вспышка: пятно + звезда у острия и ледяная нова вокруг игрока
-            Vector2 tip = center + head.ToRotationVector2() * swooshROut[0];
-            float peak = PeakPulse(progress, maxAnim) * env;
+            // Пик-вспышка у острия: пятно + звезда, у пустого меча бледная
+            float peak = PeakPulse(progress, maxAnim) * flameEnv;
             if (peak > 0.03f) {
-                Vector2 origin = glow.Size() / 2f;
-                Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(edge, peak * PeakFlashAlpha), 0f,
-                    origin, PeakFlashSize * (0.7f + 0.5f * peak) / glow.Width, SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(core, peak * PeakFlashAlpha), 0f,
-                    origin, PeakFlashSize * 0.4f / glow.Width, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(FlameEdge, peak * PeakFlashAlpha), 0f,
+                    gorigin, PeakFlashSize * (0.7f + 0.5f * peak) / glow.Width, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(FlameCore, peak * PeakFlashAlpha), 0f,
+                    gorigin, PeakFlashSize * 0.4f / glow.Width, SpriteEffects.None, 0f);
                 IceArcFx.DrawSparkle(glow, tip, PeakStarSize * peak, head + MathHelper.PiOver4, 2,
-                    IceArcFx.Additive(Color.Lerp(tail, core, 0.5f), peak * 0.9f), IceArcFx.Additive(core, peak));
+                    IceArcFx.Additive(Color.Lerp(FlameTail, FlameCore, 0.5f), peak * 0.9f), IceArcFx.Additive(FlameCore, peak));
             }
+        }
+
+        // Точка на ленте Фростбранда: t — доля вдоль (0 голова, 1 хвост), radius — доля внешнего радиуса
+        private static Vector2 FlamePoint(Vector2 center, int n, float t, float radius = 1f) {
+            float f = MathHelper.Clamp(t, 0f, 1f) * (n - 1);
+            int i = Math.Min((int)f, n - 2);
+            float k = f - i;
+            float ang = MathHelper.Lerp(fbAngles[i], fbAngles[i + 1], k);
+            float r = MathHelper.Lerp(fbROut[i], fbROut[i + 1], k);
+            return center + ang.ToRotationVector2() * r * radius;
         }
 
         // === Ice Blade: клинок точится об воздух ===
@@ -757,25 +866,13 @@ namespace FrostMelee.Content.Weapons
             float percentageOfLife = Projectile.localAI[0] / maxAnim;
             float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
-            // Линия дуги (по ней считается хитбокс — см. LineTexOuter): ледяной обод +
-            // светлое ядро с дыханием (IceArcFx) и мерцающие кристаллики вдоль неё.
-            // Поверх — IceRibbon-лента по истории углов, кристаллы на кромке и пик-вспышка
             Player owner = Main.player[Projectile.owner];
             if (IsIceBlade(owner)) {
                 DrawHone(owner, texture, scale, spriteEffects, percentageOfLife, lerpTime, maxAnim);
                 return false;
             }
-            float lineScale = scale * LineDrawScale;
-            GlowColors(out Color arcCore, out Color arcTail, out _);
-            IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
-                lineScale, spriteEffects, 0.3f * lerpTime, arcTail, arcCore);
-            Vector2 wedgeTip = owner.RotatedRelativePoint(owner.MountedCenter);
-            IceArcFx.DrawSparkles(wedgeTip, Projectile.rotation,
-                Projectile.ai[0] >= 0f ? 1 : -1, LineTexOuter * lineScale, Projectile.localAI[0], lerpTime, arcTail, arcCore);
-            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
-            if (glow != null && !glow.IsDisposed)
-                DrawSwoosh(owner, glow, percentageOfLife, maxAnim);
-
+            // Второй меч движка — Фростбранд: у него своя дуга холодного пламени
+            DrawFlameArc(owner, texture, position, origin, scale, spriteEffects, percentageOfLife, lerpTime, maxAnim);
             return false;
         }
 
