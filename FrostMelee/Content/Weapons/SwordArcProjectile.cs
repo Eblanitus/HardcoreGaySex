@@ -124,7 +124,13 @@ namespace FrostMelee.Content.Weapons
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
                 ShowHitbox(player);
 
-            if (Projectile.localAI[0] >= maxAnim) {
+            // Конец взмаха — строго вместе с анимацией руки: если itemAnimation
+            // уже 0, игра вернула руку в обычную позу (itemLocation ближе к телу),
+            // а дуга ещё жива — на этот последний кадр клинок прыгал рукояткой
+            // вглубь игрока, а дуга оставалась на старой записи (владелец нашёл
+            // покадровым разбором). Умираем в тот же тик, лишнего кадра нет
+            if (Projectile.localAI[0] >= maxAnim
+                || (Projectile.owner == Main.myPlayer && player.itemAnimation <= 0)) {
                 Projectile.Kill();
             }
 
@@ -696,11 +702,15 @@ namespace FrostMelee.Content.Weapons
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
             // Форма как у Фростбранда: веер центром на кисти и размером по
             // настоящему клинку (запись fbHist*), а не формульный сектор вокруг
-            // центра тела с растущим радиусом. Нет записи (первый тик) — старый путь
+            // центра тела с растущим радиусом. Нет записи (первый тик) — старый путь.
+            // Центр — ЖИВАЯ кисть в момент отрисовки (player.itemLocation), а не
+            // записанная в AI fbHand: клинок слой рисует от живой кисти, а запись
+            // могла отставать от неё на пиксель-другой хода руки — дуга казалась
+            // ушедшей вглубь относительно клинка. Углы и радиус — по-прежнему запись
             bool rec = fbHasBlade && fbHistCount >= 1;
             // Ванильный слеш — всегда: и на тупом, и на отточенном клинке он остаётся
             IceBladeFx.DrawSwingArc(texture,
-                rec ? fbHand : Projectile.Center,
+                rec ? player.itemLocation : Projectile.Center,
                 rec ? fbHistAngle[0] : Projectile.rotation, dir,
                 rec ? fbHistRadius[0] / LineTexOuter : scale * LineDrawScale, fx,
                 progress, fade, polish);
@@ -820,7 +830,7 @@ namespace FrostMelee.Content.Weapons
             // клинок из записи (fbHist*); лента — по записанному пути острия.
             // Нет записи (первый тик) — прежний формульный путь вокруг центра тела
             bool rec = fbHasBlade && fbHistCount >= 1;
-            Vector2 center = rec ? fbHand : Projectile.Center;
+            Vector2 center = rec ? player.itemLocation : Projectile.Center;
             float headAngle = rec ? fbHistAngle[0] : Projectile.rotation;
             float lineScale = rec ? fbHistRadius[0] / LineTexOuter : scale * LineDrawScale;
 
@@ -833,7 +843,7 @@ namespace FrostMelee.Content.Weapons
                 IceBladeFx.ArcLineColor(IceBladeFx.PolishOf(player, SwordItem)) * (0.25f * fade * keen),
                 headAngle - dir * IceArcFx.HeadAngle, texture.Frame(1, 4).Size() / 2f, lineScale, fx, 0f);
 
-            DrawTrailRibbon(player, glow, env * keen, core, tail, edge, rec ? fbHand : null, rec);
+            DrawTrailRibbon(player, glow, env * keen, core, tail, edge, rec ? center : null, rec);
         }
 
         // Лента по следу взмаха + мягкий ореол под ней — общая часть дуг шаблона
