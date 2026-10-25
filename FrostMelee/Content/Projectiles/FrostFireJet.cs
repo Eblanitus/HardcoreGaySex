@@ -69,11 +69,6 @@ namespace FrostMelee.Content.Projectiles
                         continue;
                     if (!npc.Hitbox.Intersects(hitbox))
                         continue;
-                    // Диагностика: только свежий поджог (не обновление), чтобы
-                    // в client.log было видно, что струя реально поджигает.
-                    // TODO: убрать, когда подтвердится в игре
-                    if (!Weapons.FrostFireSystem.IsBurning(npc))
-                        Mod.Logger.Info($"[Jet] струя подожгла: {npc.FullName}");
                     Weapons.FrostFireSystem.Ignite(npc);
                 }
             }
