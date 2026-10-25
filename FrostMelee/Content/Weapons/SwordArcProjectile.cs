@@ -295,17 +295,18 @@ namespace FrostMelee.Content.Weapons
         private const float PeakStarSize = 64f;      // длина лучей звезды вспышки, px
 
         // --- Дуга Фростбранда: палитра холодного пламени (та же, что у огоньков и забора) ---
-        private static readonly Color FlameCore = new Color(240, 252, 255); // белый жар
-        private static readonly Color FlameTail = new Color(150, 220, 255); // голубое пламя
-        private static readonly Color FlameEdge = new Color(50, 120, 255);  // глубокий синий
+        private static readonly Color FlameCore = new Color(235, 250, 255); // белый жар
+        private static readonly Color FlameTail = new Color(115, 200, 255); // голубое пламя
+        private static readonly Color FlameEdge = new Color(25, 85, 240);   // глубокий синий
         private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
-        private const float FlameInnerFrac = 0.35f;    // лента шире обычной: внутренний край ближе к руке
+        private const float FlameInnerFrac = 0.52f;    // ширина как у копья: внешняя половина следа клинка
+        private const float FlameStreaks = 0.55f;      // потоки внутри тела ленты, а не полосы вместо него
         private const int FlameHaloSteps = 24;         // мазков ореола
-        private const float FlameHaloWidth = 60f;      // ореол у острия, px
-        private const float FlameHaloWidthTail = 16f;  // ореол на хвосте, px
-        private const float FlameHaloAlpha = 0.22f;    // яркость ореола у головы → 0 на конце
-        private const int FlameTongues = 5;            // язычков-всполохов на хвосте ленты
-        private const float FlameTongueSize = 30f;     // длина языка, px
+        private const float FlameHaloWidth = 50f;      // ореол у острия, px
+        private const float FlameHaloWidthTail = 14f;  // ореол на хвосте, px
+        private const float FlameHaloAlpha = 0.15f;    // яркость ореола у головы → 0 на конце
+        private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
+        private const float FlameTongueSize = 34f;     // длина языка, px
         private const int FlameTwinkles = 4;           // искр-звёздочек по ленте
 
         private static readonly float[] fbAngles = new float[FlamePoints];
@@ -344,7 +345,7 @@ namespace FrostMelee.Content.Weapons
             SwordPlayer sp = player.GetModPlayer<SwordPlayer>();
             float full = sp.FlameFullness;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            float level = 0.15f + 0.85f * full;            // пустой меч — едва видимый холодный след
+            float level = 0.3f + 0.7f * full;              // пустой меч заметно бледнее, но след виден
             float glowBoost = 0.75f + 0.45f * sp.FireGlow; // горящие рядом подкармливают яркость
             float flameEnv = env * level * glowBoost;
 
@@ -392,7 +393,7 @@ namespace FrostMelee.Content.Weapons
             Main.spriteBatch.End();
             try {
                 IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
-                    gt, flameEnv, FlameCore, FlameTail, FlameEdge, streaks: true);
+                    gt, flameEnv, FlameCore, FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
             }
             finally {
                 Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
@@ -407,7 +408,7 @@ namespace FrostMelee.Content.Weapons
             float headFlick = 0.85f + 0.15f * (float)Math.Sin(gt * 2.3f);
             Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null,
                 IceArcFx.Additive(FlameCore, flameEnv), 0f, gorigin,
-                TrailHeadDot * 1.6f * headFlick / glow.Width, SpriteEffects.None, 0f);
+                TrailHeadDot * 1.35f * headFlick / glow.Width, SpriteEffects.None, 0f);
 
             if (full > 0.02f) {
                 // Языки на хвосте: короткие вытянутые всполохи вдоль хода ленты
@@ -422,7 +423,7 @@ namespace FrostMelee.Content.Weapons
                     float len = FlameTongueSize * tw * (1f - t * 0.3f);
                     Color c = Color.Lerp(FlameTail, FlameCore, 0.35f + 0.4f * tw);
                     Main.EntitySpriteDraw(glow, p0 - Main.screenPosition, null,
-                        IceArcFx.Additive(c, 0.8f * tw * flameEnv * (1f - t * 0.5f)), tang, gorigin,
+                        IceArcFx.Additive(c, 0.95f * tw * flameEnv * (1f - t * 0.5f)), tang, gorigin,
                         new Vector2(len / glow.Width, len * 0.16f / glow.Height), SpriteEffects.None, 0f);
                 }
                 // Искры-угли: маленькие звёздочки по ленте
@@ -432,9 +433,9 @@ namespace FrostMelee.Content.Weapons
                     if (tw < 0.35f)
                         continue;
                     Vector2 pos = FlamePoint(center, n, t, 0.8f + 0.2f * (float)Math.Abs(Math.Sin(i * 3.1f)));
-                    IceArcFx.DrawSparkle(glow, pos, 11f * tw, i + gt * 0.15f, 2,
-                        IceArcFx.Additive(FlameCore, 0.85f * tw * flameEnv * (1f - t * 0.6f)),
-                        IceArcFx.Additive(FlameCore, 0.85f * tw * flameEnv));
+                    IceArcFx.DrawSparkle(glow, pos, 9f * tw, i + gt * 0.15f, 2,
+                        IceArcFx.Additive(FlameCore, 0.6f * tw * flameEnv * (1f - t * 0.6f)),
+                        IceArcFx.Additive(FlameCore, 0.6f * tw * flameEnv));
                 }
             }
 
