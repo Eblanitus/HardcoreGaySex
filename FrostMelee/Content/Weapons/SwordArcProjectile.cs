@@ -416,10 +416,21 @@ namespace FrostMelee.Content.Weapons
                     if (i > 0 && Math.Abs(fbHistAngle[i] - headA) > TrailMaxAngle)
                         break;
                     float t = i / (float)Math.Max(1, cap - 1);
-                    float flick = 1f + 0.04f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
+                    // Форма НЕлинейная (решение владельца): не полоска ровной
+                    // толщины по кругу, а язык пламени. Утолщение к середине
+                    // взмаха и схождение к краям (bulge: 0 у острия и на хвосте,
+                    // 1 в середине), середина чуть выпячена наружу, а внешний
+                    // край идёт волнами — крупная медленная волна по длине плюс
+                    // мелкая дрожь, к хвосту сильнее. Углы по-прежнему честные
+                    // с клинка — гуляют только радиус и толщина
+                    float bulge = (float)Math.Sin(Math.PI * Math.Pow(t, 0.85f));
+                    float wave = (float)Math.Sin(gt * 1.35f + t * 9f) * 0.05f
+                               + (float)Math.Sin(gt * 2.6f + i * 1.15f) * 0.03f;
+                    float flick = 1f + full * wave * (0.3f + 0.7f * t) + 0.06f * bulge - 0.04f * t * t;
                     fbAngles[i] = fbHistAngle[i];
                     fbROut[i] = fbHistRadius[i] * flick;
-                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+                    float innerFrac = MathHelper.Lerp(0.68f, 0.34f, bulge);
+                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * innerFrac);
                     n++;
                 }
             } else {
