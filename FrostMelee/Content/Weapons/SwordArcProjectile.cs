@@ -332,17 +332,19 @@ namespace FrostMelee.Content.Weapons
         private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
         private const float FlameInnerFrac = 0.40f;    // ширина ленты: внешний край — остриё, внутренний — 0.40 его радиуса
         private const float FlameStreaks = 0.55f;      // потоки внутри тела ленты, а не полосы вместо него
-        private const int FlameBackTicks = 28;         // длина фонового слоя в записанных тиках (лента — FlameTrailTicks: фон заметно длиннее, как ореол копья 22 против 12)
-        private const float FlameBackWidth = 64f;      // ширина фона у головы, px
-        private const float FlameBackWidthTail = 16f;  // ширина фона на хвосте, px
-        private const float FlameBackAlpha = 0.20f;    // яркость фона у головы → 0 на конце
-        private const float FlameBackRadius = 0.96f;   // средняя линия фона: доля радиуса острия
+        private const int FlameBackTicks = 28;         // длина фонового слоя в записанных тиках (лента — FlameTrailTicks: фон заметно длиннее, как у копья)
+        private const float FlameBackOuter = 1.05f;    // внешний край фона: доля радиуса острия (чуть дальше ленты)
+        private const float FlameBackInner = 0.50f;    // внутренний край фона: доля радиуса острия
+        private const float FlameBackStrength = 0.55f; // яркость фона: доля от яркости ленты
         private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
         private const float FlameTongueSize = 34f;     // длина языка, px
 
         private static readonly float[] fbAngles = new float[FlamePoints];
         private static readonly float[] fbROut = new float[FlamePoints];
         private static readonly float[] fbRIn = new float[FlamePoints];
+        private static readonly float[] bgAngles = new float[FlamePoints]; // фоновый слой: та же запись, но длиннее и шире ленты
+        private static readonly float[] bgROut = new float[FlamePoints];
+        private static readonly float[] bgRIn = new float[FlamePoints];
 
         // Настоящий путь клинка, записываемый каждый тик (RecordFlameBlade в AI):
         // угол и длина линии кисть→остриё, новейшая точка первой. Лента по этой
@@ -468,36 +470,30 @@ namespace FrostMelee.Content.Weapons
             if (n < 2)
                 return;
 
-            // ФОНОВЫЙ слой дуги (как ореол у копья — первый из её двух слоёв):
-            // широкая мягкая дуга глубокого синего ПОД лентой. Главное — она
-            // заметно ДЛИННЕЕ ленты (FlameBackTicks записанных тиков против
-            // FlameTrailTicks у ленты; у копья 22 против 12) и шире её, поэтому
-            // выглядывает из-за ленты отдельной фоновой дугой и тянется дальше
-            // её хвоста. Прежний ореол шёл ровно по длине и ширине ленты и
-            // целиком прятался под ней — слоя не было видно (замечание владельца)
-            if (full > 0.02f && fbHasBlade && fbHistCount >= 2) {
-                Color backCol = Color.Lerp(FlameEdge, FlameTail, 0.3f);
-                int bgCap = Math.Min(fbHistCount, FlameBackTicks);
-                Vector2 prev = center + fbHistAngle[0].ToRotationVector2() * (fbHistRadius[0] * FlameBackRadius);
-                for (int i = 1; i < bgCap; i++) {
-                    float t0 = (i - 1) / (float)Math.Max(1, bgCap - 1);
-                    float t1 = i / (float)Math.Max(1, bgCap - 1);
-                    Vector2 next = center + fbHistAngle[i].ToRotationVector2() * (fbHistRadius[i] * FlameBackRadius);
-                    IceArcFx.DrawSegment(glow, prev, next,
-                        MathHelper.Lerp(FlameBackWidth, FlameBackWidthTail, t0),
-                        MathHelper.Lerp(FlameBackWidth, FlameBackWidthTail, t1),
-                        IceArcFx.Additive(backCol, FlameBackAlpha * flameEnv * (1f - (t0 + t1) * 0.5f)));
-                    prev = next;
-                }
-            }
-
-            // Лента: градиент + бегущие штрихи — потоки пламени вдоль взмаха.
-            // Ядро ленты заметно синее белого жара головки: чисто белое ядро на
+            // Дуга в ДВА слоя, как у копья: сначала ФОНОВЫЙ — широкая тихая
+            // лента глубокого синего по той же записи клинка, но длиннее
+            // основной (FlameBackTicks против FlameTrailTicks), шире неё и
+            // чуть дальше по радиусу: выглядывает из-за основной по краям и
+            // тянется дальше её хвоста. (Мягкие мазки ореолом не зашли: на
+            // коротком радиусе меча они сливались в серый купол-пятно и слоем
+            // не читались — замечание владельца «не проявилось».)
+            // Поверх — лента самого клинка: градиент + бегущие штрихи-потоки.
+            // Её ядро заметно синее белого жара головки: чисто белое ядро на
             // большей части длины аддитивно выгорало в белое пятно-фонарь,
             // особенно на тёмном фоне. Белым остаётся только жар у острия
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             Main.spriteBatch.End();
             try {
+                if (full > 0.02f && fbHasBlade && fbHistCount >= 2) {
+                    int bgCap = Math.Min(fbHistCount, FlameBackTicks);
+                    for (int i = 0; i < bgCap; i++) {
+                        bgAngles[i] = fbHistAngle[i];
+                        bgROut[i] = fbHistRadius[i] * FlameBackOuter;
+                        bgRIn[i] = fbHistRadius[i] * FlameBackInner;
+                    }
+                    IceRibbon.Draw(device, bgAngles, bgCap, center, bgROut, bgRIn,
+                        gt, flameEnv * FlameBackStrength, FlameTail, Color.Lerp(FlameTail, FlameEdge, 0.5f), FlameEdge, streaks: false);
+                }
                 IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
                     gt, flameEnv, Color.Lerp(FlameCore, FlameTail, 0.3f), FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
             }
