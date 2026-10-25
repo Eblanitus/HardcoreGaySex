@@ -812,16 +812,25 @@ namespace FrostMelee.Content.Weapons
             if (n < 2)
                 return;
 
-            // ореол под лентой: мягкие мазки по следу головы, сужаются и гаснут к хвосту
+            // ореол под лентой: мягкие мазки по следу головы, сужаются и гаснут к хвосту.
+            // Путь мазков сдвинут ВНУТРЬ на полуширину: внешний край ореола вровень
+            // с внешним краем ленты и веера. Раньше мазки центрировались ровно на
+            // внешнем радиусе — половина каждого торчала наружу, и над дугой стоял
+            // гребень «зубцов» ореола (лента казалась ниже второй дуги)
             Color haloCol = Color.Lerp(tail, edge, 0.5f);
-            Vector2 prev = KeenPoint(center, n, 0f, 1f);
+            float rOutNow = keenROut[0];
+            float wStart = KeenHaloWidth;
+            Vector2 prev = KeenPoint(center, n, 0f,
+                rOutNow > 1f ? Math.Max(0f, (rOutNow - wStart * 0.5f) / rOutNow) : 1f);
             // мазков много и они плотно перекрываются — ореол сплошной, без бусин
             const int HaloSteps = 24;
             for (int j = 1; j <= HaloSteps; j++) {
                 float t0 = (j - 1) / (float)HaloSteps, t1 = j / (float)HaloSteps;
-                Vector2 next = KeenPoint(center, n, t1, 1f);
-                IceArcFx.DrawSegment(glow, prev, next, MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t0),
-                    MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t1),
+                float w0 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t0);
+                float w1 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t1);
+                Vector2 next = KeenPoint(center, n, t1,
+                    rOutNow > 1f ? Math.Max(0f, (rOutNow - w1 * 0.5f) / rOutNow) : 1f);
+                IceArcFx.DrawSegment(glow, prev, next, w0, w1,
                     IceArcFx.Additive(haloCol, KeenHaloAlpha * env * (1f - (t0 + t1) * 0.5f)));
                 prev = next;
             }
