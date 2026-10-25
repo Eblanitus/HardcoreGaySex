@@ -238,7 +238,7 @@ namespace FrostMelee.Content.Weapons
             int dir = Projectile.ai[0] >= 0f ? 1 : -1;
             float headAng = IceArcFx.HeadAngleOf(Projectile.rotation, dir);
 
-            int embers = full > 0.02f ? 2 + (Main.rand.NextFloat() < full ? 1 : 0) : 0;
+            int embers = full > 0.02f ? 1 + (Main.rand.NextFloat() < full * 0.6f ? 1 : 0) : 0;
             for (int i = 0; i < embers; i++) {
                 float back = MathHelper.ToRadians(Main.rand.NextFloat(0f, 60f));   // от головы к хвосту
                 float ang = headAng - dir * back;
@@ -258,7 +258,7 @@ namespace FrostMelee.Content.Weapons
             // Ровно в тик пика — сноп углей с острия
             if (full > 0.02f && (int)Projectile.localAI[0] == (int)(maxAnim * PeakAt)
                 && GetBladeLine(player, out _, out Vector2 tip)) {
-                for (int i = 0; i < 10; i++) {
+                for (int i = 0; i < 6; i++) {
                     Dust d = Dust.NewDustPerfect(tip, DustID.IceTorch, Main.rand.NextVector2Circular(3.2f, 3.2f), 100,
                         default, Main.rand.NextFloat(1.1f, 1.8f));
                     d.noGravity = true;
@@ -308,7 +308,7 @@ namespace FrostMelee.Content.Weapons
         private static readonly Color FlameTail = new Color(115, 200, 255); // голубое пламя
         private static readonly Color FlameEdge = new Color(25, 85, 240);   // глубокий синий
         private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
-        private const float FlameInnerFrac = 0.52f;    // ширина как у копья: внешняя половина следа клинка
+        private const float FlameInnerFrac = 0.40f;    // ширина ленты: внешний край — остриё, внутренний — 0.40 его радиуса
         private const float FlameStreaks = 0.55f;      // потоки внутри тела ленты, а не полосы вместо него
         private const int FlameHaloSteps = 24;         // мазков ореола
         private const float FlameHaloWidth = 50f;      // ореол у острия, px
@@ -394,9 +394,21 @@ namespace FrostMelee.Content.Weapons
             // Горячая линия под всем: белый жар по кромке, голубой обод. Тихая:
             // она жар внутри дуги, а не тёмный контур вокруг неё (обод рисуется
             // чуть крупнее ядра и глубоким синим вылезал отдельной обводкой
-            // туда, где ленты уже нет). У пустого меча остаётся почти только она
-            IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
-                scale * LineDrawScale, fx, 0.22f * fade * (0.35f + 0.65f * full), FlameTail, FlameCore);
+            // туда, где ленты уже нет). У пустого меча остаётся почти только она.
+            // Сидит на той же оси, что лента и клинок: центр — кисть, голова —
+            // по записанному углу клинка, радиус — внешний край дуги. По-старому
+            // (центр тела, формульный угол) она висела второй дугой рядом с лентой
+            float lineAlpha = 0.22f * fade * (0.35f + 0.65f * full);
+            if (fbHasBlade && fbHistCount >= 1) {
+                int dir = Projectile.ai[0] >= 0f ? 1 : -1;
+                float lineRot = fbHistAngle[0] - dir * IceArcFx.HeadAngle;
+                float lineScale = ArcLineRadius(Projectile.localAI[0]) / LineTexOuter;
+                IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), fbHand - Main.screenPosition, lineRot, origin,
+                    lineScale, fx, lineAlpha, FlameTail, FlameCore);
+            } else {
+                IceArcFx.DrawLine(texture, texture.Frame(1, 4, 0, 3), position, Projectile.rotation, origin,
+                    scale * LineDrawScale, fx, lineAlpha, FlameTail, FlameCore);
+            }
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed || env <= 0.02f)
@@ -451,10 +463,16 @@ namespace FrostMelee.Content.Weapons
                 }
             }
 
-            // Лента: градиент + бегущие штрихи — потоки пламени вдоль взмаха
+            // Лента: градиент + бегущие штрихи — потоки пламени вдоль взмаха.
+            // Тело — два градиентных прохода: у короткого клинка один проход на
+            // светлом небе смывается в дымку (у копья полоса длиннее и потому
+            // плотнее сама по себе), второй проход добирает плотность тела,
+            // не раздувая штрихи
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             Main.spriteBatch.End();
             try {
+                IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
+                    gt, flameEnv * 0.5f, FlameCore, FlameTail, FlameEdge, streaks: false);
                 IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
                     gt, flameEnv, FlameCore, FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
             }

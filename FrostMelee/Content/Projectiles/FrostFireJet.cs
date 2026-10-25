@@ -44,7 +44,10 @@ namespace FrostMelee.Content.Projectiles
             if (Projectile.timeLeft % 2 == 0)
                 FrostJetFx.EmitJet(Projectile.Center, dir);
 
-            if (!Main.dedServ && Main.rand.NextBool(2))
+            // Пыль редкая: веер взмаха спавнит струй много, и частая пыль
+            // каждой складывалась в рой крестиков, забивавший саму дугу.
+            // Видимое пламя несёт FrostJetFx выше, пыль — только подсыпка
+            if (!Main.dedServ && Main.rand.NextBool(4))
             {
                 Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(5f, 5f),
                     DustID.IceTorch, -Projectile.velocity * 0.15f + Main.rand.NextVector2Circular(0.5f, 0.5f),
