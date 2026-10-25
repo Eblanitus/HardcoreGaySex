@@ -22,6 +22,7 @@ namespace FrostMelee.Content.Projectiles
             Projectile.tileCollide = true;
             Projectile.ignoreWater = true;
             Projectile.timeLeft = 12;
+            Projectile.aiStyle = -1; // только свой AI, как у остальных снарядов мода
         }
 
         public override void AI()
@@ -36,9 +37,9 @@ namespace FrostMelee.Content.Projectiles
             }
 
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            // Раньше струи тычка убивались на возврате клинка (визуально висели
-            // дольше меча). Теперь наоборот: тычок пускает струю ИМЕННО на возврате,
-            // и она должна долететь и поджечь — досрочная смерть убрана
+            // Досрочной смерти у струи нет: сколько задали при спавне, столько живёт.
+            // Старая «смерть на возврате тычка» заодно убивала струи взмаха,
+            // если игрок сразу после взмаха начинал тычок
 
             if (Projectile.timeLeft % 2 == 0)
                 FrostJetFx.EmitJet(Projectile.Center, dir);
@@ -51,22 +52,29 @@ namespace FrostMelee.Content.Projectiles
                 d.noGravity = true;
             }
 
-            // Поджог проверяется каждые 3 тика, начиная с первого. Раньше стоял
-            // шаг 15 при жизни 12 — проверка не наступала никогда: струя не
-            // поджигала вообще, поджигал сам клинок своими OnHit (наоборот дизайну)
+            // Поджог проверяется КАЖДЫЙ тик без хитрых шагов. История бага:
+            // раньше шаг был 15 при жизни снаряда 12 — проверка не наступала
+            // никогда, и струя не поджигала вообще (поджигал клинок, наоборот
+            // дизайну). Больше никакой арифметики: каждый тик, точка.
+            // Хитбокс чуть шире тела снаряда (Inflate): видимое пламя в PreDraw
+            // заметно крупнее 18px, враг должен загораться от видимого огня.
             if (Main.netMode != NetmodeID.MultiplayerClient || Projectile.owner == Main.myPlayer)
             {
-                Projectile.localAI[0]++;
-                if (Projectile.localAI[0] % 3 == 1)
+                Rectangle hitbox = Projectile.Hitbox;
+                hitbox.Inflate(6, 6);
+                for (int i = 0; i < Main.maxNPCs; i++)
                 {
-                    Rectangle hitbox = Projectile.Hitbox;
-                    for (int i = 0; i < Main.maxNPCs; i++)
-                    {
-                        NPC npc = Main.npc[i];
-                        if (npc.active && !npc.friendly && !npc.dontTakeDamage && !npc.immortal
-                            && npc.Hitbox.Intersects(hitbox))
-                            Weapons.FrostFireSystem.Ignite(npc);
-                    }
+                    NPC npc = Main.npc[i];
+                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                        continue;
+                    if (!npc.Hitbox.Intersects(hitbox))
+                        continue;
+                    // Диагностика: только свежий поджог (не обновление), чтобы
+                    // в client.log было видно, что струя реально поджигает.
+                    // TODO: убрать, когда подтвердится в игре
+                    if (!Weapons.FrostFireSystem.IsBurning(npc))
+                        Mod.Logger.Info($"[Jet] струя подожгла: {npc.FullName}");
+                    Weapons.FrostFireSystem.Ignite(npc);
                 }
             }
 

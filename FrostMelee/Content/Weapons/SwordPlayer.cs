@@ -419,7 +419,7 @@ namespace FrostMelee.Content.Weapons
             if (!HoldingSword || Player.dead)
                 return;
             bool throwing = ApplyThrowPose();
-            TrySpawnFrostJet();
+            EmitBladeFlame();
             if (throwing)
                 return;
 
@@ -447,7 +447,11 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        private void TrySpawnFrostJet()
+        // Только пламя-частицы на клинке (FrostJetFx) — снарядов струи здесь нет.
+        // Струю как поджигающие снаряды пускают: дуга веером (SwordArcProjectile.
+        // SpawnArcJets) и встреча факелом (SickleBraceProjectile). У тычка струи
+        // НЕТ ни в каком виде (решение владельца): он только забирает чужой огонь
+        private void EmitBladeFlame()
         {
             if (Player.HeldItem.type != ItemID.Frostbrand || CurrentMode == Mode.Spear)
                 return;
@@ -464,17 +468,6 @@ namespace FrostMelee.Content.Weapons
             // и огонь кажется прыгающим вслед за клинком. Сила пламени — от числа
             // горящих врагов рядом (FireIntensity), на возврате тычка — слабее.
             FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity * (1f - 0.8f * retract));
-            // Снаряды струи здесь пускает только тычок и только НА ВОЗВРАТЕ:
-            // удар уже забрал горение в урон, а уходящее пламя поджигает цель
-            // заново — под следующий тычок. До удара струи нет, иначе тычок
-            // снимал бы огонь, который сам же только что навесил.
-            // Взмах свой веер делает сам (SwordArcProjectile.SpawnArcJets),
-            // замах броска снарядов струи не пускает — только пламя на клинке.
-            if (CurrentMode != Mode.Stab || retract <= 0f || Main.GameUpdateCount % 2 != 0)
-                return;
-
-            Projectile.NewProjectile(Player.GetSource_ItemUse(Player.HeldItem), tip, dir * 4.5f,
-                ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Player.whoAmI);
         }
 
         public float StabRetractProgress => StabRetract01();

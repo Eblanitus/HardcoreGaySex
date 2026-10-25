@@ -220,9 +220,9 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
             }
-            // Фростбранд: забрал горение — бонусный урон. Сам клинок НЕ поджигает:
-            // не горел враг — его подожжёт струя на возврате тычка
-            // (SwordPlayer.TrySpawnFrostJet), дуга или встреча.
+            // Фростбранд: забрал горение — бонусный урон. Сам тычок НЕ поджигает
+            // и струи у него нет: не горел враг — его подожгут веер дуги или
+            // факел встречи. Подготовка тычка — дело других приёмов.
             // Умер от тычка с забранным горением — взрыв холодного огня.
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
                 bool tookBurn = takenBurn.Remove(target.whoAmI, out int burnTaken);
