@@ -432,6 +432,7 @@ namespace FrostMelee.Content.Projectiles
         // сборка не ломается.
         private const string LongFrostbrandPath = "FrostMelee/Items/frostbrand_long";
         private const int LongFadeTicks = 120;   // за сколько тиков проявляется полностью (2 секунды)
+        private const float LongMaxAlpha = 0.55f; // удлинение полупрозрачное всегда (решение владельца)
 
         private static Texture2D longGeoTexture;
         private static SickleSprite.Geometry? longGeoCache;
@@ -441,7 +442,7 @@ namespace FrostMelee.Content.Projectiles
             if (Main.dedServ)
                 return;
             float fade = MathHelper.Clamp(braceAge / (float)LongFadeTicks, 0f, 1f);
-            fade = fade * fade * (3f - 2f * fade);   // мягкие начало и конец проявления
+            fade = fade * fade * (3f - 2f * fade) * LongMaxAlpha;   // мягкие начало и конец проявления; потолок — полупрозрачность
             if (fade <= 0.01f)
                 return;
             if (!ModContent.RequestIfExists<Texture2D>(LongFrostbrandPath, out Asset<Texture2D> asset, AssetRequestMode.ImmediateLoad))

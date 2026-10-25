@@ -114,10 +114,11 @@ namespace FrostMelee.Content.Weapons
             if (!Main.dedServ) {
                 if (IsIceBlade(player))
                     UpdateHone(player, maxAnim);
-                else {
+                else if ((SwordItem != 0 ? SwordItem : player.HeldItem.type) == ItemID.Frostbrand) {
                     RecordFlameBlade(player);
                     SpawnFlameSparks(player, maxAnim);
                 }
+                // Праздничные мечи: своих частиц взмаха нет — только шаблонная дуга
             }
 
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
@@ -162,6 +163,14 @@ namespace FrostMelee.Content.Weapons
         public static float SwingProgressCurve(float progress, int itemType) {
             progress = MathHelper.Clamp(progress, 0f, 1f);
             return 1f - (float)Math.Pow(1f - progress, SwingEaseOutPower);
+        }
+
+        // Обратная к SwingProgressCurve: изогнутый прогресс → обычная доля времени.
+        // Нужна истории ленты: прошлые углы берём равномерно по углу взмаха,
+        // а ArcRotation понимает только время.
+        public static float SwingProgressInverse(float curved) {
+            curved = MathHelper.Clamp(curved, 0f, 1f);
+            return 1f - (float)Math.Pow(1f - curved, 1f / SwingEaseOutPower);
         }
 
         private float ArcRotation(Player player, float time) {
@@ -222,10 +231,10 @@ namespace FrostMelee.Content.Weapons
         private void RecordFrostTrail(Player player) {
             if (Main.dedServ)
                 return;
-            // Фростбранд инея не оставляет вовсе — ни пятен с искрами, ни
-            // замедления: иней — фишка копья (решение владельца), а этот меч
-            // огненный. Иней взмаха остался только у Ice Blade, невидимый
-            if (SwordItem == ItemID.Frostbrand)
+            // Иней взмаха есть только у Ice Blade (невидимый — одно замедление):
+            // Фростбранд огненный, инея у него нет вовсе (решение владельца),
+            // праздничные мечи — без стихийных механик
+            if (SwordItem != ItemID.IceBlade)
                 return;
             float outer = Math.Max(LineTexOuter * ArcScaleAt(Projectile.localAI[0]) * BodyDrawScale * LineDrawScale, BladeReach);
             if (outer <= 1f)
@@ -717,21 +726,30 @@ namespace FrostMelee.Content.Weapons
         private static readonly float[] keenROut = new float[KeenPoints];
         private static readonly float[] keenRIn = new float[KeenPoints];
 
-        // История углов следа: голова — текущий угол дуги, дальше — углы за прошлые тики
+        // История углов следа: голова — текущий угол дуги, дальше — прошлые углы
         // (ArcRotation). Радиусы растут вместе с дугой. Лента ложится по реальному пути взмаха,
-        // а не по фиксированному сектору; длина ограничена по тикам и по углу (TrailMaxAngle).
+        // а не по фиксированному сектору; длина ограничена по доле взмаха и по углу (TrailMaxAngle).
         // Этим же строятся и шлейф, и лента отточенного клинка — как у косы.
         private int BuildTrailHistory(Player player, float[] angles, float[] rOut, float[] rIn) {
             float head = Projectile.rotation;
-            float step = TrailTicks / (angles.Length - 1);
+            float maxAnim = Math.Max(1f, Projectile.ai[1]);
+            // Прошлые углы берём РАВНОМЕРНО ПО УГЛУ взмаха, а не по тикам: при
+            // нелинейной скорости клинок в начале взмаха за те же тики проходит
+            // угол в разы больше, и тиковая лента мгновенно растягивалась на всю
+            // длину огромным веером (так сломалась дуга Ice Blade после кривой).
+            // По изогнутому прогрессу лента на каждом участке дуги выглядит как
+            // при старой линейной скорости — нелинейна только скорость головы.
+            float pNow = SwingProgressCurve(MathHelper.Clamp(Projectile.localAI[0] / maxAnim, 0f, 1f), SwordItem);
+            float stepP = TrailTicks / maxAnim / (angles.Length - 1);
             int n = 1;
             angles[0] = head;
             rOut[0] = ArcLineRadius(Projectile.localAI[0]);
             rIn[0] = Math.Max(BladeReach * 0.2f, rOut[0] * TrailInnerFrac);
             for (int i = 1; i < angles.Length; i++) {
-                float ti = Projectile.localAI[0] - i * step;
-                if (ti < 0f)
+                float pi = pNow - i * stepP;
+                if (pi < 0f)
                     break;
+                float ti = SwingProgressInverse(pi) * maxAnim;
                 float angle = head + MathHelper.WrapAngle(ArcRotation(player, ti) - head);
                 float r = ArcLineRadius(Math.Max(0f, ti));
                 float delta = Math.Abs(angle - head);
@@ -772,7 +790,13 @@ namespace FrostMelee.Content.Weapons
                 IceBladeFx.ArcLineColor(IceBladeFx.PolishOf(player, SwordItem)) * (0.25f * fade * keen),
                 Projectile.rotation, texture.Frame(1, 4).Size() / 2f, scale * LineDrawScale, fx, 0f);
 
-            env *= keen;
+            DrawTrailRibbon(player, glow, env * keen, core, tail, edge);
+        }
+
+        // Лента по следу взмаха + мягкий ореол под ней — общая часть дуг шаблона
+        // (отточенный Ice Blade и праздничные мечи): история BuildTrailHistory,
+        // ореол мазками, лента IceRibbon. Цвета задаёт вызвавший.
+        private void DrawTrailRibbon(Player player, Texture2D glow, float env, Color core, Color tail, Color edge) {
             if (env <= 0.02f)
                 return;
             Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
@@ -804,7 +828,32 @@ namespace FrostMelee.Content.Weapons
                 Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
                     DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
             }
+        }
 
+        // Дуга праздничных мечей (подкласс FestiveSwords): чистый шаблон без
+        // механик — тело и линия по рецепту шершавого Ice Blade (DrawSwingArc)
+        // плюс лента с ореолом (DrawTrailRibbon), цвета свои у каждого меча.
+        private void DrawFestiveArc(Player player, Texture2D texture, float scale, SpriteEffects fx, float fade, float maxAnim) {
+            if (Main.dedServ)
+                return;
+            FestiveSwords.ArcColors(SwordItem != 0 ? SwordItem : player.HeldItem.type, out Color core, out Color tail, out Color edge);
+
+            Vector2 pos = Projectile.Center - Main.screenPosition;
+            Rectangle body = texture.Frame(1, 4);
+            Rectangle line = texture.Frame(1, 4, 0, 3);
+            Vector2 origin = body.Size() / 2f;
+            // тело: полупрозрачное свечение формы взмаха, две копии на одном угле
+            Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(tail, fade * 0.16f),
+                Projectile.rotation, origin, scale * LineDrawScale, fx, 0f);
+            Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(Color.Lerp(tail, core, 0.4f), fade * 0.08f),
+                Projectile.rotation, origin, scale * LineDrawScale * 0.975f, fx, 0f);
+            // линия по кромке взмаха
+            Main.EntitySpriteDraw(texture, pos, line, core * (fade * 0.3f),
+                Projectile.rotation, origin, scale * LineDrawScale, fx, 0f);
+
+            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
+            if (glow != null && !glow.IsDisposed)
+                DrawTrailRibbon(player, glow, SwingEnv(Projectile.localAI[0], maxAnim), core, tail, edge);
         }
 
         // Хитбокс на момент time — сектор вокруг игрока: от центра до внешнего края линии
@@ -960,6 +1009,11 @@ namespace FrostMelee.Content.Weapons
             Player owner = Main.player[Projectile.owner];
             if (IsIceBlade(owner)) {
                 DrawHone(owner, texture, scale, spriteEffects, percentageOfLife, lerpTime, maxAnim);
+                return false;
+            }
+            // Праздничные мечи (подкласс FestiveSwords): шаблонная дуга в своих цветах
+            if (FestiveSwords.IsFestive(SwordItem != 0 ? SwordItem : owner.HeldItem.type)) {
+                DrawFestiveArc(owner, texture, scale, spriteEffects, lerpTime, maxAnim);
                 return false;
             }
             // Второй меч движка — Фростбранд: у него своя дуга холодного пламени

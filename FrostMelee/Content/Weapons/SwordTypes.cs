@@ -3,16 +3,19 @@ using Terraria.ID;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Ледяные мечи (Ice Blade, Frostbrand) под доктрину HardcoreMelee
-    // (МЕЧИ.md): взмах-дуга (ЛКМ), встреча (ПКМ тап), тычки (ПКМ зажать),
-    // бросок (ПКМ+ЛКМ, остаётся в земле/цели, забирать самому).
+    // Мечи движка (Ice Blade, Frostbrand и подкласс праздничных — FestiveSwords)
+    // под доктрину HardcoreMelee (МЕЧИ.md): взмах-дуга (ЛКМ), встреча (ПКМ тап),
+    // тычки (ПКМ зажать), бросок (ПКМ+ЛКМ, остаётся в земле/цели, забирать самому).
     // Один источник правды: SwordPlayer, SwordGlobalItem, SwordUI берут отсюда.
     public static class SwordTypes
     {
         public static readonly int[] Swords = new int[]
         {
             ItemID.IceBlade,   // Ледяной клинок
-            ItemID.Frostbrand  // Морозный клинок
+            ItemID.Frostbrand, // Морозный клинок
+            // Подкласс праздничных (база — FestiveSwords): шаблонные приёмы, без своих механик
+            ItemID.CandyCaneSword,      // Карамельный меч (меч-леденец)
+            ItemID.ChristmasTreeSword   // Меч из ёлки
         };
 
         public static bool IsSword(Item item) => item != null && !item.IsAir && IsSwordId(item.type);
