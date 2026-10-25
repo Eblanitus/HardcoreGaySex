@@ -684,8 +684,7 @@ namespace FrostMelee.Content.Weapons
 
         // Дуга Ice Blade. Шершавый клинок — своя дуга (IceBladeFx.DrawSwingArc: бледное свечение
         // формы Excalibur, матовая белая линия). По мере заточки она перетекает в дугу косы
-        // (DrawKeenArc: лента IceRibbon, ореол, снежинки, вспышка). По клинку бежит блик-брусок,
-        // в конце правки — «дзинь».
+        // (DrawKeenArc: лента IceRibbon, ореол, снежинки, вспышка).
         private const float KeenFrom = 0.25f;   // с какой полировки начинает проступать дуга косы
         private const float KeenSpan = 0.5f;    // за какой отрезок полировки переход завершается
 
@@ -713,14 +712,9 @@ namespace FrostMelee.Content.Weapons
             if (keen > 0.01f && glowOk)
                 DrawKeenArc(player, texture, glow, scale, fx, fade, env, keen);
 
-            if (env <= 0.02f)
-                return;
-            HoneLine(player, progress, out Vector2 butt, out Vector2 tip, out _, out Vector2 bladeDir);
-            Vector2 heel = IceBladeFx.HeelOf(butt, tip);
-            float s = HoneGlintAt(progress);
-            float ramp = Smooth01((progress - HoneStart * 0.5f) / 0.08f);
-            float stoneA = env * (0.5f + 0.5f * polish) * ramp * (1f - Smooth01((s - 0.9f) / 0.1f));
-            IceBladeFx.DrawStone(heel, tip, s, polish, stoneA);
+            // Бегущий блик-брусок (белая звезда от игрока к острию) убран по
+            // решению владельца — мельтешил на клинке. Точка блика как логика
+            // осталась: от неё сыплются стружка и искры в UpdateHone
         }
 
         // === Дуга косы на отточенном клинке ===

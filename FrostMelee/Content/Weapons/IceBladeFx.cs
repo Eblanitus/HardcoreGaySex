@@ -102,33 +102,6 @@ namespace FrostMelee.Content.Weapons
         }
 
         // =====================================================================
-        // Звёздочка — как ванильная DrawPrettyStarSparkle (слеза Extra 98 крестом)
-        // =====================================================================
-        // length — длина длинного луча, cross — короткого (px), rotation — куда смотрит длинный.
-        // Ширина лучей — доля длины, как у ванили; ядро — белое, ореол — shine.
-        public static void Star(Vector2 world, float length, float cross, float rotation, Color shine, float alpha)
-        {
-            if (alpha <= 0.02f || length <= 1f)
-                return;
-            Texture2D tex = TextureAssets.Extra[98].Value;
-            if (tex == null || tex.IsDisposed)
-                return;
-            Vector2 pos = world - Main.screenPosition;
-            Vector2 origin = tex.Size() / 2f;
-            float fat = 0.38f;
-            Vector2 longScale = new Vector2(length * fat / tex.Width, length / tex.Height);
-            Vector2 crossScale = new Vector2(cross * fat / tex.Width, cross / tex.Height);
-            Color halo = Additive(shine, alpha);
-            Color core = Additive(Color.White, alpha * 0.8f);
-            // текстура — вертикальная слеза: +π/2 кладёт её вдоль rotation
-            float rLong = rotation + MathHelper.PiOver2;
-            Main.EntitySpriteDraw(tex, pos, null, halo, rLong, origin, longScale, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(tex, pos, null, halo, rotation, origin, crossScale, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(tex, pos, null, core, rLong, origin, longScale * 0.6f, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(tex, pos, null, core, rotation, origin, crossScale * 0.6f, SpriteEffects.None, 0f);
-        }
-
-        // =====================================================================
         // Дуга взмаха по рецепту ванильного Excalibur, в ледяных тонах
         // =====================================================================
         // tex — текстура Excalibur (4 кадра), center — центр веера в мире (кисть), rotation/fx/scale —
@@ -171,11 +144,11 @@ namespace FrostMelee.Content.Weapons
         }
 
         // =====================================================================
-        // Правка на самом клинке
+        // Точки на самом клинке (для стружки и искр правки)
         // =====================================================================
-        // Брусок — блик-звезда, бегущая по клинку (дуга: от пяты к острию, тычок: наоборот).
-        // Длинный луч — поперёк клинка (брусок), короткий — вдоль. В конце правки — «дзинь».
         // Координата t вдоль клинка: 0 — пята (где кончается гарда), 1 — остриё.
+        // Бегущая звезда-брусок отсюда убрана по решению владельца; точка блика
+        // осталась только как место рождения частиц (SwordArcProjectile.UpdateHone).
 
         public const float HeelFrac = 0.3f;        // где на оси приклад→остриё начинается клинок
         public const float BladeHalfWidth = 4f;    // полуширина клинка Ice Blade поперёк оси, px
@@ -190,16 +163,6 @@ namespace FrostMelee.Content.Weapons
             Vector2 n = new Vector2(-d.Y, d.X).SafeNormalize(Vector2.UnitY);
             float w = halfWidth * MathHelper.Clamp((1f - t) / TipTaper, 0f, 1f);
             return heel + d * t + n * w * side;
-        }
-
-        public static void DrawStone(Vector2 heel, Vector2 tip, float t, float polish, float alpha)
-        {
-            if (alpha <= 0.02f)
-                return;
-            Vector2 at = Vector2.Lerp(heel, tip, t);
-            float along = (tip - heel).ToRotation();
-            Star(at, 14f + 6f * polish, 7f + 4f * polish, along + MathHelper.PiOver2,
-                Color.Lerp(FrostMatte, EdgeRim, polish), alpha);
         }
 
         public static void Unload()
