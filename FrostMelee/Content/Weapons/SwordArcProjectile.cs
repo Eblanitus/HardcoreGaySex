@@ -143,31 +143,24 @@ namespace FrostMelee.Content.Weapons
         // в SwordPlayer), головы дуги и каждой точки ленты через её time.
         // История ленты поэтому настоящая: прошлые time дают прошлые углы,
         // шлейф тянется за клинком, а не схлопывается в текущий угол.
-        // Кривая СКОРОСТИ взмаха Фростбранда — нелинейная, как у копья
-        // (решение владельца; у копья это SpinCurve). Форма та же, что у копья,
-        // но на полукруг меча: первые SwingWindupEnd времени клинок уходит
-        // НАЗАД на SwingWindupDepth хода (замах), дальше разгон и торможение
-        // smootherstep-ом: медленно на краях, быстро через середину.
+        // Кривая СКОРОСТИ взмаха Фростбранда — нелинейная (решение владельца):
+        // БЫСТРОЕ НАЧАЛО и замедляющийся конец. Клинок срывается с места
+        // рывком, большую часть дуги проходит в первой половине времени и
+        // к концу плавно затухает (ease-out: 1-(1-t)^степень; степень больше —
+        // резче старт и длиннее затухание).
+        // Форма копья наоборот (замах назад → разгон через середину) на мече
+        // ощущалась ужасно — тягучее начало; владелец велел перевернуть.
         // У Ice Blade ход линейный — его этап и ощущения не трогаем.
         // Функцию обязаны звать ВСЕ места с формулой угла взмаха: ArcRotation
         // здесь и itemRotation в SwordPlayer.PostUpdate — иначе клинок, дуга
         // и хитбокс разойдутся по разным кривым.
-        public const float SwingWindupEnd = 0.15f;    // доля времени на замах назад
-        public const float SwingWindupDepth = 0.08f;  // глубина замаха: доля всего хода
-
-        public static float Smootherstep(float t) {
-            t = MathHelper.Clamp(t, 0f, 1f);
-            return t * t * t * (t * (t * 6f - 15f) + 10f);
-        }
+        public const float SwingEaseOutPower = 2.6f;  // резкость старта взмаха
 
         public static float SwingProgressCurve(float progress, int itemType) {
             progress = MathHelper.Clamp(progress, 0f, 1f);
             if (itemType != ItemID.Frostbrand)
                 return progress;
-            if (progress < SwingWindupEnd)
-                return -SwingWindupDepth * Smootherstep(progress / SwingWindupEnd);
-            float u = (progress - SwingWindupEnd) / (1f - SwingWindupEnd);
-            return -SwingWindupDepth + (1f + SwingWindupDepth) * Smootherstep(u);
+            return 1f - (float)Math.Pow(1f - progress, SwingEaseOutPower);
         }
 
         private float ArcRotation(Player player, float time) {
