@@ -11,8 +11,10 @@ namespace FrostMelee.Content.Weapons
 {
     // Холодное пламя Фростбранда (FROSTBRAND_ИТОГ.md).
     //
-    // Общее правило — Горение: любой удар любым приёмом накладывает
-    // Frostburn. Никаких стаков и отдельного «полного возгорания» нет.
+    // Поджигает только струя (клинок — никогда), и запас огня КОНЕЧЕН:
+    // у меча SwordPlayer.MaxFlames языков, каждый горящий враг держит один.
+    // Умер горящим — язык возвращается к игроку живым огоньком
+    // (FrostFlameWisp) и бьёт врагов по пути. Учёт запаса — TryIgnite.
     //
     // Смерть горящего врага от тычка или броска — взрыв холодного огня,
     // поджигающий и задевающий соседей (радиус и силу задаёт приём).
@@ -68,13 +70,48 @@ namespace FrostMelee.Content.Weapons
             return ticks;
         }
 
-        // Любой удар Фростбранда просто накладывает Frostburn
+        // Сырой поджог без учёта запаса (внутренний и запасной путь)
         public static void Ignite(NPC npc)
         {
             if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
                 return;
 
             npc.AddBuff(BuffID.Frostburn, BurnTicks);
+        }
+
+        // Поджог с учётом конечного запаса владельца: новый враг загорается,
+        // только если есть свободный язык (в мече или висящий у игрока
+        // огоньком); уже держащего свой язык обновляем бесплатно.
+        // Возвращает false — запаса нет, враг НЕ загорелся
+        public static bool TryIgnite(NPC npc, Player owner)
+        {
+            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+                return false;
+            if (owner == null || !owner.active)
+            {
+                Ignite(npc);
+                return true;
+            }
+            SwordPlayer sp = owner.GetModPlayer<SwordPlayer>();
+            if (!sp.FlameAuthority)
+            {
+                // Сервер и чужие клиенты учёт не ведут (как полировка в MP):
+                // поджог не блокируем, запас считает клиент владельца
+                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                return true;
+            }
+            if (sp.HoldsFlame(npc))
+            {
+                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                return true;
+            }
+            if (sp.FreeFlames > 0 || sp.TryConsumeOrbitingFlame())
+            {
+                sp.AddFlameHolder(npc);
+                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                return true;
+            }
+            return false;
         }
 
         // Вспышка холодного огня: звук, кольцо пламени, свечение.

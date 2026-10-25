@@ -107,6 +107,11 @@ public class SwordGlobalItem : GlobalItem
                 // Кто взмахнул: от меча зависят ледяные свойства удара
                 arc.SwordItem = item.type;
             }
+
+            // Фростбранд: вернувшиеся языки пламени висят у игрока огоньками
+            // и уходят вместе со взмахом (бьют и поджигают — FrostFlameWisp)
+            if (item.type == ItemID.Frostbrand)
+                player.GetModPlayer<SwordPlayer>().LaunchOrbitingFlames();
             return false;
         }
     }

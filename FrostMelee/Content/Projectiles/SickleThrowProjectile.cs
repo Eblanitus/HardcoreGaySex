@@ -577,7 +577,7 @@ namespace FrostMelee.Content.Projectiles
             {
                 lodgedBurnPulse = 0;
                 if (lodged != null && lodged.active)
-                    Weapons.FrostFireSystem.Ignite(lodged);
+                    Weapons.FrostFireSystem.TryIgnite(lodged, Main.player[Projectile.owner]);
 
                 float r2 = radius * radius;
                 for (int i = 0; i < Main.maxNPCs; i++)
@@ -586,7 +586,7 @@ namespace FrostMelee.Content.Projectiles
                     if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
                         continue;
                     if (Vector2.DistanceSquared(npc.Center, Projectile.Center) <= r2)
-                        Weapons.FrostFireSystem.Ignite(npc);
+                        Weapons.FrostFireSystem.TryIgnite(npc, Main.player[Projectile.owner]);
                 }
             }
 

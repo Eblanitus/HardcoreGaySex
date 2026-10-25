@@ -69,7 +69,7 @@ namespace FrostMelee.Content.Projectiles
                         continue;
                     if (!npc.Hitbox.Intersects(hitbox))
                         continue;
-                    Weapons.FrostFireSystem.Ignite(npc);
+                    Weapons.FrostFireSystem.TryIgnite(npc, Main.player[Projectile.owner]);
                 }
             }
 

@@ -228,7 +228,12 @@ namespace FrostMelee.Content.Projectiles
                 bool tookBurn = takenBurn.Remove(target.whoAmI, out int burnTaken);
                 // анимация: холодное пламя стекается с врага в клинок (FrostDrainFx)
                 if (tookBurn)
+                {
                     FrostDrainFx.Play(target, Main.player[Projectile.owner], burnTaken);
+                    // Забранный огонь не растворяется: язык уходит в орбиту у
+                    // игрока и уйдёт со следующим взмахом (конечный запас)
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().OnFlameDrained(target);
+                }
                 if (tookBurn && target.life <= 0 && Projectile.owner == Main.myPlayer) {
                     Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
                 }
