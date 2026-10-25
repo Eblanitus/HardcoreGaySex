@@ -143,16 +143,45 @@ namespace FrostMelee.Content.Weapons
         // в SwordPlayer), головы дуги и каждой точки ленты через её time.
         // История ленты поэтому настоящая: прошлые time дают прошлые углы,
         // шлейф тянется за клинком, а не схлопывается в текущий угол.
+        // Кривая СКОРОСТИ взмаха Фростбранда — нелинейная, как у копья
+        // (решение владельца; у копья это SpinCurve). Форма та же, что у копья,
+        // но на полукруг меча: первые SwingWindupEnd времени клинок уходит
+        // НАЗАД на SwingWindupDepth хода (замах), дальше разгон и торможение
+        // smootherstep-ом: медленно на краях, быстро через середину.
+        // У Ice Blade ход линейный — его этап и ощущения не трогаем.
+        // Функцию обязаны звать ВСЕ места с формулой угла взмаха: ArcRotation
+        // здесь и itemRotation в SwordPlayer.PostUpdate — иначе клинок, дуга
+        // и хитбокс разойдутся по разным кривым.
+        public const float SwingWindupEnd = 0.15f;    // доля времени на замах назад
+        public const float SwingWindupDepth = 0.08f;  // глубина замаха: доля всего хода
+
+        public static float Smootherstep(float t) {
+            t = MathHelper.Clamp(t, 0f, 1f);
+            return t * t * t * (t * (t * 6f - 15f) + 10f);
+        }
+
+        public static float SwingProgressCurve(float progress, int itemType) {
+            progress = MathHelper.Clamp(progress, 0f, 1f);
+            if (itemType != ItemID.Frostbrand)
+                return progress;
+            if (progress < SwingWindupEnd)
+                return -SwingWindupDepth * Smootherstep(progress / SwingWindupEnd);
+            float u = (progress - SwingWindupEnd) / (1f - SwingWindupEnd);
+            return -SwingWindupDepth + (1f + SwingWindupDepth) * Smootherstep(u);
+        }
+
         private float ArcRotation(Player player, float time) {
+            int item = SwordItem != 0 ? SwordItem : player.HeldItem.type;
             if (!player.HeldItem.IsAir && player.itemAnimation > 0 && player.itemAnimationMax > 0) {
                 float maxAnim = player.itemAnimationMax;
-                float progress = MathHelper.Clamp(time, 0f, maxAnim) / maxAnim;
+                float progress = SwingProgressCurve(MathHelper.Clamp(time, 0f, maxAnim) / maxAnim, item);
                 float theta = player.direction >= 0
                     ? MathHelper.Pi * (1f + progress)
                     : -MathHelper.Pi * progress;
                 return theta + player.fullRotation;
             }
-            float percentageOfLife = MathHelper.Clamp(time, 0f, Math.Max(1f, Projectile.ai[1])) / Math.Max(1f, Projectile.ai[1]);
+            float percentageOfLife = SwingProgressCurve(
+                MathHelper.Clamp(time, 0f, Math.Max(1f, Projectile.ai[1])) / Math.Max(1f, Projectile.ai[1]), item);
             return Projectile.velocity.ToRotation() + Projectile.ai[0] * MathHelper.Pi * percentageOfLife + player.fullRotation + MathHelper.Pi;
         }
 
