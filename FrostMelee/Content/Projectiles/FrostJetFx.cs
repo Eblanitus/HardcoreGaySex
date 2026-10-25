@@ -116,9 +116,13 @@ namespace FrostMelee.Content.Projectiles
             {
                 float along = Main.rand.NextFloat(0.1f, 0.8f);
                 Vector2 position = Vector2.Lerp(butt, tip, along) + perp * Main.rand.NextFloat(-2.5f, 2.5f);
-                Vector2 velocity = dir * Main.rand.NextFloat(1f, 2.2f)
-                    + perp * Main.rand.NextFloat(-0.4f, 0.4f)
-                    + new Vector2(0f, -Main.rand.NextFloat(0.1f, 0.6f));
+                // Меч в руке (взмах): искры быстрые, им положено. Свободный огонь
+                // (застрявший меч): медленные тлеющие угольки — быстрые искры на
+                // неподвижном клинке выглядят электрическими разрядами
+                Vector2 velocity = anchored
+                    ? dir * Main.rand.NextFloat(1f, 2.2f) + perp * Main.rand.NextFloat(-0.4f, 0.4f)
+                    : dir * Main.rand.NextFloat(0.1f, 0.35f) + perp * Main.rand.NextFloat(-0.15f, 0.15f);
+                velocity += new Vector2(0f, -Main.rand.NextFloat(0.1f, anchored ? 0.6f : 0.35f));
                 Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f));
             }
         }
@@ -259,7 +263,13 @@ namespace FrostMelee.Content.Projectiles
             for (int i = particles.Count - 1; i >= 0; i--)
             {
                 Particle p = particles[i];
-                p.Age += hasBlade ? 1 : 3;
+                // Ускоренное старение ×3 — только уборка остатков пламени меча
+                // В РУКЕ, когда его убрали. Свободные частицы (брошенный и
+                // застрявший меч, струя) стареют всегда в обычном темпе: на
+                // неподвижном застрявшем мече ×3 превращало огонь в быстрый
+                // стробоскоп «как электричество» (замечание владельца)
+                bool cleanup = p.Anchored && !hasBlade;
+                p.Age += cleanup ? 3 : 1;
                 if (p.Age >= p.Life)
                 {
                     particles.RemoveAt(i);
@@ -288,7 +298,7 @@ namespace FrostMelee.Content.Projectiles
                         break;
                 }
 
-                p.Temperature = MathHelper.Max(0f, p.Temperature - (hasBlade ? 0.65f : 2f) / p.Life);
+                p.Temperature = MathHelper.Max(0f, p.Temperature - (cleanup ? 2f : 0.65f) / p.Life);
 
                 if (p.Anchored && hasBlade)
                 {
