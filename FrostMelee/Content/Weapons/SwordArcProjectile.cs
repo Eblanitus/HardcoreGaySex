@@ -1007,7 +1007,13 @@ namespace FrostMelee.Content.Weapons
                 return false;
             Rectangle sourceRectangle = texture.Frame(1, 4);
             Vector2 origin = sourceRectangle.Size() / 2f;
-            float scale = Projectile.scale * BodyDrawScale;
+            // Масштаб веера — от ArcLineRadius, как у ленты отточенной дуги:
+            // внешний край сектора и внешний край ленты — один радиус в каждый
+            // момент взмаха, дуги лежат одна на другой. Раньше веер брал голый
+            // Projectile.scale (без «не короче клинка»), и в начале взмаха
+            // заточенная дуга была заметно крупнее шершавой — две дуги разного
+            // размера (замечание владельца)
+            float scale = ArcLineRadius(Projectile.localAI[0]) / LineTexOuter / LineDrawScale;
             SpriteEffects spriteEffects = ((!(Projectile.ai[0] >= 0f)) ? SpriteEffects.FlipVertically : SpriteEffects.None);
             float maxAnim = Math.Max(1f, Projectile.ai[1]);
             float percentageOfLife = Projectile.localAI[0] / maxAnim;
