@@ -523,6 +523,23 @@ namespace FrostMelee.Content.Weapons
                 SickleSprite.Geometry geo = SickleSprite.Get(Player.HeldItem.type);
                 float baseAng = (geo.TipFor(flipped) - geo.ButtFor(flipped)).ToRotation();
                 Player.itemRotation = MathHelper.WrapAngle(theta - baseAng);
+
+                // Кисть и рука взмаха — тоже наши, плавные. Ванильная позиция
+                // меча (itemLocation) во взмахе стоит ТРЕМЯ СТУПЕНЯМИ по третям
+                // анимации (ItemCheck_ApplyUseStyle, useStyle 1: пороги 0.333 и
+                // 0.666) — под три нарисованных кадра руки. В ванилле ступени
+                // замаскированы её кривой и теми же кадрами, а на нашей: клинок
+                // рисуется прикладом от itemLocation, и на второй ступени
+                // (~67% пути) рукоять разом падает вниз на 10–16 px, когда
+                // клинок по ease-out уже почти остановился, — покадрово это
+                // «прыжок» рукояти вглубь игрока на ~70% взмаха (нашёл владелец).
+                // Ставим композитную руку вдоль клинка, как у тычка/встречи, а
+                // приклад — на её кисть: путь рукояти становится гладкой дугой
+                // вокруг плеча, ступеней нет. Запись дуги, хитбокс и слой клинка
+                // все читают itemLocation — прыжок уходит отовсюду разом
+                float armRot = theta - MathHelper.PiOver2;
+                Player.SetCompositeArmFront(true, Player.CompositeArmStretchAmount.Full, armRot);
+                Player.itemLocation = SickleSprite.HandGrip(Player, Player.CompositeArmStretchAmount.Full, armRot);
             }
 
             // Фростбранд: чем больше врагов горит рядом, тем ярче светится меч
