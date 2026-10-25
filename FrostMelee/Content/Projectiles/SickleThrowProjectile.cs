@@ -47,7 +47,6 @@ namespace FrostMelee.Content.Projectiles
         private const float StickMinSpeed = 7f;
         private const float SideHitDamageMult = 0.5f;
         private const float StickEmbedDepth = 12f; // глубже, чем 6: меч не балансирует на кончике
-        private const float StickProtrude = 10f;   // на сколько кончик торчит ЗА врагом при пробитии насквозь
         // Втыкается только та часть клинка, которой вообще втыкаются: передний
         // кусок у кончика. Касание серединой клинка или рукоятью — не втыкание,
         // а удар плашмя (иначе меч «застревал» в воздухе рядом с врагом:
@@ -171,6 +170,11 @@ namespace FrostMelee.Content.Projectiles
                     frostAtThrow = Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().Frost;
             }
             Projectile.localAI[0]++;
+            // Воткнувшийся меч рисуется ПОД врагом/блоками (DrawBehind ниже):
+            // тело врага перекрывает вошедшую часть клинка, и меч выглядит
+            // именно воткнувшимся в него, а не наклейкой поверх спрайта
+            // (требование владельца: «под текстурой, а не поверх текстуры»)
+            Projectile.hide = State == StateLodged || State == StateStuckTile;
             if (AutoReturnTicks <= 0)
                 Projectile.timeLeft = 2;
 
@@ -289,7 +293,7 @@ namespace FrostMelee.Content.Projectiles
                 if (!lodgeInit)
                 {
                     lodgeInit = true;
-                    lodgeOffset = LodgeOffsetThrough(npc);
+                    lodgeOffset = TipLodgeOffset(npc);
                 }
                 Projectile.Center = npc.Center + lodgeOffset;
                 UpdateLodgedFrostbrand(npc);
@@ -676,62 +680,6 @@ namespace FrostMelee.Content.Projectiles
             sp.FrostShown = 0f;
         }
 
-        // Застревание во враге: меч пробивает его НАСКВОЗЬ — кончик выходит
-        // ЗА врага с дальней стороны и торчит там (решение владельца: «не
-        // поверх врага внутрь, а за него»). Враг толще клинка и насквозь не
-        // пробивается — тогда меч уходит вглубь до самой рукояти. Сдвиг
-        // только вдоль собственной оси клинка, угол не трогаем. Возвращает
-        // смещение середины оси от центра цели (как TipLodgeOffset)
-        private Vector2 LodgeOffsetThrough(NPC npc)
-        {
-            SickleSprite.Geometry geo = Geo;
-            Vector2 axis = Projectile.rotation.ToRotationVector2();
-            Vector2 tip = Projectile.Center + axis * geo.FrontReach;
-            Vector2 butt = Projectile.Center - axis * geo.RearReach;
-            Rectangle box = npc.Hitbox;
-
-            if (!box.Contains(tip.ToPoint()))
-            {
-                // Кончик снаружи. Клинок при этом пересекает тело — меч уже
-                // пробил врага сам в тик попадания: не дёргаем его назад
-                for (float t = 0.15f; t <= 0.9f; t += 0.15f)
-                {
-                    if (box.Contains(Vector2.Lerp(butt, tip, t).ToPoint()))
-                        return Projectile.Center - npc.Center;
-                }
-                // Кончик просто не дошёл (касание краем зоны острия) —
-                // старый зажим кончика внутрь тела
-                return TipLodgeOffset(npc);
-            }
-
-            // Кончик внутри: ищем выход с дальней стороны тела...
-            float exitShift = -1f;
-            for (float d = 2f; d <= 260f; d += 2f)
-            {
-                if (!box.Contains((tip + axis * d).ToPoint()))
-                {
-                    exitShift = d;
-                    break;
-                }
-            }
-            if (exitShift < 0f)
-                return TipLodgeOffset(npc); // выхода не видно — старый зажим
-
-            // ...и предел сдвига: рукоять не должна утонуть в теле
-            float hiltShift = 260f;
-            for (float d = 0f; d <= 260f; d += 2f)
-            {
-                if (box.Contains((butt + axis * d).ToPoint()))
-                {
-                    hiltShift = d + 4f; // рукоять чуть вжата в кожу
-                    break;
-                }
-            }
-
-            float shift = Math.Min(exitShift + StickProtrude, hiltShift);
-            return Projectile.Center + axis * shift - npc.Center;
-        }
-
         // Втыкается ОСТРИЁМ: внутрь цели ограничиваем положение кончика лезвия, а не
         // середины оси. Иначе у длинной косы середина прыгала бы в цель, а лезвие торчало
         // бы далеко за ней. Возвращает смещение СЕРЕДИНЫ оси от центра цели.
@@ -956,9 +904,7 @@ namespace FrostMelee.Content.Projectiles
             lodgedAuraTicks = 0;
             lodgedBurnPulse = 0;
             lodgeInit = true;
-            // Пробивает насквозь: кончик выходит ЗА врага, а не останавливается
-            // внутри тела. Толстого врага пронзает до рукояти
-            lodgeOffset = LodgeOffsetThrough(target);
+            lodgeOffset = TipLodgeOffset(target);
             Projectile.netUpdate = true;
         }
 
@@ -1055,6 +1001,17 @@ namespace FrostMelee.Content.Projectiles
             State == StateLying && lyingInit
                 ? Projectile.Bottom + Vector2.Lerp(settleFromOffset, new Vector2(0f, -lyingBelow), SettleProgress)
                 : Projectile.Center;
+
+        public override void DrawBehind(int index, List<int> behindNPCsAndTiles, List<int> behindNPCs,
+            List<int> behindProjectiles, List<int> overPlayers, List<int> overWiresUI)
+        {
+            // Куда именно «под»: во враге — под NPC (тело перекрывает вошедший
+            // клинок), в земле — под блоки (земля перекрывает закопанный кончик)
+            if (State == StateLodged)
+                behindNPCs.Add(index);
+            else if (State == StateStuckTile)
+                behindNPCsAndTiles.Add(index);
+        }
 
         public override bool PreDraw(ref Color lightColor)
         {
