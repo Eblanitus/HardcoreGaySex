@@ -46,14 +46,15 @@ namespace FrostMelee.Content.Projectiles
         private const float StickAngle = 0.49f;     // допуск острия (~28°)
         private const float StickMinSpeed = 7f;
         private const float SideHitDamageMult = 0.5f;
-        private const float StickEmbedDepth = 6f;
+        private const float StickEmbedDepth = 12f; // глубже, чем 6: меч не балансирует на кончике
+        private const float StickNpcEmbed = 8f;    // досаживание вдоль клинка при застревании во враге
         // Втыкается только та часть клинка, которой вообще втыкаются: передний
         // кусок у кончика. Касание серединой клинка или рукоятью — не втыкание,
         // а удар плашмя (иначе меч «застревал» в воздухе рядом с врагом:
         // кончик далеко сбоку, а защёлка дёргала меч к цели)
         private const float StickTipZoneFraction = 0.35f; // доля длины от кончика
-        private const float StickTipMaxGap = 14f;         // кончик не дальше этого от врага
-        private const float StickTipReach = 10f;          // кончик не дальше этого от земли
+        private const float StickTipMaxGap = 20f;         // кончик не дальше этого от врага
+        private const float StickTipReach = 16f;          // кончик не дальше этого от земли
         // Авто-возврат через N тиков; 0 = никогда (доктрина: подбери сам)
         private const int AutoReturnTicks = 0;
 
@@ -392,7 +393,7 @@ namespace FrostMelee.Content.Projectiles
         // этом рядом с врагом (а не где-то сбоку). Без этого меч застревал от
         // касания серединой клинка и висел на враге багануто: защёлка
         // (TipLodgeOffset) дёргала его так, чтобы кончик оказался внутри
-        private bool TipSectionTouches(NPC target)
+        private bool TipSectionTouches(NPC target, out float tipGap)
         {
             SickleSprite.Geometry geo = Geo;
             Vector2 axis = Projectile.rotation.ToRotationVector2();
@@ -402,13 +403,22 @@ namespace FrostMelee.Content.Projectiles
             Vector2 nearest = new Vector2(
                 MathHelper.Clamp(tip.X, box.Left, box.Right),
                 MathHelper.Clamp(tip.Y, box.Top, box.Bottom));
-            if (Vector2.Distance(tip, nearest) > StickTipMaxGap)
+            tipGap = Vector2.Distance(tip, nearest);
+            if (tipGap > StickTipMaxGap)
                 return false;
 
+            // Точки вдоль переднего куска клинка: хоть одна внутри врага (с
+            // запасом 4 px) — коснулся остриём. Сэмплинг вместо
+            // CheckAABBvLineCollision: с ней условие почти никогда не
+            // выполнялось и волна ледяного меча пропала совсем
+            box.Inflate(4, 4);
             float zoneLen = (geo.FrontReach + geo.RearReach) * StickTipZoneFraction;
-            float collisionPoint = 0f;
-            return Collision.CheckAABBvLineCollision(box.TopLeft(), box.Size(),
-                tip - axis * zoneLen, tip, HitWidth, ref collisionPoint);
+            for (float d = 0f; d <= zoneLen; d += 4f)
+            {
+                if (box.Contains((tip - axis * d).ToPoint()))
+                    return true;
+            }
+            return box.Contains((tip - axis * zoneLen).ToPoint());
         }
 
         private bool TryLodgeInTile(Vector2 oldVelocity)
@@ -834,7 +844,11 @@ namespace FrostMelee.Content.Projectiles
             // кувырка И врага коснулся передний кусок клинка у кончика.
             // Серединой/рукоятью — слабый удар и отскок без втыкания
             cleanNpcHit = IsCleanHit(Projectile.velocity);
-            stickNpcHit = IsPointHit(Projectile.velocity) && TipSectionTouches(target);
+            bool point = IsPointHit(Projectile.velocity);
+            bool tipTouch = TipSectionTouches(target, out float tipGap);
+            stickNpcHit = point && tipTouch;
+            // TODO: диагностика втыкания — убрать, когда волна подтвердится в игре
+            Mod.Logger.Info($"[Stick] clean={cleanNpcHit} point={point} tip={tipTouch} gap={tipGap:0.0} speed={Projectile.velocity.Length():0.0} -> stick={stickNpcHit}");
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
@@ -891,6 +905,10 @@ namespace FrostMelee.Content.Projectiles
             lodgedAuraTicks = 0;
             lodgedBurnPulse = 0;
             lodgeInit = true;
+            // Чуть глубже вдоль клинка: сидит во враге, а не балансирует на
+            // самом кончике у поверхности (замечание владельца). Зажим в
+            // TipLodgeOffset всё равно удержит кончик внутри цели
+            Projectile.Center += Projectile.rotation.ToRotationVector2() * StickNpcEmbed;
             lodgeOffset = TipLodgeOffset(target);
             Projectile.netUpdate = true;
         }
