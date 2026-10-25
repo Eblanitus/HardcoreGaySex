@@ -21,7 +21,7 @@ namespace FrostMelee
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261026-rename-1";
+        public const string BuildTag = "20261026-hitbox-1";
 
         public override void Load()
         {

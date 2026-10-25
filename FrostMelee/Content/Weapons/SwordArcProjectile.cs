@@ -32,6 +32,9 @@ namespace FrostMelee.Content.Weapons
         private const float LineTexOuter = 82f;
         private static readonly float ArcAngleBack = MathHelper.ToRadians(74f);
         private static readonly float ArcAngleFront = MathHelper.ToRadians(56f);
+        // Толщина клинка для зоны полного урона: клин между углами клинка соседних
+        // тиков расширяем на этот угол в обе стороны (≈3 px на острие)
+        private static readonly float BladeWedgePad = MathHelper.ToRadians(3f);
         // Дуга растёт за взмах: масштаб от ArcScaleStart до ArcScaleStart + ArcScaleGrowth (× ai[2])
         private const float ArcScaleStart = 1f;
         private const float ArcScaleGrowth = 0.6f;
@@ -930,50 +933,108 @@ namespace FrostMelee.Content.Weapons
                 DrawTrailRibbon(player, glow, SwingEnv(Projectile.localAI[0], maxAnim), core, tail, edge);
         }
 
-        // Хитбокс на момент time — сектор вокруг игрока: от центра до внешнего края линии
-        // (но не короче клинка), по углу от хвоста до головы дуги
+        // Контрольный сектор на момент time (зона дальше острия и серверный
+        // запасной путь): вокруг центра игрока, но позади клинка и только в уже
+        // заметённой части взмаха — голова на клинке, хвост не дальше
+        // ArcAngleBack+ArcAngleFront назад и не раньше начала взмаха. Раньше
+        // сектор стоял головой на +56° ВПЕРЕДИ клинка и бил туда, где клинок
+        // ещё не был; полный урон теперь даёт только сама полоса клинка (TryHit)
         private void GetHitSector(Player player, float time, out Vector2 center, out float outer, out float startAngle, out float sweep) {
             GetArcState(player, time, out float rotation, out float scale);
             // Центр — живая позиция игрока, а не Projectile.Center: тот ставится в AI
             // и на бегу может отставать от игрока на тик
             center = player.RotatedRelativePoint(player.MountedCenter);
-            // В начале взмаха линия ещё не дотянулась до острия — бьёт весь клинок
             outer = Math.Max(LineTexOuter * scale * BodyDrawScale * LineDrawScale, BladeReach);
-            // ai[0] < 0 — текстура отзеркалена (FlipVertically): хвост и голова меняются местами
-            startAngle = Projectile.ai[0] >= 0f ? rotation - ArcAngleBack : rotation - ArcAngleFront;
-            sweep = ArcAngleBack + ArcAngleFront;
+            float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
+            GetArcState(player, 0f, out float startRot, out _);
+            float back = rotation - dir * (ArcAngleBack + ArcAngleFront);
+            back = dir > 0f ? Math.Max(back, startRot) : Math.Min(back, startRot);
+            startAngle = dir > 0f ? back : rotation;
+            sweep = Math.Abs(rotation - back);
+        }
+
+        // Клин зоны клинка: от кисти, между углом клинка прошлого и текущего тика
+        // (заметённая за тик часть пути) плюс толщина клинка по краям. Углы — та же
+        // формула, что рисует клинок (GetArcState), поэтому зона и картинка в один тик
+        private void GetBladeWedge(Player player, out Vector2 hand, out float startAngle, out float sweep) {
+            hand = player.itemLocation;
+            float time = Projectile.localAI[0];
+            GetArcState(player, time, out float now, out _);
+            GetArcState(player, Math.Max(0f, time - 1f), out float prev, out _);
+            startAngle = Math.Min(now, prev) - BladeWedgePad;
+            sweep = Math.Abs(now - prev) + BladeWedgePad * 2f;
+        }
+
+        // Настоящая длина клинка (приклад → остриё) в мире сейчас. 0 — геометрии
+        // нет (выделенный сервер): TryHit уходит в запасной сектор, как у копья
+        private float BladeLengthNow(Player player) {
+            if (Main.dedServ || player.HeldItem.IsAir)
+                return 0f;
+            int itemType = SwordItem != 0 ? SwordItem : player.HeldItem.type;
+            if (itemType <= 0)
+                return 0f;
+            return SickleSprite.Get(itemType).Length * player.GetAdjustedItemScale(player.HeldItem);
+        }
+
+        // Спад от расстояния за кончиком клинка: 0 — как клинком, 1 — край линии дуги
+        private float FalloffEdge(float distance, float reach) {
+            float maxReach = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2];
+            if (maxReach <= reach)
+                return 0f;
+            return MathHelper.Clamp((distance - reach) / (maxReach - reach), 0f, 1f);
+        }
+
+        // Попадание и «краевой» коэффициент урона edge (0 — полный, 1 — минимальный) —
+        // как у копья (SickleArcProjectile.TryHit):
+        // 1) Клинок: заметённый за тик клин от кисти до острия — полный урон.
+        // 2) Контроль дальше острия: сектор позади клинка до края линии, урон падает.
+        // Нет геометрии (сервер) — запасной сектор GetHitSector целиком.
+        private bool TryHit(Rectangle target, out float edge) {
+            edge = 1f;
+            Player player = Main.player[Projectile.owner];
+            GetHitSector(player, Projectile.localAI[0], out Vector2 center, out float outer,
+                out float startAngle, out float sweep);
+
+            float bladeLen = BladeLengthNow(player);
+            if (bladeLen <= 1f) {
+                if (!NearestInWedge(target, center, startAngle, sweep, out float distance, out _) || distance > outer)
+                    return false;
+                edge = FalloffEdge(distance, BladeReach);
+                return true;
+            }
+
+            GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
+            if (NearestInWedge(target, hand, bladeStart, bladeSweep, out float bladeDist, out _) && bladeDist <= bladeLen) {
+                edge = 0f;
+                return true;
+            }
+
+            GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
+            float lineOuter = LineTexOuter * arcScale * BodyDrawScale * LineDrawScale;
+            if (lineOuter <= BladeReach)
+                return false;
+            if (!NearestInWedge(target, center, startAngle, sweep, out float dist, out float farthest)
+                || dist > lineOuter || farthest <= BladeReach)
+                return false;
+            edge = FalloffEdge(dist, BladeReach);
+            return true;
         }
 
         public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox) {
-            // Хитбокс — точная форма нарисованной дуги (сектор), а не конус по 5 точкам цели
-            GetHitSector(Main.player[Projectile.owner], Projectile.localAI[0], out Vector2 center,
-                out float outer, out float startAngle, out float sweep);
-            return NearestInWedge(targetHitbox, center, startAngle, sweep, out float distance) && distance <= outer;
-        }
-
-        // Насколько цель у края дуги: 0 — в зоне клинка, 1 — у края полностью раскрытой
-        // дуги. Берётся ближайшая к игроку точка цели внутри дуги — ею цель и задета.
-        private float EdgeFactor(Rectangle targetHitbox) {
-            GetHitSector(Main.player[Projectile.owner], Projectile.localAI[0], out Vector2 center,
-                out _, out float startAngle, out float sweep);
-            // Сюда попадаем только после Colliding; если вдруг цель вне дуги — считаем краем
-            if (!NearestInWedge(targetHitbox, center, startAngle, sweep, out float distance))
-                return 1f;
-            float maxReach = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2];
-            if (maxReach <= BladeReach)
-                return 0f;
-            return MathHelper.Clamp((distance - BladeReach) / (maxReach - BladeReach), 0f, 1f);
+            return TryHit(targetHitbox, out _);
         }
 
         private static readonly Vector2[] clipBufferA = new Vector2[16];
         private static readonly Vector2[] clipBufferB = new Vector2[16];
 
-        // Ближайшая к центру точка прямоугольника внутри клина {угол от startAngle до
-        // startAngle + sweep}, sweep <= π. false — прямоугольник в клин не попадает.
-        // Точно, без выборки точек: режем прямоугольник клином — остаётся выпуклый
-        // многоугольник, ищем его ближайшую к центру точку.
-        private static bool NearestInWedge(Rectangle rect, Vector2 center, float startAngle, float sweep, out float distance) {
+        // Ближайшая и самая дальняя точки прямоугольника внутри клина {угол от
+        // startAngle до startAngle + sweep}, sweep <= π. false — прямоугольник в
+        // клин не попадает. Точно, без выборки точек: режем прямоугольник клином —
+        // остаётся выпуклый многоугольник, ищем его крайние по радиусу точки.
+        private static bool NearestInWedge(Rectangle rect, Vector2 center, float startAngle, float sweep,
+            out float distance, out float farthest) {
             distance = 0f;
+            farthest = 0f;
             clipBufferA[0] = new Vector2(rect.Left, rect.Top) - center;
             clipBufferA[1] = new Vector2(rect.Right, rect.Top) - center;
             clipBufferA[2] = new Vector2(rect.Right, rect.Bottom) - center;
@@ -989,15 +1050,17 @@ namespace FrostMelee.Content.Weapons
 
             // Центр — вершина клина, внутрь многоугольника он не попадает, поэтому
             // ближняя точка всегда лежит на одном из рёбер
-            float nearestSq = float.MaxValue;
+            float nearestSq = float.MaxValue, farthestSq = 0f;
             for (int i = 0; i < count; i++) {
                 Vector2 a = clipBufferA[i];
                 Vector2 edge = clipBufferA[(i + 1) % count] - a;
                 float lengthSq = edge.LengthSquared();
                 float t = lengthSq > 0f ? MathHelper.Clamp(-Vector2.Dot(a, edge) / lengthSq, 0f, 1f) : 0f;
                 nearestSq = Math.Min(nearestSq, (a + edge * t).LengthSquared());
+                farthestSq = Math.Max(farthestSq, a.LengthSquared());
             }
             distance = (float)Math.Sqrt(nearestSq);
+            farthest = (float)Math.Sqrt(farthestSq);
             return true;
         }
 
@@ -1017,13 +1080,22 @@ namespace FrostMelee.Content.Weapons
             return outCount;
         }
 
-        // Отладка (DebugHitbox): пыль по границе зоны клинка и по внешнему краю хитбокса
+        // Отладка (DebugHitbox): голубая пыль — кончик клинка от центра (отсюда спад),
+        // розовая — край контрольного сектора, изумрудная — остриё по клину зоны клинка
         private void ShowHitbox(Player player) {
             GetHitSector(player, Projectile.localAI[0], out Vector2 center, out float outer, out float startAngle, out float sweep);
             for (int i = 0; i <= 12; i++) {
                 Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
                 Dust.NewDustPerfect(center + dir * BladeReach, DustID.BlueFairy, Vector2.Zero).noGravity = true;
                 Dust.NewDustPerfect(center + dir * outer, DustID.Pixie, Vector2.Zero).noGravity = true;
+            }
+            float bladeLen = BladeLengthNow(player);
+            if (bladeLen > 1f) {
+                GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
+                for (int i = 0; i <= 4; i++) {
+                    Vector2 dir = (bladeStart + bladeSweep * i / 4f).ToRotationVector2();
+                    Dust.NewDustPerfect(hand + dir * bladeLen, DustID.GemEmerald, Vector2.Zero).noGravity = true;
+                }
             }
         }
 
@@ -1035,8 +1107,8 @@ namespace FrostMelee.Content.Weapons
         }
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers) {
-            // Урон и отбрасывание от радиуса: клинком — как мечом, к краю дуги — до крошечных
-            float edge = EdgeFactor(target.Hitbox);
+            // Урон и отбрасывание от зоны: клинком — как мечом, дальше острия к краю линии — до крошечных
+            TryHit(target.Hitbox, out float edge);
             // Урон: крутой спад сразу за клинком, дальше крошечный; защита вычтется уже после этого
             float falloff = MathHelper.Clamp(edge / DamageFalloffSpan, 0f, 1f);
             falloff = falloff * falloff * (3f - 2f * falloff);
