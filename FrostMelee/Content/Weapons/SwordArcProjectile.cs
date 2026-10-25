@@ -11,8 +11,9 @@ using FrostMelee.Content.Projectiles;
 namespace FrostMelee.Content.Weapons
 {
     // Снаряд дуги для ледяных мечей (текстура — ванильная дуга меча Excalibur).
-    // Копия WoodSwordArcProjectile (WoodSwordsOverhaul) + ледяной след:
-    // на swept-веер ложится слабый иней FrostTrailSystem (только Slow, без поджога).
+    // Копия WoodSwordArcProjectile (WoodSwordsOverhaul) + ледяной след у Ice Blade:
+    // на его swept-веер ложится слабый невидимый иней FrostTrailSystem (только Slow).
+    // У Фростбранда инея нет вовсе — это фишка копья, а меч огненный.
     // Дуга — единственный удар взмаха (у самого меча хитбокс убран, см. SwordGlobalItem):
     // бьёт от рукояти до края нарисованной дуги, по каждой цели раз за взмах.
     // В зоне клинка — полный урон и отбрасывание, дальше к краю они падают до крошечных.
@@ -190,7 +191,7 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        // === Ледяной след: слабый иней вдоль веера взмаха (только Slow) ===
+        // === Ледяной след Ice Blade: слабый невидимый иней вдоль веера взмаха (только Slow) ===
         // Точки брать по текущему углу дуги, на трёх радиусах через лезвие —
         // за взмах собирается веер снега, как у взмаха серпа, но слабый.
         private FrostTrailSystem.Trail frostTrail;
@@ -198,12 +199,17 @@ namespace FrostMelee.Content.Weapons
         private void RecordFrostTrail(Player player) {
             if (Main.dedServ)
                 return;
+            // Фростбранд инея не оставляет вовсе — ни пятен с искрами, ни
+            // замедления: иней — фишка копья (решение владельца), а этот меч
+            // огненный. Иней взмаха остался только у Ice Blade, невидимый
+            if (SwordItem == ItemID.Frostbrand)
+                return;
             float outer = Math.Max(LineTexOuter * ArcScaleAt(Projectile.localAI[0]) * BodyDrawScale * LineDrawScale, BladeReach);
             if (outer <= 1f)
                 return;
             if (frostTrail == null)
                 // Ice Blade точится, а не сыплет иней: замедление остаётся, пятна и искры инея не рисуются
-                frostTrail = FrostTrailSystem.Begin(true, false, !IsIceBlade(player));
+                frostTrail = FrostTrailSystem.Begin(true, false, false);
             // За тик заметается угол между прошлым и текущим поворотом линии:
             // точки раскладываем по трем направлениям на трех радиусах,
             // чтобы веер снега не редел на быстрых взмахах
