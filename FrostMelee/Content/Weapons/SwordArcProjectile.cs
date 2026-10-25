@@ -618,6 +618,10 @@ namespace FrostMelee.Content.Weapons
             honeRadii[0] = ArcLineRadius(Projectile.localAI[0]);
             honeCount = Math.Min(honeCount + 1, HonePoints);
 
+            // Настоящий путь клинка вокруг кисти — та же запись, что у Фростбранда
+            // (fbHist*): веер и лента Ice Blade строятся по ней, форма дуги общая
+            RecordFlameBlade(player);
+
             float progress = Projectile.localAI[0] / maxAnim;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             float polish = IceBladeFx.PolishOf(player, SwordItem);
@@ -691,8 +695,15 @@ namespace FrostMelee.Content.Weapons
             float polish = IceBladeFx.PolishOf(player, SwordItem);
             float keen = Smooth01((polish - KeenFrom) / KeenSpan);
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
+            // Форма как у Фростбранда: веер центром на кисти и размером по
+            // настоящему клинку (запись fbHist*), а не формульный сектор вокруг
+            // центра тела с растущим радиусом. Нет записи (первый тик) — старый путь
+            bool rec = fbHasBlade && fbHistCount >= 1;
             // Ванильный слеш — всегда: и на тупом, и на отточенном клинке он остаётся
-            IceBladeFx.DrawSwingArc(texture, Projectile.Center, Projectile.rotation, dir, scale * LineDrawScale, fx,
+            IceBladeFx.DrawSwingArc(texture,
+                rec ? fbHand : Projectile.Center,
+                rec ? fbHistAngle[0] : Projectile.rotation, dir,
+                rec ? fbHistRadius[0] / LineTexOuter : scale * LineDrawScale, fx,
                 progress, fade, polish);
 
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
@@ -776,6 +787,28 @@ namespace FrostMelee.Content.Weapons
             return n;
         }
 
+        // История ленты по ЗАПИСИ настоящего клинка (fbHist*, как у Фростбранда):
+        // углы и радиусы «кисть → остриё», записанные по тикам в AI, растянутые
+        // на все точки ленты. Лента ложится на настоящий путь острия вокруг
+        // кисти и заканчивается там, где клинок реально был, — та же форма
+        // дуги, что у Фростбранда, а не формульный веер вокруг центра тела
+        private int BuildRecordedHistory(float[] angles, float[] rOut, float[] rIn) {
+            int cap = Math.Min(fbHistCount, (int)TrailTicks);
+            if (cap < 2)
+                return 0;
+            int n = 0;
+            for (int i = 0; i < angles.Length; i++) {
+                float f = i / (float)(angles.Length - 1) * (cap - 1);
+                int i0 = Math.Min((int)f, cap - 2);
+                float k = f - i0;
+                angles[n] = MathHelper.Lerp(fbHistAngle[i0], fbHistAngle[i0 + 1], k);
+                rOut[n] = MathHelper.Lerp(fbHistRadius[i0], fbHistRadius[i0 + 1], k);
+                rIn[n] = Math.Max(6f, rOut[n] * TrailInnerFrac);
+                n++;
+            }
+            return n;
+        }
+
         // Точка на ленте: t — доля вдоль (0 голова, 1 хвост), radius — доля внешнего радиуса
         private static Vector2 KeenPoint(Vector2 center, int n, float t, float radius) {
             float f = MathHelper.Clamp(t, 0f, 1f) * (n - 1);
@@ -789,26 +822,38 @@ namespace FrostMelee.Content.Weapons
         private void DrawKeenArc(Player player, Texture2D texture, Texture2D glow, float scale, SpriteEffects fx, float fade, float env, float keen) {
             IceBladeFx.ArcColors(IceBladeFx.PolishOf(player, SwordItem), out Color core, out Color tail, out Color edge);
 
+            // Форма как у Фростбранда: центр — кисть, угол и радиус — настоящий
+            // клинок из записи (fbHist*); лента — по записанному пути острия.
+            // Нет записи (первый тик) — прежний формульный путь вокруг центра тела
+            bool rec = fbHasBlade && fbHistCount >= 1;
+            Vector2 center = rec ? fbHand : Projectile.Center;
+            float headAngle = rec ? fbHistAngle[0] : Projectile.rotation;
+            float lineScale = rec ? fbHistRadius[0] / LineTexOuter : scale * LineDrawScale;
+
             // линейная дуга меча: светлая бирюза клинка (у ванили и косы она белая).
             // Посадка как у сектора DrawSwingArc: голова линии — ровно на клинке,
             // вся линия позади него
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
             Rectangle line = texture.Frame(1, 4, 0, 3);
-            Main.EntitySpriteDraw(texture, Projectile.Center - Main.screenPosition, line,
+            Main.EntitySpriteDraw(texture, center - Main.screenPosition, line,
                 IceBladeFx.ArcLineColor(IceBladeFx.PolishOf(player, SwordItem)) * (0.25f * fade * keen),
-                Projectile.rotation - dir * IceArcFx.HeadAngle, texture.Frame(1, 4).Size() / 2f, scale * LineDrawScale, fx, 0f);
+                headAngle - dir * IceArcFx.HeadAngle, texture.Frame(1, 4).Size() / 2f, lineScale, fx, 0f);
 
-            DrawTrailRibbon(player, glow, env * keen, core, tail, edge);
+            DrawTrailRibbon(player, glow, env * keen, core, tail, edge, rec ? fbHand : null, rec);
         }
 
         // Лента по следу взмаха + мягкий ореол под ней — общая часть дуг шаблона
-        // (отточенный Ice Blade и праздничные мечи): история BuildTrailHistory,
-        // ореол мазками, лента IceRibbon. Цвета задаёт вызвавший.
-        private void DrawTrailRibbon(Player player, Texture2D glow, float env, Color core, Color tail, Color edge) {
+        // (отточенный Ice Blade и праздничные мечи): ореол мазками, лента
+        // IceRibbon. Цвета задаёт вызвавший. recorded=true — история из записи
+        // настоящего клинка вокруг кисти (fbHist*, форма Фростбранда),
+        // иначе формульная история вокруг центра тела (BuildTrailHistory)
+        private void DrawTrailRibbon(Player player, Texture2D glow, float env, Color core, Color tail, Color edge,
+            Vector2? centerOverride = null, bool recorded = false) {
             if (env <= 0.02f)
                 return;
-            Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
-            int n = BuildTrailHistory(player, keenAngles, keenROut, keenRIn);
+            Vector2 center = centerOverride ?? player.RotatedRelativePoint(player.MountedCenter);
+            int n = recorded ? BuildRecordedHistory(keenAngles, keenROut, keenRIn)
+                             : BuildTrailHistory(player, keenAngles, keenROut, keenRIn);
             if (n < 2)
                 return;
 
@@ -819,15 +864,19 @@ namespace FrostMelee.Content.Weapons
             // гребень «зубцов» ореола (лента казалась ниже второй дуги)
             Color haloCol = Color.Lerp(tail, edge, 0.5f);
             float rOutNow = keenROut[0];
-            float wStart = KeenHaloWidth;
+            // Ширина мазков — не шире самой полосы ленты: на малом радиусе вокруг
+            // кисти широкий ореол залил бы всё внутрь полосы, и дуга снова
+            // читалась бы сплошным веером, а не полосой по пути клинка
+            float haloScale = Math.Min(1f, Math.Max(0.2f, (rOutNow - keenRIn[0]) * 1.6f / KeenHaloWidth));
+            float wStart = KeenHaloWidth * haloScale;
             Vector2 prev = KeenPoint(center, n, 0f,
                 rOutNow > 1f ? Math.Max(0f, (rOutNow - wStart * 0.5f) / rOutNow) : 1f);
             // мазков много и они плотно перекрываются — ореол сплошной, без бусин
             const int HaloSteps = 24;
             for (int j = 1; j <= HaloSteps; j++) {
                 float t0 = (j - 1) / (float)HaloSteps, t1 = j / (float)HaloSteps;
-                float w0 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t0);
-                float w1 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t1);
+                float w0 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t0) * haloScale;
+                float w1 = MathHelper.Lerp(KeenHaloWidth, KeenHaloWidthTail, t1) * haloScale;
                 Vector2 next = KeenPoint(center, n, t1,
                     rOutNow > 1f ? Math.Max(0f, (rOutNow - w1 * 0.5f) / rOutNow) : 1f);
                 IceArcFx.DrawSegment(glow, prev, next, w0, w1,

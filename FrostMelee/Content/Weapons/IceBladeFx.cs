@@ -131,7 +131,7 @@ namespace FrostMelee.Content.Weapons
         // =====================================================================
         // Дуга взмаха по рецепту ванильного Excalibur, в ледяных тонах
         // =====================================================================
-        // tex — текстура Excalibur (4 кадра), center — центр снаряда (мир), rotation/fx/scale —
+        // tex — текстура Excalibur (4 кадра), center — центр веера в мире (кисть), rotation/fx/scale —
         // как у ванильного снаряда, dir — сторона взмаха (ai[0] ≥ 0 ? 1 : -1),
         // progress — доля взмаха, fade — ванильная огибающая (0→1 к 60 %, дальше гаснет).
         public static void DrawSwingArc(Texture2D tex, Vector2 center, float rotation, float dir, float scale,
