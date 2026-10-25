@@ -108,12 +108,15 @@ namespace FrostMelee.Content.Weapons
                 && Projectile.localAI[0] % 2 == 0)
                 SpawnArcJets(player);
 
-            // Визуал (все клиенты): Ice Blade точится об воздух, Фростбранд сыплет угли пламени
+            // Визуал (все клиенты): Ice Blade точится об воздух; Фростбранд
+            // записывает настоящий путь клинка для ленты и сыплет угли пламени
             if (!Main.dedServ) {
                 if (IsIceBlade(player))
                     UpdateHone(player, maxAnim);
-                else
+                else {
+                    RecordFlameBlade(player);
                     SpawnFlameSparks(player, maxAnim);
+                }
             }
 
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
@@ -312,6 +315,40 @@ namespace FrostMelee.Content.Weapons
         private static readonly float[] fbROut = new float[FlamePoints];
         private static readonly float[] fbRIn = new float[FlamePoints];
 
+        // Настоящий путь клинка, записываемый каждый тик (RecordFlameBlade в AI):
+        // угол и длина линии кисть→остриё, новейшая точка первой. Лента по этой
+        // записи не может быть кривой относительно меча. Формульная история
+        // (BuildTrailHistory) ею не была: ArcRotation переключается между двумя
+        // формулами по текущей анимации игрока, и в конце взмаха вся лента
+        // перестраивалась по другой кривой; плюс её центр — тело, а не кисть.
+        private const int FlameTrailTicks = 18;   // на сколько тиков назад тянется лента
+        private float[] fbHistAngle;
+        private float[] fbHistRadius;
+        private int fbHistCount;
+        private Vector2 fbHand;
+        private Vector2 fbTipPos;
+        private bool fbHasBlade;
+
+        private void RecordFlameBlade(Player player) {
+            if (!GetBladeLine(player, out Vector2 butt, out Vector2 tip))
+                return;
+            fbHistAngle ??= new float[FlamePoints];
+            fbHistRadius ??= new float[FlamePoints];
+            float angle = (tip - butt).ToRotation();
+            if (fbHistCount > 0)
+                angle = fbHistAngle[0] + MathHelper.WrapAngle(angle - fbHistAngle[0]);
+            for (int i = Math.Min(fbHistCount, FlamePoints - 1); i > 0; i--) {
+                fbHistAngle[i] = fbHistAngle[i - 1];
+                fbHistRadius[i] = fbHistRadius[i - 1];
+            }
+            fbHistAngle[0] = angle;
+            fbHistRadius[0] = Vector2.Distance(butt, tip);
+            fbHistCount = Math.Min(fbHistCount + 1, FlamePoints);
+            fbHand = butt;
+            fbTipPos = tip;
+            fbHasBlade = true;
+        }
+
         private static float Smooth01(float x) {
             x = MathHelper.Clamp(x, 0f, 1f);
             return x * x * (3f - 2f * x);
@@ -345,7 +382,7 @@ namespace FrostMelee.Content.Weapons
             float full = sp.FlameFullness;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             float level = 0.3f + 0.7f * full;              // пустой меч заметно бледнее, но след виден
-            float glowBoost = 0.75f + 0.45f * sp.FireGlow; // горящие рядом подкармливают яркость
+            float glowBoost = 0.9f + 0.35f * sp.FireGlow;  // горящие рядом подкармливают яркость
             float flameEnv = env * level * glowBoost;
 
             // Горячая линия под всем: белый жар по кромке, голубой обод. Тихая:
@@ -358,23 +395,40 @@ namespace FrostMelee.Content.Weapons
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed || env <= 0.02f)
                 return;
-            Vector2 center = player.RotatedRelativePoint(player.MountedCenter);
-            int n = BuildTrailHistory(player, fbAngles, fbROut, fbRIn);
-            if (n < 2)
-                return;
             // Фаза мерцания и бега штрихов: минутный цикл (штрихи сдвигаются на
             // целое число повторов текстуры — стык цикла не виден)
             float gt = Main.GameUpdateCount % 3600;
-            // Радиус ленты — постоянный, как у копья: чистая полоса по кругу
-            // острия, а не растущая спираль-радуга на пол-оборота. Внешний край
-            // дышит языками: радиус каждой точки слегка дрожит, к хвосту сильнее
-            float outerNow = ArcLineRadius(Projectile.localAI[0]);
-            for (int i = 0; i < n; i++) {
-                float t = i / (float)(n - 1);
-                float flick = 1f + 0.05f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
-                fbROut[i] = outerNow * flick;
-                fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+            // Лента — по записанному пути настоящего клинка вокруг кисти
+            // (fbHist*): голова ровно на острие, тело — где клинок правда был.
+            // Внешний край чуть дышит языками: радиус дрожит, к хвосту сильнее.
+            // Запасной путь (первый тик, записи ещё нет) — формульная история
+            Vector2 center;
+            int n = 0;
+            if (fbHasBlade && fbHistCount >= 2) {
+                center = fbHand;
+                float headA = fbHistAngle[0];
+                int cap = Math.Min(fbHistCount, FlameTrailTicks);
+                for (int i = 0; i < cap; i++) {
+                    if (i > 0 && Math.Abs(fbHistAngle[i] - headA) > TrailMaxAngle)
+                        break;
+                    float t = i / (float)Math.Max(1, cap - 1);
+                    float flick = 1f + 0.04f * full * t * (float)Math.Sin(gt * 1.9f + i * 1.35f);
+                    fbAngles[i] = fbHistAngle[i];
+                    fbROut[i] = fbHistRadius[i] * flick;
+                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+                    n++;
+                }
+            } else {
+                center = player.RotatedRelativePoint(player.MountedCenter);
+                n = BuildTrailHistory(player, fbAngles, fbROut, fbRIn);
+                float outerNow = ArcLineRadius(Projectile.localAI[0]);
+                for (int i = 0; i < n; i++) {
+                    fbROut[i] = outerNow;
+                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+                }
             }
+            if (n < 2)
+                return;
 
             // Ореол под лентой (как у копья): мягкие широкие мазки по следу острия
             if (full > 0.02f) {
@@ -405,7 +459,7 @@ namespace FrostMelee.Content.Weapons
 
             Vector2 gorigin = glow.Size() / 2f;
             float head = Projectile.rotation;
-            Vector2 tip = center + head.ToRotationVector2() * fbROut[0];
+            Vector2 tip = fbHasBlade ? fbTipPos : center + head.ToRotationVector2() * fbROut[0];
 
             // Головка у острия: яркая капля жара, дрожит как пламя
             float headFlick = 0.85f + 0.15f * (float)Math.Sin(gt * 2.3f);
