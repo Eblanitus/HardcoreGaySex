@@ -47,7 +47,7 @@ namespace FrostMelee.Content.Projectiles
         private const float StickMinSpeed = 7f;
         private const float SideHitDamageMult = 0.5f;
         private const float StickEmbedDepth = 12f; // глубже, чем 6: меч не балансирует на кончике
-        private const float StickNpcEmbed = 8f;    // досаживание вдоль клинка при застревании во враге
+        private const float StickProtrude = 10f;   // на сколько кончик торчит ЗА врагом при пробитии насквозь
         // Втыкается только та часть клинка, которой вообще втыкаются: передний
         // кусок у кончика. Касание серединой клинка или рукоятью — не втыкание,
         // а удар плашмя (иначе меч «застревал» в воздухе рядом с врагом:
@@ -289,7 +289,7 @@ namespace FrostMelee.Content.Projectiles
                 if (!lodgeInit)
                 {
                     lodgeInit = true;
-                    lodgeOffset = TipLodgeOffset(npc);
+                    lodgeOffset = LodgeOffsetThrough(npc);
                 }
                 Projectile.Center = npc.Center + lodgeOffset;
                 UpdateLodgedFrostbrand(npc);
@@ -393,7 +393,7 @@ namespace FrostMelee.Content.Projectiles
         // этом рядом с врагом (а не где-то сбоку). Без этого меч застревал от
         // касания серединой клинка и висел на враге багануто: защёлка
         // (TipLodgeOffset) дёргала его так, чтобы кончик оказался внутри
-        private bool TipSectionTouches(NPC target, out float tipGap)
+        private bool TipSectionTouches(NPC target)
         {
             SickleSprite.Geometry geo = Geo;
             Vector2 axis = Projectile.rotation.ToRotationVector2();
@@ -403,8 +403,7 @@ namespace FrostMelee.Content.Projectiles
             Vector2 nearest = new Vector2(
                 MathHelper.Clamp(tip.X, box.Left, box.Right),
                 MathHelper.Clamp(tip.Y, box.Top, box.Bottom));
-            tipGap = Vector2.Distance(tip, nearest);
-            if (tipGap > StickTipMaxGap)
+            if (Vector2.Distance(tip, nearest) > StickTipMaxGap)
                 return false;
 
             // Точки вдоль переднего куска клинка: хоть одна внутри врага (с
@@ -677,6 +676,62 @@ namespace FrostMelee.Content.Projectiles
             sp.FrostShown = 0f;
         }
 
+        // Застревание во враге: меч пробивает его НАСКВОЗЬ — кончик выходит
+        // ЗА врага с дальней стороны и торчит там (решение владельца: «не
+        // поверх врага внутрь, а за него»). Враг толще клинка и насквозь не
+        // пробивается — тогда меч уходит вглубь до самой рукояти. Сдвиг
+        // только вдоль собственной оси клинка, угол не трогаем. Возвращает
+        // смещение середины оси от центра цели (как TipLodgeOffset)
+        private Vector2 LodgeOffsetThrough(NPC npc)
+        {
+            SickleSprite.Geometry geo = Geo;
+            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            Vector2 tip = Projectile.Center + axis * geo.FrontReach;
+            Vector2 butt = Projectile.Center - axis * geo.RearReach;
+            Rectangle box = npc.Hitbox;
+
+            if (!box.Contains(tip.ToPoint()))
+            {
+                // Кончик снаружи. Клинок при этом пересекает тело — меч уже
+                // пробил врага сам в тик попадания: не дёргаем его назад
+                for (float t = 0.15f; t <= 0.9f; t += 0.15f)
+                {
+                    if (box.Contains(Vector2.Lerp(butt, tip, t).ToPoint()))
+                        return Projectile.Center - npc.Center;
+                }
+                // Кончик просто не дошёл (касание краем зоны острия) —
+                // старый зажим кончика внутрь тела
+                return TipLodgeOffset(npc);
+            }
+
+            // Кончик внутри: ищем выход с дальней стороны тела...
+            float exitShift = -1f;
+            for (float d = 2f; d <= 260f; d += 2f)
+            {
+                if (!box.Contains((tip + axis * d).ToPoint()))
+                {
+                    exitShift = d;
+                    break;
+                }
+            }
+            if (exitShift < 0f)
+                return TipLodgeOffset(npc); // выхода не видно — старый зажим
+
+            // ...и предел сдвига: рукоять не должна утонуть в теле
+            float hiltShift = 260f;
+            for (float d = 0f; d <= 260f; d += 2f)
+            {
+                if (box.Contains((butt + axis * d).ToPoint()))
+                {
+                    hiltShift = d + 4f; // рукоять чуть вжата в кожу
+                    break;
+                }
+            }
+
+            float shift = Math.Min(exitShift + StickProtrude, hiltShift);
+            return Projectile.Center + axis * shift - npc.Center;
+        }
+
         // Втыкается ОСТРИЁМ: внутрь цели ограничиваем положение кончика лезвия, а не
         // середины оси. Иначе у длинной косы середина прыгала бы в цель, а лезвие торчало
         // бы далеко за ней. Возвращает смещение СЕРЕДИНЫ оси от центра цели.
@@ -844,11 +899,7 @@ namespace FrostMelee.Content.Projectiles
             // кувырка И врага коснулся передний кусок клинка у кончика.
             // Серединой/рукоятью — слабый удар и отскок без втыкания
             cleanNpcHit = IsCleanHit(Projectile.velocity);
-            bool point = IsPointHit(Projectile.velocity);
-            bool tipTouch = TipSectionTouches(target, out float tipGap);
-            stickNpcHit = point && tipTouch;
-            // TODO: диагностика втыкания — убрать, когда волна подтвердится в игре
-            Mod.Logger.Info($"[Stick] clean={cleanNpcHit} point={point} tip={tipTouch} gap={tipGap:0.0} speed={Projectile.velocity.Length():0.0} -> stick={stickNpcHit}");
+            stickNpcHit = IsPointHit(Projectile.velocity) && TipSectionTouches(target);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
@@ -905,11 +956,9 @@ namespace FrostMelee.Content.Projectiles
             lodgedAuraTicks = 0;
             lodgedBurnPulse = 0;
             lodgeInit = true;
-            // Чуть глубже вдоль клинка: сидит во враге, а не балансирует на
-            // самом кончике у поверхности (замечание владельца). Зажим в
-            // TipLodgeOffset всё равно удержит кончик внутри цели
-            Projectile.Center += Projectile.rotation.ToRotationVector2() * StickNpcEmbed;
-            lodgeOffset = TipLodgeOffset(target);
+            // Пробивает насквозь: кончик выходит ЗА врага, а не останавливается
+            // внутри тела. Толстого врага пронзает до рукояти
+            lodgeOffset = LodgeOffsetThrough(target);
             Projectile.netUpdate = true;
         }
 
