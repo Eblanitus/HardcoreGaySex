@@ -52,7 +52,21 @@ namespace FrostMelee.Content.Projectiles
         private static uint bladeFrame;
         private static bool bladeLineValid;
 
+        // Огонь на клинке В РУКЕ (взмах/тычок/встреча): частицы привязаны к линии
+        // клинка и тянутся за ней. Линия одна на всех (bladeButt/bladeTip),
+        // поэтому так горит только один меч за раз — тот, что в руке
         public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true);
+
+        // Огонь на БРОШЕННОМ клинке (летит или застрял): частицы рождаются на
+        // лезвии и гаснут на месте, ни к чему не привязаны и общую линию не
+        // трогают. Привязывать нельзя: линия одна, и меч в руке с застрявшим
+        // мечом начнут дёргать частицы друг к другу — огонь летает между ними
+        // «как электричество» (баг, замеченный владельцем на Дирклопсе)
+        public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false);
+
+        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored)
         {
             if (Main.dedServ)
                 return;
@@ -61,34 +75,37 @@ namespace FrostMelee.Content.Projectiles
             Vector2 perp = new Vector2(-dir.Y, dir.X);
             intensity = MathHelper.Clamp(intensity, 0.15f, 1f);
 
-            bladeVelocity = bladeLineValid
-                ? ((butt - bladeButt) + (tip - bladeTip)) * 0.5f
-                : Vector2.Zero;
-            bladeButt = butt;
-            bladeTip = tip;
-            bladeDir = dir;
-            bladeFrame = Main.GameUpdateCount;
-            bladeLineValid = true;
+            if (anchored)
+            {
+                bladeVelocity = bladeLineValid
+                    ? ((butt - bladeButt) + (tip - bladeTip)) * 0.5f
+                    : Vector2.Zero;
+                bladeButt = butt;
+                bladeTip = tip;
+                bladeDir = dir;
+                bladeFrame = Main.GameUpdateCount;
+                bladeLineValid = true;
+            }
 
             int bladeCount = System.Math.Max(1, (int)System.Math.Round(4f * intensity));
             for (int i = 0; i < bladeCount; i++)
             {
                 float along = MathHelper.Clamp((i + 0.5f) / bladeCount + Main.rand.NextFloat(-0.07f, 0.07f), 0.02f, 0.96f);
-                EmitLineParticle(butt, tip, dir, perp, FlameKind.Blade, along, -0.02f, 0.06f, 0.06f, 6, 10, 0.26f, 0.36f, true);
+                EmitLineParticle(butt, tip, dir, perp, FlameKind.Blade, along, -0.02f, 0.06f, 0.06f, 6, 10, 0.26f, 0.36f, anchored);
             }
 
             int nearCount = intensity >= 0.55f ? 2 : 1;
             for (int i = 0; i < nearCount; i++)
             {
                 float along = nearCount == 2 ? (i == 0 ? 0.28f : 0.7f) : 0.5f;
-                EmitLineParticle(butt, tip, dir, perp, FlameKind.Near, along, 0f, 0.14f, 0.12f, 7, 11, 0.28f, 0.38f, true);
+                EmitLineParticle(butt, tip, dir, perp, FlameKind.Near, along, 0f, 0.14f, 0.12f, 7, 11, 0.28f, 0.38f, anchored);
             }
 
             int haloCount = intensity >= 0.55f ? 2 : 1;
             for (int i = 0; i < haloCount; i++)
             {
                 float along = haloCount == 2 ? (i == 0 ? 0.18f : 0.82f) : 0.5f;
-                EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, along, 0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, true);
+                EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, along, 0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, anchored);
             }
 
             if (intensity >= 0.35f)

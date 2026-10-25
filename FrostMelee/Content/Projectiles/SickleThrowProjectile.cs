@@ -453,8 +453,9 @@ namespace FrostMelee.Content.Projectiles
             lastTrailPos = Projectile.Center;
         }
 
-        // Огонь на летящем Frostbrand: тот же клинок, что рисует PreDraw,
-        // поэтому пламя не отрывается от брошенного меча.
+        // Огонь на летящем Frostbrand: тот же клинок, что рисует PreDraw.
+        // EmitBladeLoose, а не EmitBlade: брошенный меч не должен делить
+        // привязанную линию клинка с мечом в руке (см. FrostJetFx)
         private void EmitFrostJet()
         {
             if (State != StateFlying)
@@ -469,7 +470,7 @@ namespace FrostMelee.Content.Projectiles
             Vector2 center = VisualCenter(geo);
             Vector2 butt = center - axis * half;
             Vector2 tip = center + axis * half;
-            FrostJetFx.EmitBlade(butt, tip, axis,
+            FrostJetFx.EmitBladeLoose(butt, tip, axis,
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
             if (Main.GameUpdateCount % 2 == 0)
                 FrostJetFx.EmitJet(center, axis);
@@ -517,18 +518,11 @@ namespace FrostMelee.Content.Projectiles
             float half = geo.Length * 0.5f * Projectile.scale;
             Vector2 butt = Projectile.Center - axis * half;
             Vector2 tip = Projectile.Center + axis * half;
-            FrostJetFx.EmitBlade(butt, tip, axis, 0.35f + 0.65f * grow);
-
-            if (Main.GameUpdateCount % 4 != 0)
-                return;
-
-            int puffs = 1 + (int)Math.Round(grow * 2f);
-            for (int i = 0; i < puffs; i++)
-            {
-                Vector2 dir = Main.rand.NextFloat(MathHelper.TwoPi).ToRotationVector2();
-                Vector2 pos = Projectile.Center + dir * radius * Main.rand.NextFloat(0.55f, 1f);
-                FrostJetFx.EmitJet(pos, dir);
-            }
+            // Огонь сидит НА клинке и разгорается с grow — и всё. Кольца клубков
+            // по воздуху вокруг меча больше нет: огонь по воздуху не
+            // распространяется (замечание владельца). Сама аура-поджог по
+            // радиусу выше работает как работала — убрана только картинка
+            FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow);
         }
 
         private void CloseFrostTrail()
