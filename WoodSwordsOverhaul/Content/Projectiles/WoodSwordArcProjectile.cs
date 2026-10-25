@@ -16,12 +16,15 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 	{
 		public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.Excalibur;
 
-		// === Геометрия нарисованной дуги (по ней же считается хитбокс) ===
-		// Снята с текстуры Excalibur: кадр 170×170, центр дуги — центр кадра.
-		// В игре видна в основном тонкая линия (кадр 3): в текстуре она лежит на радиусе
-		// 78..82 px и по углу от -74° (хвост) до +56° (голова, сторона взмаха) от оси снаряда.
-		// Тело дуги (кадр 0) почти прозрачное (цвет ×0.15 / ×0.25) и в хитбокс не входит.
-		// PreDraw рисует только линию: масштаб BodyDrawScale, сверху ×LineDrawScale. Тело не рисуется.
+		// === Геометрия дуги Excalibur (текстура 170×170, центр — центр кадра) ===
+		// Тонкая линия (кадр 3) в текстуре лежит на радиусе 78..82 px и по углу от
+		// -74° (хвост) до +56° (голова, сторона взмаха) от оси снаряда.
+		// Рисуется (PreDraw) только эта линия — ультрапрозрачной полоской по пути
+		// острия: центром на кисти, головой ровно на палке, внешним краем на острие
+		// (как дуги мечей FrostMelee). Хитбокс при этом шире полоски — формульный
+		// сектор вокруг центра игрока (GetHitSector, масштаб BodyDrawScale×
+		// LineDrawScale с ростом): палка бьёт дальше своего острия с падающим
+		// уроном, полоска лишь метит путь клинка.
 		private const float BodyDrawScale = 0.75f;
 		private const float LineDrawScale = 0.8f;
 		private const float LineTexOuter = 82f;
@@ -146,7 +149,7 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 		}
 
 		public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox) {
-			// Хитбокс — точная форма нарисованной дуги (сектор), а не конус по 5 точкам цели
+			// Хитбокс — сектор поражения вокруг игрока (шире нарисованной полоски), а не конус по 5 точкам цели
 			GetHitSector(Main.player[Projectile.owner], Projectile.localAI[0], out Vector2 center,
 				out float outer, out float startAngle, out float sweep);
 			return NearestInWedge(targetHitbox, center, startAngle, sweep, out float distance) && distance <= outer;
@@ -256,7 +259,10 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 		}
 
 		public override bool PreDraw(ref Color lightColor) {
-			Vector2 position = Projectile.Center - Main.screenPosition;
+			Player player = Main.player[Projectile.owner];
+			Item held = player.HeldItem;
+			if (held.IsAir)
+				return false;
 			Texture2D texture = TextureAssets.Projectile[Type].Value;
 			if (texture == null || texture.IsDisposed)
 				texture = ModContent.Request<Texture2D>("Terraria/Images/Projectile_" + ProjectileID.Excalibur).Value;
@@ -264,15 +270,23 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 				return false;
 			Rectangle sourceRectangle = texture.Frame(1, 4);
 			Vector2 origin = sourceRectangle.Size() / 2f;
-			float scale = Projectile.scale * BodyDrawScale;
 			SpriteEffects spriteEffects = ((!(Projectile.ai[0] >= 0f)) ? SpriteEffects.FlipVertically : SpriteEffects.None);
 			float maxAnim = Math.Max(1f, Projectile.ai[1]);
 			float percentageOfLife = Projectile.localAI[0] / maxAnim;
 			float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
-			// Тонкая линия (по ней считается хитбокс — см. LineTexOuter). Больше ничего не рисуем:
-			// искры у кисти (DrawPrettyStarSparkle) убраны — это и был светлый слой в темноте
-			Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3), Color.White * 0.25f * lerpTime, Projectile.rotation, origin, scale * LineDrawScale, spriteEffects, 0f);
+			// Полоска по пути острия, как у мечей: центр — кисть (там приклад
+			// палки), голова линии ровно на палке (вся полоска позади неё),
+			// внешний край — на острие по настоящей длине спрайта. Раньше линия
+			// рисовалась вокруг центра игрока растущим формульным радиусом с
+			// головой на +56° впереди палки — после перевода взмаха на нашу
+			// кривую она висела отдельно от палки (скрин владельца).
+			// Искр у кисти (DrawPrettyStarSparkle) по-прежнему нет.
+			float bladeLen = StickSprite.Get(held.type).Length * player.GetAdjustedItemScale(held);
+			float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
+			float lineRot = Projectile.rotation - dir * ArcAngleFront;
+			Vector2 position = player.itemLocation - Main.screenPosition;
+			Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3), Color.White * 0.25f * lerpTime, lineRot, origin, bladeLen / LineTexOuter, spriteEffects, 0f);
 
 			return false;
 		}
