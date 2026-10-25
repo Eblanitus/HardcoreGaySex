@@ -125,6 +125,7 @@ namespace FrostMelee.Content.Projectiles
         private bool stuckInit;
         private Point stuckTile;
         private bool cleanNpcHit;
+        private bool pointNpcHit;
         private int lodgedAuraTicks;
         private int lodgedBurnPulse;
 
@@ -357,8 +358,8 @@ namespace FrostMelee.Content.Projectiles
 
         private bool IsCleanHit(Vector2 velocity)
         {
-            // Кувыркающаяся после отскока/падения коса острием не летит: ось ≠ ход полёта, воткнув её
-            // по оси, тело оказывалось целиком внутри блока. Втыкается только летящая остриём вперёд
+            // Чистый удар: почти идеально кончиком вперёд (допуск StickAngle).
+            // Даёт полный урон и волну льда. Втыкание же шире — IsPointHit ниже
             if (harmless)
                 return false;
             if (velocity.Length() < StickMinSpeed)
@@ -368,9 +369,26 @@ namespace FrostMelee.Content.Projectiles
             return Math.Abs(MathHelper.WrapAngle(velocity.ToRotation() - Projectile.rotation)) <= StickAngle;
         }
 
+        private bool IsPointHit(Vector2 velocity)
+        {
+            // Втыкание кувыркающегося меча (решение владельца): не только
+            // идеально кончиком, а когда острие впереди центра меча по ходу
+            // полёта — вся передняя половина кувырка. В момент втыкания меч
+            // доворачивается остриём строго по полёту (иначе при оси поперёк
+            // тело оказалось бы внутри блока — старый баг). Прилетел рукоятью
+            // вперёд (острие в задней половине) — втыкаться нечем: отскок
+            if (harmless)
+                return false;
+            if (velocity.Length() < StickMinSpeed)
+                return false;
+            if (AlwaysTipFirst)
+                return true;
+            return Math.Abs(MathHelper.WrapAngle(velocity.ToRotation() - Projectile.rotation)) < MathHelper.PiOver2;
+        }
+
         private bool TryLodgeInTile(Vector2 oldVelocity)
         {
-            if (!IsCleanHit(oldVelocity))
+            if (!IsPointHit(oldVelocity))
                 return false;
 
             Vector2 dir = oldVelocity.SafeNormalize(Vector2.UnitY);
@@ -400,8 +418,14 @@ namespace FrostMelee.Content.Projectiles
             }
             centerDist = dists[0] >= 0f ? dists[0] : nearest + 5f;
 
+            // Доворот остриём по ходу полёта: кувыркающийся меч мог прилететь
+            // под углом до 90°, а втыкается всегда ровно остриём. Заглубление
+            // считается по этой же оси (= dir), поэтому тело внутри блока не
+            // оказывается — та самая причина, почему ось нельзя было брать
+            // из текущего rotation
+            Projectile.rotation = dir.ToRotation();
             SickleSprite.Geometry geo = Geo;
-            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            Vector2 axis = dir;
             float embed = Math.Min(StickEmbedDepth, geo.Length * 0.4f);
             Vector2 contact = Projectile.Center + dir * centerDist;
 
@@ -758,10 +782,11 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Чистый удар («лезвием по ходу») — выравнивание оси на полёт,
-            // как у палок: у крученого меча пиксель-зона накрывает врага
-            // почти каждый кадр, из-за чего меч застревал при каждом касании
+            // Чистый удар («лезвием по ходу», ±28°) — полный урон и волна.
+            // Втыкание шире: острие в передней половине кувырка (IsPointHit).
+            // Рукоятью/плашмя с остриём назад — слабый удар и отскок
             cleanNpcHit = IsCleanHit(Projectile.velocity);
+            pointNpcHit = IsPointHit(Projectile.velocity);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
@@ -789,9 +814,10 @@ namespace FrostMelee.Content.Projectiles
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);
 
-            if (!cleanNpcHit)
+            if (!pointNpcHit)
             {
-                // Не острием: отскакивает от врага и падает, не втыкаясь
+                // Острие в задней половине кувырка (рукоятью/плашмя):
+                // отскакивает от врага и падает, не втыкаясь
                 Vector2 away = (Projectile.Center - target.Center).SafeNormalize(-Vector2.UnitY);
                 Projectile.velocity = away * Math.Max(Projectile.velocity.Length() * 0.3f, 2f) + new Vector2(0f, -1.5f);
                 spinDir = -spinDir;
