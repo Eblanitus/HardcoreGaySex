@@ -118,6 +118,11 @@ namespace FrostMelee.Content.Weapons
             if (Projectile.owner == Main.myPlayer)
                 RecordFrostTrail(player);
 
+            // Frostbrand: взмах несёт за собой веер струи холодного пламени
+            if (SwordItem == ItemID.Frostbrand && Projectile.owner == Main.myPlayer
+                && Projectile.localAI[0] % 2 == 0)
+                SpawnArcJets(player);
+
             // Визуал (все клиенты): Ice Blade точится об воздух, остальные — иней вдоль дуги
             if (!Main.dedServ) {
                 if (IsIceBlade(player))
@@ -170,6 +175,31 @@ namespace FrostMelee.Content.Weapons
         private void GetArcState(Player player, float time, out float rotation, out float scale) {
             rotation = ArcRotation(player, time);
             scale = ArcScaleAt(time);
+        }
+
+        // === Frostbrand: струя веером по дуге ===
+        // У встречи струя — узкий язык вперёд из острия (SickleBraceProjectile).
+        // У взмаха своя, адаптированная по дуге: короткие языки срываются
+        // с внешней половины клинка и летят ПО ХОДУ взмаха (касательно), чуть
+        // наружу. За взмах они заметают тот же сектор, что и пламя на клинке,
+        // и поджигают, кого задели (FrostFireJet). Сам клинок не поджигает.
+        private static readonly float[] ArcJetFractions = new float[] { 0.6f, 1f }; // точки клинка: доля приклад→остриё
+        private const float ArcJetLife = 11f;   // тиков жизни языка веера
+
+        private void SpawnArcJets(Player player) {
+            if (!GetBladeLine(player, out Vector2 butt, out Vector2 tip))
+                return;
+            Vector2 bladeDir = (tip - butt).SafeNormalize(Vector2.UnitX);
+            // Касательная по ходу взмаха: ai[0] несёт знак направления взмаха
+            // (как флип текстуры дуги). Внешний конец клинка движется быстрее —
+            // скорость языка растёт с долей f, как у настоящего острия
+            Vector2 tangent = new Vector2(-bladeDir.Y, bladeDir.X) * (Projectile.ai[0] >= 0f ? 1f : -1f);
+            foreach (float f in ArcJetFractions) {
+                Vector2 at = Vector2.Lerp(butt, tip, f);
+                Vector2 vel = tangent * (1.2f + 2.4f * f) + bladeDir * 0.6f;
+                Projectile.NewProjectile(Projectile.GetSource_FromThis(), at, vel,
+                    ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ArcJetLife);
+            }
         }
 
         // === Ледяной след: слабый иней вдоль веера взмаха (только Slow) ===
@@ -703,10 +733,9 @@ namespace FrostMelee.Content.Weapons
                 if (Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish(SwordItem))
                     HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
             }
-            // Фростбранд: любой удар поджигает холодным огнём
-            if (SwordItem == ItemID.Frostbrand) {
-                FrostFireSystem.Ignite(target);
-            }
+            // Frostbrand сам НЕ поджигает: поджигает только струя. У взмаха это
+            // веер струй по дуге (SpawnArcJets в AI) — пламя, которое клинок
+            // несёт за собой по ходу взмаха
         }
 
         public override void OnHitPlayer(Player target, Player.HurtInfo info) {

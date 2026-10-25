@@ -220,16 +220,16 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
             }
-            // Фростбранд: забрал горение — бонусный урон; не горел — обычное поджигание.
+            // Фростбранд: забрал горение — бонусный урон. Сам клинок НЕ поджигает:
+            // не горел враг — его подожжёт струя на возврате тычка
+            // (SwordPlayer.TrySpawnFrostJet), дуга или встреча.
             // Умер от тычка с забранным горением — взрыв холодного огня.
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
                 bool tookBurn = takenBurn.Remove(target.whoAmI, out int burnTaken);
                 // анимация: холодное пламя стекается с врага в клинок (FrostDrainFx)
                 if (tookBurn)
                     FrostDrainFx.Play(target, Main.player[Projectile.owner], burnTaken);
-                if (!tookBurn) {
-                    Content.Weapons.FrostFireSystem.Ignite(target);
-                } else if (target.life <= 0 && Projectile.owner == Main.myPlayer) {
+                if (tookBurn && target.life <= 0 && Projectile.owner == Main.myPlayer) {
                     Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
                 }
             }

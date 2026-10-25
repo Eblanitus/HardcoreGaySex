@@ -26,20 +26,19 @@ namespace FrostMelee.Content.Projectiles
 
         public override void AI()
         {
-            // Встреча задаёт длину струи через ai[0]: живёт дольше — уходит дальше
+            // Кто спавнил, тот задаёт длину струи через ai[0] (тики жизни):
+            // встреча — растущую, веер взмаха — короткую. 0 = обычная (SetDefaults)
             if (Projectile.localAI[1] == 0f)
             {
                 Projectile.localAI[1] = 1f;
-                if (Projectile.ai[0] >= 12f)
+                if (Projectile.ai[0] > 0f)
                     Projectile.timeLeft = (int)Projectile.ai[0];
             }
 
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            Player owner = Main.player[Projectile.owner];
-            Weapons.SwordPlayer sword = owner.GetModPlayer<Weapons.SwordPlayer>();
-            if (owner.active && sword.CurrentMode == Weapons.SwordPlayer.Mode.Stab
-                && sword.StabRetractProgress > 0f)
-                Projectile.timeLeft = System.Math.Min(Projectile.timeLeft, 2);
+            // Раньше струи тычка убивались на возврате клинка (визуально висели
+            // дольше меча). Теперь наоборот: тычок пускает струю ИМЕННО на возврате,
+            // и она должна долететь и поджечь — досрочная смерть убрана
 
             if (Projectile.timeLeft % 2 == 0)
                 FrostJetFx.EmitJet(Projectile.Center, dir);
@@ -52,10 +51,13 @@ namespace FrostMelee.Content.Projectiles
                 d.noGravity = true;
             }
 
+            // Поджог проверяется каждые 3 тика, начиная с первого. Раньше стоял
+            // шаг 15 при жизни 12 — проверка не наступала никогда: струя не
+            // поджигала вообще, поджигал сам клинок своими OnHit (наоборот дизайну)
             if (Main.netMode != NetmodeID.MultiplayerClient || Projectile.owner == Main.myPlayer)
             {
                 Projectile.localAI[0]++;
-                if (Projectile.localAI[0] % 15 == 0)
+                if (Projectile.localAI[0] % 3 == 1)
                 {
                     Rectangle hitbox = Projectile.Hitbox;
                     for (int i = 0; i < Main.maxNPCs; i++)

@@ -427,10 +427,8 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
-            // Фростбранд: встреча тоже поджигает
-            if (braceItem == ItemID.Frostbrand) {
-                Weapons.FrostFireSystem.Ignite(target);
-            }
+            // Frostbrand: выставленный клинок сам НЕ поджигает — поджигает его
+            // струя (FrostFireJet из острия в AI), враг должен задеть пламя
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
 
