@@ -59,6 +59,13 @@ namespace FrostMelee.Content.Weapons
         // Поза броска (только локальный игрок)
         private int throwFollowTicks;
         private float fireGlow;   // свечение Фростбранда от горящих рядом врагов
+        // Насколько сильно горит сам клинок Frostbrand (0..1): счёт горящих врагов
+        // и сглаживание живут в PostUpdate. От этого питаются пламя на клинке
+        // (FrostJetFx.EmitBlade) и яркость ленты взмаха — «чем больше врагов горит,
+        // тем ярче горит меч» (FROSTBRAND_ИТОГ.md). База FireIntensity > 0:
+        // клинок из холодного огня горит всегда, враги доводят его до полной.
+        public float FireGlow => fireGlow;
+        public float FireIntensity => 0.55f + 0.45f * fireGlow;
         // Живая дуга взмаха этого игрока: SwingBladeLayer рисует клинок её углом
         public Projectile swingArc;                 // сколько тиков ещё идёт выброс/возврат
         private Vector2 throwAimDir = Vector2.UnitX;  // линия броска, зафиксированная при вылете
@@ -454,8 +461,9 @@ namespace FrostMelee.Content.Weapons
             Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
             float retract = CurrentMode == Mode.Stab ? StabRetract01() : 0f;
             // Каждый тик: на быстром взмахе частицы раз в 2 тика дают разрывы,
-            // и огонь кажется прыгающим вслед за клинком.
-            FrostJetFx.EmitBlade(butt, tip, dir, 1f - 0.8f * retract);
+            // и огонь кажется прыгающим вслед за клинком. Сила пламени — от числа
+            // горящих врагов рядом (FireIntensity), на возврате тычка — слабее.
+            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity * (1f - 0.8f * retract));
             if (retract > 0f || Main.GameUpdateCount % 2 != 0)
                 return;
 

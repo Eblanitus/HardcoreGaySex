@@ -158,7 +158,8 @@ namespace FrostMelee.Content.Projectiles
                 float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
                 Vector2 jetBase = Projectile.Center - SpearDir * half;
                 Vector2 jetTip = Projectile.Center + SpearDir * half;
-                FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir);
+                FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir,
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
                 if (Main.GameUpdateCount % 4 == 0)
                 {
                     Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed,

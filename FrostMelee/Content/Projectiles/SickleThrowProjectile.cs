@@ -469,7 +469,8 @@ namespace FrostMelee.Content.Projectiles
             Vector2 center = VisualCenter(geo);
             Vector2 butt = center - axis * half;
             Vector2 tip = center + axis * half;
-            FrostJetFx.EmitBlade(butt, tip, axis);
+            FrostJetFx.EmitBlade(butt, tip, axis,
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
             if (Main.GameUpdateCount % 2 == 0)
                 FrostJetFx.EmitJet(center, axis);
         }

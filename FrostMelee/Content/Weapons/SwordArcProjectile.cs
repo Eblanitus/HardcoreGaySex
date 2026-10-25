@@ -62,15 +62,18 @@ namespace FrostMelee.Content.Weapons
         // true — показать пылью зону клинка (полный урон) и внешний край хитбокса
         public static bool DebugHitbox = false;
 
-        // Палитра ленты следует за полировкой клинка: шершавый меч даёт
-        // матовый морозный шлейф, отполированный — яркое сияние.
-        // Полировка — именно ЭТОГО меча (SwordItem), а не IceFrostShown:
-        // то свойство всегда смотрит на Ice Blade, и дуга Frostbrand
-        // раньше ярчела от заточки чужого клинка.
+        // Палитра ленты следует за «яркостью» клинка: тусклый даёт матовый
+        // морозный шлейф, яркий — сияние. Что такое яркость, у мечей разное:
+        // у Ice Blade — его полировка (именно ЭТОГО меча по SwordItem, а не
+        // IceFrostShown), у Frostbrand полировки нет — он ярчеет от числа
+        // горящих рядом врагов (FireGlow), как и пламя на его клинке.
         private void GlowColors(out Color core, out Color tail, out Color edge) {
             Player owner = Main.player[Projectile.owner];
             int item = SwordItem != 0 ? SwordItem : owner.HeldItem.type;
-            float polish = 1f - owner.GetModPlayer<SwordPlayer>().GetFrostShown(item);
+            SwordPlayer sp = owner.GetModPlayer<SwordPlayer>();
+            float polish = item == ItemID.Frostbrand
+                ? MathHelper.Clamp(0.25f + 0.75f * sp.FireGlow, 0f, 1f)
+                : 1f - sp.GetFrostShown(item);
             IceBladeFx.ArcColors(polish, out core, out tail, out edge);
         }
 
