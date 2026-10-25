@@ -332,19 +332,15 @@ namespace FrostMelee.Content.Weapons
         private const int FlamePoints = 30;            // точек ленты (гладкость как у копья)
         private const float FlameInnerFrac = 0.40f;    // ширина ленты: внешний край — остриё, внутренний — 0.40 его радиуса
         private const float FlameStreaks = 0.55f;      // потоки внутри тела ленты, а не полосы вместо него
-        private const int FlameBackTicks = 28;         // длина фонового слоя в записанных тиках (лента — FlameTrailTicks: фон заметно длиннее, как у копья)
-        private const float FlameBackOuter = 1.05f;    // внешний край фона: доля радиуса острия (чуть дальше ленты)
-        private const float FlameBackInner = 0.50f;    // внутренний край фона: доля радиуса острия
-        private const float FlameBackStrength = 0.55f; // яркость фона: доля от яркости ленты
+        private const float FlameSectorOuter = 1.04f;  // внешний радиус фонового веера: доля длины клинка
+        private const float FlameSectorAlpha = 0.30f;  // яркость первой (глубокой) копии веера
+        private const float FlameSectorAlpha2 = 0.16f; // яркость второй (светлее, чуть меньше) копии
         private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
         private const float FlameTongueSize = 34f;     // длина языка, px
 
         private static readonly float[] fbAngles = new float[FlamePoints];
         private static readonly float[] fbROut = new float[FlamePoints];
         private static readonly float[] fbRIn = new float[FlamePoints];
-        private static readonly float[] bgAngles = new float[FlamePoints]; // фоновый слой: та же запись, но длиннее и шире ленты
-        private static readonly float[] bgROut = new float[FlamePoints];
-        private static readonly float[] bgRIn = new float[FlamePoints];
 
         // Настоящий путь клинка, записываемый каждый тик (RecordFlameBlade в AI):
         // угол и длина линии кисть→остриё, новейшая точка первой. Лента по этой
@@ -406,7 +402,7 @@ namespace FrostMelee.Content.Weapons
         // показом запаса: густота огня = FlameFullness. Запас пуст — фон и
         // языки пропадают, остаётся бледная лента: взмах никого нового не
         // подожжёт, и это видно сразу.
-        private void DrawFlameArc(Player player, float progress, float maxAnim) {
+        private void DrawFlameArc(Player player, Texture2D texture, SpriteEffects fx, float progress, float maxAnim) {
             if (Main.dedServ)
                 return;
             SwordPlayer sp = player.GetModPlayer<SwordPlayer>();
@@ -416,10 +412,28 @@ namespace FrostMelee.Content.Weapons
             float glowBoost = 0.85f + 0.35f * sp.FireGlow; // горящие рядом подкармливают яркость
             float flameEnv = env * level * glowBoost;
 
-            // Линии Экскалибура у этой дуги нет вовсе: её геометрия (центр тела,
-            // растущий формульный радиус) вечно расходилась с лентой по клинку —
-            // то тёмной обводкой, то второй дугой, то пунктиром вдалеке от меча.
-            // Дуга Фростбранда — одна лента по настоящему пути клинка
+            // ФОНОВЫЙ слой — светящийся веер-сектор на всю дугу, как у косы
+            // (там фон читается широкой светящейся площадью с ободком по кругу
+            // острия, а не второй полоской у клинка): тело ванильной дуги
+            // (кадр 0) двумя тихими копиями глубокого синего. Геометрия та же,
+            // что у клинка и ленты: центр — кисть, голова сектора — по
+            // записанному углу клинка, внешний радиус — длина клинка.
+            // (Беда прежней линии была в формульном радиусе хитбокса из центра
+            // тела — она и висела отдельной дугой. Фон мазками и второй лентой
+            // владелец забраковал: слипались с лентой в один сноп.)
+            if (full > 0.02f && fbHasBlade && fbHistCount >= 1) {
+                int dir = Projectile.ai[0] >= 0f ? 1 : -1;
+                float sectorRot = fbHistAngle[0] - dir * IceArcFx.HeadAngle;
+                float sectorScale = fbHistRadius[0] * FlameSectorOuter / LineTexOuter;
+                Rectangle body = texture.Frame(1, 4, 0, 0);
+                Vector2 sectorOrigin = body.Size() / 2f;
+                Vector2 sectorPos = fbHand - Main.screenPosition;
+                Color deep = Color.Lerp(FlameEdge, FlameTail, 0.3f);
+                Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(deep, FlameSectorAlpha * flameEnv),
+                    sectorRot, sectorOrigin, sectorScale, fx, 0f);
+                Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(Color.Lerp(deep, FlameTail, 0.45f), FlameSectorAlpha2 * flameEnv),
+                    sectorRot, sectorOrigin, sectorScale * 0.97f, fx, 0f);
+            }
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed || env <= 0.02f)
@@ -470,30 +484,14 @@ namespace FrostMelee.Content.Weapons
             if (n < 2)
                 return;
 
-            // Дуга в ДВА слоя, как у копья: сначала ФОНОВЫЙ — широкая тихая
-            // лента глубокого синего по той же записи клинка, но длиннее
-            // основной (FlameBackTicks против FlameTrailTicks), шире неё и
-            // чуть дальше по радиусу: выглядывает из-за основной по краям и
-            // тянется дальше её хвоста. (Мягкие мазки ореолом не зашли: на
-            // коротком радиусе меча они сливались в серый купол-пятно и слоем
-            // не читались — замечание владельца «не проявилось».)
-            // Поверх — лента самого клинка: градиент + бегущие штрихи-потоки.
-            // Её ядро заметно синее белого жара головки: чисто белое ядро на
-            // большей части длины аддитивно выгорало в белое пятно-фонарь,
-            // особенно на тёмном фоне. Белым остаётся только жар у острия
+            // Лента самого клинка поверх фонового веера: градиент + бегущие
+            // штрихи-потоки. Её ядро заметно синее белого жара головки: чисто
+            // белое ядро на большей части длины аддитивно выгорало в белое
+            // пятно-фонарь, особенно на тёмном фоне. Белым остаётся только
+            // жар у острия
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             Main.spriteBatch.End();
             try {
-                if (full > 0.02f && fbHasBlade && fbHistCount >= 2) {
-                    int bgCap = Math.Min(fbHistCount, FlameBackTicks);
-                    for (int i = 0; i < bgCap; i++) {
-                        bgAngles[i] = fbHistAngle[i];
-                        bgROut[i] = fbHistRadius[i] * FlameBackOuter;
-                        bgRIn[i] = fbHistRadius[i] * FlameBackInner;
-                    }
-                    IceRibbon.Draw(device, bgAngles, bgCap, center, bgROut, bgRIn,
-                        gt, flameEnv * FlameBackStrength, FlameTail, Color.Lerp(FlameTail, FlameEdge, 0.5f), FlameEdge, streaks: false);
-                }
                 IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
                     gt, flameEnv, Color.Lerp(FlameCore, FlameTail, 0.3f), FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
             }
@@ -964,7 +962,7 @@ namespace FrostMelee.Content.Weapons
                 return false;
             }
             // Второй меч движка — Фростбранд: у него своя дуга холодного пламени
-            DrawFlameArc(owner, percentageOfLife, maxAnim);
+            DrawFlameArc(owner, texture, spriteEffects, percentageOfLife, maxAnim);
             return false;
         }
 
