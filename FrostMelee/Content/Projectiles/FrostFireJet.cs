@@ -110,7 +110,7 @@ namespace FrostMelee.Content.Projectiles
             float fade = Projectile.timeLeft < 5 ? Projectile.timeLeft / 5f : 1f;
             Vector2 origin = glow.Size() / 2f;
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition + dir * 1f, null,
-                new Color(150, 220, 255) * (0.28f * fade), dir.ToRotation(), origin,
+                new Color(150, 220, 255) * (0.28f * fade * FrostMeleeConfigDefaults.FireIntensityScale), dir.ToRotation(), origin,
                 new Vector2(9f / glow.Width, 5.5f / glow.Height), SpriteEffects.None, 0f);
             return false;
         }

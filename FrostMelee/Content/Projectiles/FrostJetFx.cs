@@ -117,9 +117,9 @@ namespace FrostMelee.Content.Projectiles
         private static Vector2 targetOrigin;
         private static bool targetHasContent;
         private const int TargetPad = 96;
-        // Общая мягкость огня (пожелание владельца: менее ядрёно,
-        // прозрачнее): множитель вывода буфера на экран и сила подложки.
-        // Альфы слоёв ниже дополнительно убавлены примерно на четверть
+        // Общая мягкость огня при ядрёности 100 в конфиге владельца:
+        // множитель вывода буфера на экран и сила подложки. Настройка
+        // «ядрёность» умножает оба сверху (DrawFireOverDust)
         private const float FireSoftness = 0.66f;
         private const float UnderlayStrength = 0.25f;
         private static BlendState underlayBlend;
@@ -269,8 +269,10 @@ namespace FrostMelee.Content.Projectiles
             FlameKind kind, float along, float speedMin, float speedMax, float sideSpeed,
             int lifeMin, int lifeMax, float sizeMin, float sizeMax, bool anchored)
         {
-            // ±2.2, а не ±3.5: огонь сидит туже на самой кромке, меньше «плавает» вокруг клинка
-            float side = Main.rand.NextFloat(-2.2f, 2.2f);
+            // ±2.2 при тужости 100 (настройка владельца в конфиге): туже —
+            // огонь рождается ближе к самой кромке, свободнее — шире от неё
+            float tightness = FrostMeleeConfigDefaults.FireTightnessScale;
+            float side = Main.rand.NextFloat(-2.2f / tightness, 2.2f / tightness);
             Vector2 position = Vector2.Lerp(butt, tip, along) + perp * side;
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
                 + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed);
@@ -293,14 +295,14 @@ namespace FrostMelee.Content.Projectiles
                     FlameKind.Near => 1.55f,
                     _ => 1.3f
                 };
-                // Сползание вдоль клинка вдвое медленнее прежнего: пламя
-                // меньше «плавает» по лезвию туда-сюда
-                p.Flow = kind switch
+                // Сползание вдоль клинка: чем туже настройка, тем медленнее
+                // пламя «плавает» по лезвию туда-сюда
+                p.Flow = (kind switch
                 {
                     FlameKind.Blade => 0.012f,
                     FlameKind.Near => 0.008f,
                     _ => 0.005f
-                };
+                }) / tightness;
             }
             return p;
         }
@@ -534,6 +536,9 @@ namespace FrostMelee.Content.Projectiles
                 return;
 
             bool hasBlade = Main.GameUpdateCount - bladeFrame <= BladeGraceTicks;
+            // Тужость из конфига владельца: сила резинки к клинку, подхват
+            // его скорости и болтанка вокруг кромки (1 — посадка flame-13)
+            float tightness = FrostMeleeConfigDefaults.FireTightnessScale;
 
             for (int i = particles.Count - 1; i >= 0; i--)
             {
@@ -587,15 +592,15 @@ namespace FrostMelee.Content.Projectiles
                     // подхват скорости усилены, болтанка убавлена: огонь в руке
                     // «плавал» вокруг клинка, а в броске (без якоря) сидит лучше
                     float anchorDist = (anchor - p.Position).Length();
-                    float follow = 1f - (float)System.Math.Exp(-(p.Coupling * 0.85f + anchorDist * 0.022f));
-                    float wobble = (float)System.Math.Sin((p.Age + p.Wobble) * 0.55f) * 0.6f;
+                    float follow = 1f - (float)System.Math.Exp(-((p.Coupling * 0.85f + anchorDist * 0.022f) * tightness));
+                    float wobble = (float)System.Math.Sin((p.Age + p.Wobble) * 0.55f) * (0.6f / tightness);
                     p.Position = Vector2.Lerp(p.Position, anchor, follow)
                         + perp * wobble
                         + p.Velocity * 0.2f;
                     // Далеко от клинка пламя быстро остывает и тает, а не висит
                     if (anchorDist > 44f)
                         p.Temperature = MathHelper.Max(0f, p.Temperature - 0.05f);
-                    p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity, p.Coupling * 0.55f);
+                    p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity, MathHelper.Min(p.Coupling * 0.55f * tightness, 1f));
                     p.Rotation = bladeDir.ToRotation() + wobble * 0.04f;
                     float baseStretch = p.Kind switch
                     {
@@ -614,11 +619,11 @@ namespace FrostMelee.Content.Projectiles
                     // оставалось висеть кометами по всей траектории полёта
                     if (p.Kind == FlameKind.Trail && hasBlade)
                     {
-                        p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity * 0.92f, 0.22f);
+                        p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity * 0.92f, MathHelper.Min(0.22f * tightness, 1f));
                         Vector2 toBlade = NearestBladePoint(p.Position) - p.Position;
                         float d = toBlade.Length();
                         if (d > 30f)
-                            p.Velocity += toBlade.SafeNormalize(Vector2.Zero) * MathHelper.Clamp((d - 30f) * 0.012f, 0f, 0.9f);
+                            p.Velocity += toBlade.SafeNormalize(Vector2.Zero) * MathHelper.Clamp((d - 30f) * 0.012f * tightness, 0f, 0.9f * tightness);
                         if (d > 110f)
                             p.Temperature = MathHelper.Max(0f, p.Temperature - 0.08f);
                     }
@@ -1152,15 +1157,19 @@ namespace FrostMelee.Content.Projectiles
             SpriteBatch sb = Main.spriteBatch;
             Vector2 at = targetOrigin - Main.screenPosition;
             Matrix view = Main.GameViewMatrix.TransformationMatrix;
+            // Ядрёность из конфига владельца: весь буферный огонь ярче/тише
+            // одним множителем; подложка следом, но с потолком — иначе на
+            // большой ядрёности вокруг пламени ляжет чёрное пятно
+            float intensity = FrostMeleeConfigDefaults.FireIntensityScale;
 
             sb.Begin(SpriteSortMode.Deferred, underlayBlend, SamplerState.LinearClamp,
                 DepthStencilState.None, RasterizerState.CullNone, null, view);
-            sb.Draw(fireTarget, at, Color.White * UnderlayStrength);
+            sb.Draw(fireTarget, at, Color.White * MathHelper.Min(UnderlayStrength * intensity, 0.4f));
             sb.End();
 
             sb.Begin(SpriteSortMode.Deferred, screenBlend, SamplerState.LinearClamp,
                 DepthStencilState.None, RasterizerState.CullNone, null, view);
-            sb.Draw(fireTarget, at, Color.White * FireSoftness);
+            sb.Draw(fireTarget, at, Color.White * (FireSoftness * intensity));
             sb.End();
         }
 

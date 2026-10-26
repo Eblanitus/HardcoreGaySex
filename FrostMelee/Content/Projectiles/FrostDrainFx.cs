@@ -223,7 +223,9 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
             Vector2 go = glow.Size() / 2f;
-            float bright = MathHelper.Lerp(0.85f, 1.15f, Ratio);
+            // Ядрёность из конфига владельца — общая со всем ледяным огнём
+            float intensity = FrostMeleeConfigDefaults.FireIntensityScale;
+            float bright = MathHelper.Lerp(0.85f, 1.15f, Ratio) * intensity;
 
             // 1) кольцо холодного огня схлопывается в врага — горение «срывают»
             if (Age < RingTicks)
@@ -309,13 +311,13 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 d = tip - butt;
                 float len = d.Length();
                 Vector2 mid = Vector2.Lerp(butt, tip, 0.6f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.72f), d.ToRotation(),
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.72f * intensity), d.ToRotation(),
                     go, new Vector2(len * 1.1f / glow.Width, 22f / glow.Height), SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.6f), d.ToRotation(),
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.6f * intensity), d.ToRotation(),
                     go, new Vector2(len * 0.8f / glow.Width, 8f / glow.Height), SpriteEffects.None, 0f);
                 float star = 38f * pulse;
                 for (int r = 0; r < 2; r++)
-                    Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse * 0.8f), d.ToRotation() + MathHelper.PiOver2 * r,
+                    Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse * 0.8f * intensity), d.ToRotation() + MathHelper.PiOver2 * r,
                         go, new Vector2(star / glow.Width, star * 0.12f / glow.Height), SpriteEffects.None, 0f);
             }
             return false;
