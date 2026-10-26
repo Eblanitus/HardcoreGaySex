@@ -216,10 +216,12 @@ namespace FrostMelee.Content.Weapons
             foreach (float f in ArcJetFractions) {
                 Vector2 at = Vector2.Lerp(butt, tip, f);
                 // + скорость игрока: языки медленные (до ~3.6), взмах на
-                // крыльях без наследования оставляет их висеть позади
+                // крыльях без наследования оставляет их висеть позади.
+                // ai[1] — ключ потока ленты FrostJetFx: у каждого ряда веера
+                // своя лента, иначе ряды заплетаются зигзагом-«созвездием»
                 Vector2 vel = tangent * (1.2f + 2.4f * f) + bladeDir * 0.6f + player.velocity;
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), at, vel,
-                    ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ArcJetLife);
+                    ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ArcJetLife, f < 0.8f ? 1f : 2f);
             }
         }
 

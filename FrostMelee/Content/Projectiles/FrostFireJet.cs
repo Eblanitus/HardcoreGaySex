@@ -54,7 +54,7 @@ namespace FrostMelee.Content.Projectiles
             // Пыль редкая: веер взмаха спавнит струй много, и частая пыль
             // каждой складывалась в рой крестиков, забивавший саму дугу.
             // Видимое пламя несёт FrostJetFx выше, пыль — только подсыпка
-            if (!Main.dedServ && Main.rand.NextBool(4))
+            if (!Main.dedServ && Main.rand.NextBool(8))
             {
                 Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(5f, 5f),
                     DustID.IceTorch, -Projectile.velocity * 0.15f + Main.rand.NextVector2Circular(0.5f, 0.5f),
@@ -110,7 +110,7 @@ namespace FrostMelee.Content.Projectiles
             float fade = Projectile.timeLeft < 5 ? Projectile.timeLeft / 5f : 1f;
             Vector2 origin = glow.Size() / 2f;
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition + dir * 1f, null,
-                new Color(150, 220, 255) * (0.5f * fade), dir.ToRotation(), origin,
+                new Color(150, 220, 255) * (0.35f * fade), dir.ToRotation(), origin,
                 new Vector2(9f / glow.Width, 5.5f / glow.Height), SpriteEffects.None, 0f);
             return false;
         }

@@ -140,7 +140,7 @@ namespace FrostMelee.Content.Projectiles
             trail[0] = Projectile.Center;
 
             Lighting.AddLight(Projectile.Center, 0.2f, 0.45f, 0.65f);
-            if (!Main.dedServ && Main.rand.NextBool(3))
+            if (!Main.dedServ && Main.rand.NextBool(6))
             {
                 Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.IceTorch,
                     -Projectile.velocity * 0.1f + Main.rand.NextVector2Circular(0.4f, 0.4f), 100, default, Main.rand.NextFloat(0.8f, 1.2f));
