@@ -243,7 +243,7 @@ namespace FrostMelee.Content.Projectiles
                 Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Deep, a * 0.7f), 0f,
                     go, originRadius * 1.6f * (1f - 0.5f * t) / glow.Width, SpriteEffects.None, 0f);
                 // яркая вспышка в месте срыва пламени в первые мгновения
-                Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Core, a * 0.85f), 0f,
+                Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Core, a * 0.68f), 0f,
                     go, originRadius * (1.1f - 0.6f * t) / glow.Width, SpriteEffects.None, 0f);
             }
 
@@ -274,9 +274,9 @@ namespace FrostMelee.Content.Projectiles
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
                             ribbonWidths[i] = MathHelper.Lerp(13f, 2.5f, f) * w.Size * (pass == 0 ? 1.8f : 0.8f);
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.5f * bright)
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.4f * bright)
                                 : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
-                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * (0.88f * bright);
+                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * (0.68f * bright);
                         }
                         FlameRibbon.Draw(device, w.Trail, ribbonWidths, ribbonColors, TrailLen);
                     }
@@ -295,9 +295,9 @@ namespace FrostMelee.Content.Projectiles
                 if (w.Done || w.Delay > 0)
                     continue;
                 float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + w.Phase);
-                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.95f * bright), 0f,
+                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.78f * bright), 0f,
                     go, 20f * w.Size * flick / glow.Width, SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Core, bright), 0f,
+                Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Core, 0.85f * bright), 0f,
                     go, 9f * w.Size / glow.Width, SpriteEffects.None, 0f);
             }
 
@@ -309,13 +309,13 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 d = tip - butt;
                 float len = d.Length();
                 Vector2 mid = Vector2.Lerp(butt, tip, 0.6f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.9f), d.ToRotation(),
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.72f), d.ToRotation(),
                     go, new Vector2(len * 1.1f / glow.Width, 22f / glow.Height), SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.75f), d.ToRotation(),
+                Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.6f), d.ToRotation(),
                     go, new Vector2(len * 0.8f / glow.Width, 8f / glow.Height), SpriteEffects.None, 0f);
                 float star = 38f * pulse;
                 for (int r = 0; r < 2; r++)
-                    Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse), d.ToRotation() + MathHelper.PiOver2 * r,
+                    Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse * 0.8f), d.ToRotation() + MathHelper.PiOver2 * r,
                         go, new Vector2(star / glow.Width, star * 0.12f / glow.Height), SpriteEffects.None, 0f);
             }
             return false;

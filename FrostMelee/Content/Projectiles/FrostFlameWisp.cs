@@ -200,9 +200,9 @@ namespace FrostMelee.Content.Projectiles
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
                             ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f);
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.5f
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.4f
                                 : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
-                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * 0.88f;
+                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * 0.68f;
                         }
                         FlameRibbon.Draw(device, trail, ribbonWidths, ribbonColors, TrailLen);
                     }
@@ -214,9 +214,9 @@ namespace FrostMelee.Content.Projectiles
                 }
             }
             float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + Phase);
-            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.95f), 0f,
+            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.75f), 0f,
                 go, 17f * flick / glow.Width, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 1f), 0f,
+            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 0.8f), 0f,
                 go, 7f / glow.Width, SpriteEffects.None, 0f);
 
             // Звёздный блик-крестик: огонёк — живой ресурс (бьёт, уходит со
@@ -224,7 +224,7 @@ namespace FrostMelee.Content.Projectiles
             // взрыва и забором тычком он терялся. Крест не похож ни на язык,
             // ни на пятно — огонёк узнаётся сразу. В полёте (бьёт) — ярче
             float glint = 0.55f + 0.45f * (float)Math.Sin(Age * 0.22f + Phase);
-            float strength = State == StateOrbit ? 0.6f : 0.9f;
+            float strength = State == StateOrbit ? 0.48f : 0.72f;
             float spin = Age * 0.04f + Phase;
             for (int k = 0; k < 2; k++)
                 Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, strength * glint),

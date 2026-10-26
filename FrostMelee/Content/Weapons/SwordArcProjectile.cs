@@ -349,6 +349,7 @@ namespace FrostMelee.Content.Weapons
         private const float FlameSectorAlpha2 = 0.16f; // яркость второй (светлее, чуть меньше) копии
         private const int FlameTongues = 6;            // язычков-всполохов на хвосте ленты
         private const float FlameTongueSize = 34f;     // длина языка, px
+        private const float FlameSoftness = 0.78f;     // общая мягкость дуги: менее ядрёно (пожелание владельца)
 
         private static readonly float[] fbAngles = new float[FlamePoints];
         private static readonly float[] fbROut = new float[FlamePoints];
@@ -422,7 +423,7 @@ namespace FrostMelee.Content.Weapons
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             float level = 0.3f + 0.7f * full;              // пустой меч заметно бледнее, но след виден
             float glowBoost = 0.85f + 0.35f * sp.FireGlow; // горящие рядом подкармливают яркость
-            float flameEnv = env * level * glowBoost;
+            float flameEnv = env * level * glowBoost * FlameSoftness;
 
             // ФОНОВЫЙ слой — светящийся веер-сектор на всю дугу, как у косы
             // (там фон читается широкой светящейся площадью с ободком по кругу

@@ -117,7 +117,11 @@ namespace FrostMelee.Content.Projectiles
         private static Vector2 targetOrigin;
         private static bool targetHasContent;
         private const int TargetPad = 96;
-        private const float UnderlayStrength = 0.35f;
+        // Общая мягкость огня (пожелание владельца: менее ядрёно,
+        // прозрачнее): множитель вывода буфера на экран и сила подложки.
+        // Альфы слоёв ниже дополнительно убавлены примерно на четверть
+        private const float FireSoftness = 0.78f;
+        private const float UnderlayStrength = 0.25f;
         private static BlendState underlayBlend;
         private static BlendState screenBlend;
 
@@ -651,10 +655,10 @@ namespace FrostMelee.Content.Projectiles
                     ribbonWidths[k] = t.Width * profile * ragged * wMul;
                     // Белое — только жар у самого основания; тело языка синее
                     ribbonColors[k] = pass == 0
-                        ? Color.Lerp(new Color(28, 105, 245), new Color(8, 34, 130), f) * (0.55f * env)
+                        ? Color.Lerp(new Color(28, 105, 245), new Color(8, 34, 130), f) * (0.42f * env)
                         : Color.Lerp(
                             Color.Lerp(new Color(190, 240, 255), new Color(110, 200, 255), MathHelper.Clamp(f * 3.2f, 0f, 1f)),
-                            new Color(30, 110, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.76f * env);
+                            new Color(30, 110, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.58f * env);
                 }
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
             }
@@ -677,8 +681,8 @@ namespace FrostMelee.Content.Projectiles
                 else if (p.Kind == FlameKind.Blade || p.Kind == FlameKind.Near)
                     sheetMain.Add(p);
             }
-            DrawSheet(device, sheetHalo, 42f, 0.24f);
-            DrawSheet(device, sheetMain, 25f, 0.82f);
+            DrawSheet(device, sheetHalo, 42f, 0.19f);
+            DrawSheet(device, sheetMain, 25f, 0.64f);
         }
 
         private static void DrawSheet(GraphicsDevice device, List<Particle> list, float widthScale, float strength)
@@ -763,9 +767,9 @@ namespace FrostMelee.Content.Projectiles
                 ribbonWidths[2] = 1f;
                 // Тише перемычек: тело пламени теперь соединения (DrawFlameWeb),
                 // язычки — только кончики поверх него
-                ribbonColors[0] = hot * (0.42f * fade);
-                ribbonColors[1] = hot * (0.34f * fade);
-                ribbonColors[2] = cold * (0.5f * fade);
+                ribbonColors[0] = hot * (0.32f * fade);
+                ribbonColors[1] = hot * (0.26f * fade);
+                ribbonColors[2] = cold * (0.38f * fade);
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
             }
         }
@@ -830,9 +834,9 @@ namespace FrostMelee.Content.Projectiles
                     ribbonWidths[0] = wdt;
                     ribbonWidths[1] = wdt * 1.05f;
                     ribbonWidths[2] = wdt;
-                    ribbonColors[0] = WebColor(q, 0.3f * fade);
-                    ribbonColors[1] = WebColor(p, 0.36f * fade);
-                    ribbonColors[2] = WebColor(p, 0.3f * fade);
+                    ribbonColors[0] = WebColor(q, 0.23f * fade);
+                    ribbonColors[1] = WebColor(p, 0.28f * fade);
+                    ribbonColors[2] = WebColor(p, 0.23f * fade);
                     FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
                     drawn++;
                 }
@@ -938,10 +942,10 @@ namespace FrostMelee.Content.Projectiles
                             // Белое — короткий жар у острия; тело потока глубокое
                             // синее, иначе лента блестит белым кнутом по всей длине
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.36f * dim)
+                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.28f * dim)
                                 : Color.Lerp(
                                     Color.Lerp(new Color(175, 238, 255), new Color(70, 160, 255), MathHelper.Clamp(f * 2.6f, 0f, 1f)),
-                                    new Color(30, 110, 250), MathHelper.Clamp((f - 0.35f) * 1.6f, 0f, 1f)) * (0.66f * dim);
+                                    new Color(30, 110, 250), MathHelper.Clamp((f - 0.35f) * 1.6f, 0f, 1f)) * (0.5f * dim);
                         }
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
                     }
@@ -1110,9 +1114,9 @@ namespace FrostMelee.Content.Projectiles
                 float breathe = 0.85f + 0.15f * (float)System.Math.Sin(time * 0.08f);
                 float scale = a.Radius * 2.3f / glow.Width;
                 Main.EntitySpriteDraw(glow, a.Center - targetOrigin, null,
-                    new Color(30, 95, 235) * (0.16f * a.Strength * breathe), 0f, origin, scale, SpriteEffects.None, 0f);
+                    new Color(30, 95, 235) * (0.12f * a.Strength * breathe), 0f, origin, scale, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, a.Center - targetOrigin, null,
-                    new Color(70, 160, 255) * (0.08f * a.Strength * breathe), 0f, origin, scale * 0.55f, SpriteEffects.None, 0f);
+                    new Color(70, 160, 255) * (0.06f * a.Strength * breathe), 0f, origin, scale * 0.55f, SpriteEffects.None, 0f);
             }
         }
 
@@ -1149,7 +1153,7 @@ namespace FrostMelee.Content.Projectiles
 
             sb.Begin(SpriteSortMode.Deferred, screenBlend, SamplerState.LinearClamp,
                 DepthStencilState.None, RasterizerState.CullNone, null, view);
-            sb.Draw(fireTarget, at, Color.White);
+            sb.Draw(fireTarget, at, Color.White * FireSoftness);
             sb.End();
         }
 
