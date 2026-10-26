@@ -193,13 +193,11 @@ namespace FrostMelee.Content.Projectiles
                     1f, FrostJetFx.HandSource(Projectile.owner), carryWithBlade: true);
                 if (Main.GameUpdateCount % 4 == 0)
                 {
-                    // Струя едет вместе с игроком: без этого медленные (4.5)
-                    // языки на крыльях тут же отстают и висят цепочкой комет
-                    // по траектории полёта — пламя «отрывается от меча».
-                    // ai[2] — направление струи: FrostFireJet каждый тик заново
-                    // прибавляет к нему ТЕКУЩУЮ скорость игрока. Скорость из
-                    // одного момента рождения после остановки продолжала нести
-                    // огонь вперёд (или держать его у меча после бега назад).
+                    // Струя рождается со скоростью игрока, чтобы медленные
+                    // (4.5) языки на крыльях не отставали в момент появления.
+                    // Дальше FrostFireJet даёт воздуху тормозить её до своей
+                    // скорости: меч при беге вперёд догоняет старые языки, а
+                    // при беге назад уходит от них. ai[2] — направление струи.
                     Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, dir * FrostJetSpeed + player.velocity,
                         ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks, 0f, dir.ToRotation());
                 }
