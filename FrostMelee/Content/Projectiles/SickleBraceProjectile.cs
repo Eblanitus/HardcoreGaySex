@@ -164,7 +164,10 @@ namespace FrostMelee.Content.Projectiles
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
                 if (Main.GameUpdateCount % 4 == 0)
                 {
-                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed,
+                    // Струя наследует скорость игрока: без этого медленные
+                    // (4.5) языки на крыльях тут же отстают и висят цепочкой
+                    // комет по траектории полёта — пламя «отрывается от меча»
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed + player.velocity,
                         ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
                 }
             }

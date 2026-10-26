@@ -95,14 +95,17 @@ namespace FrostMelee.Content.Projectiles
                     float dist = to.Length();
                     float ramp = MathHelper.Clamp(Age / 26f, 0f, 1f);
                     Projectile.velocity += to.SafeNormalize(Vector2.Zero) * MathHelper.Lerp(0.3f, 1.6f, ramp);
-                    float maxSpeed = MathHelper.Lerp(7f, 17f, ramp);
+                    // Резинка возврата: чем дальше огонёк отстал, тем выше
+                    // потолок скорости — быстрого игрока догонит, а не будет
+                    // тащиться цепочкой комет по траектории полёта
+                    float maxSpeed = MathHelper.Lerp(7f, 17f, ramp) + MathHelper.Clamp((dist - 160f) * 0.03f, 0f, 16f);
                     if (Projectile.velocity.Length() > maxSpeed)
                         Projectile.velocity = Projectile.velocity.SafeNormalize(Vector2.Zero) * maxSpeed;
                     // лёгкое виляние пламени поперёк хода, как у языков забора
                     Projectile.velocity += Projectile.velocity.SafeNormalize(Vector2.Zero).RotatedBy(MathHelper.PiOver2)
                         * (float)Math.Sin(Age * 0.45f + Phase) * 0.3f;
                     Projectile.Center += Projectile.velocity;
-                    if (mine && Age > ReturnTimeout)
+                    if (mine && (Age > ReturnTimeout || dist > 1400f))
                         Projectile.Kill(); // не долетел — растаял в меч, запас освободился
                     else if (mine && dist < 16f)
                     {

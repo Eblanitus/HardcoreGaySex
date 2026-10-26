@@ -215,7 +215,9 @@ namespace FrostMelee.Content.Weapons
             Vector2 tangent = new Vector2(-bladeDir.Y, bladeDir.X) * (Projectile.ai[0] >= 0f ? 1f : -1f);
             foreach (float f in ArcJetFractions) {
                 Vector2 at = Vector2.Lerp(butt, tip, f);
-                Vector2 vel = tangent * (1.2f + 2.4f * f) + bladeDir * 0.6f;
+                // + скорость игрока: языки медленные (до ~3.6), взмах на
+                // крыльях без наследования оставляет их висеть позади
+                Vector2 vel = tangent * (1.2f + 2.4f * f) + bladeDir * 0.6f + player.velocity;
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), at, vel,
                     ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ArcJetLife);
             }
