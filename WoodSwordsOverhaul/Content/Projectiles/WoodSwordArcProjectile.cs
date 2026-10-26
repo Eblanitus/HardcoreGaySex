@@ -137,9 +137,9 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 			scale = (ArcScaleStart + percentageOfLife * ArcScaleGrowth) * Projectile.ai[2];
 		}
 
-		// Контрольный сектор на момент time (зона дальше острия и серверный
-		// запасной путь): вокруг центра игрока, но позади палки и только в уже
-		// заметённой части взмаха — голова на палке, хвост не дальше
+		// Углы контрольного сектора на момент time (+ центр/радиус серверного
+		// запасного пути): позади палки и только в уже заметённой части взмаха —
+		// голова на палке, хвост не дальше
 		// ArcAngleBack+ArcAngleFront назад и не раньше начала взмаха. Раньше
 		// сектор стоял головой на +56° ВПЕРЕДИ палки и бил туда, где палка
 		// ещё не была; полный урон теперь даёт только сама палка (TryHit)
@@ -179,11 +179,23 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 		}
 
 		// Спад от расстояния за кончиком палки: 0 — как палкой, 1 — край линии дуги
-		private float FalloffEdge(float distance, float reach) {
-			float maxReach = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2];
+		private float FalloffEdge(float distance, float reach) => FalloffEdge(distance, reach,
+			LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2]);
+
+		private static float FalloffEdge(float distance, float reach, float maxReach) {
 			if (maxReach <= reach)
 				return 0f;
 			return MathHelper.Clamp((distance - reach) / (maxReach - reach), 0f, 1f);
+		}
+
+		// Внешний радиус контрольной оболочки ОТ КИСТИ сейчас: остриё + прежняя
+		// толщина оболочки (радиус линии от центра минус BladeReach). Оболочка
+		// обязана сидеть на том же центре, что палка и нарисованная полоска (кисть):
+		// от центра тела получался мёртвый серп сбоку от игрока и перелёт с другой
+		// стороны — хитбокс не совпадал с картинкой (замечание владельца)
+		private float ControlOuterNow(Player player, float bladeLen) {
+			GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
+			return bladeLen + (LineTexOuter * arcScale * BodyDrawScale * LineDrawScale - BladeReach);
 		}
 
 		// Попадание и «краевой» коэффициент урона edge (0 — полный, 1 — минимальный) —
@@ -211,14 +223,16 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 				return true;
 			}
 
-			GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
-			float lineOuter = LineTexOuter * arcScale * BodyDrawScale * LineDrawScale;
-			if (lineOuter <= BladeReach)
+			// Контроль: оболочка за остриём вокруг кисти в уже заметённой части
+			// сектора (углы — GetHitSector). Цель обязана выступать за остриё
+			float controlOuter = ControlOuterNow(player, bladeLen);
+			if (controlOuter <= bladeLen)
 				return false;
-			if (!NearestInWedge(target, center, startAngle, sweep, out float dist, out float farthest)
-				|| dist > lineOuter || farthest <= BladeReach)
+			if (!NearestInWedge(target, hand, startAngle, sweep, out float dist, out float farthest)
+				|| dist > controlOuter || farthest <= bladeLen)
 				return false;
-			edge = FalloffEdge(dist, BladeReach);
+			float maxReachCenter = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2];
+			edge = FalloffEdge(dist, bladeLen, bladeLen + (maxReachCenter - BladeReach));
 			return true;
 		}
 
@@ -282,21 +296,30 @@ namespace WoodSwordsOverhaul.Content.Projectiles
 			return outCount;
 		}
 
-		// Отладка (DebugHitbox): голубая пыль — кончик палки от центра (отсюда спад),
-		// розовая — край контрольного сектора, изумрудная — остриё по клину зоны палки
+		// Отладка (DebugHitbox): всё от кисти, как настоящий хитбокс: голубая пыль —
+		// остриё по углам контрольного сектора, розовая — край контрольной оболочки,
+		// изумрудная — остриё по клину зоны палки этого тика
 		private void ShowHitbox(Player player) {
 			GetHitSector(player, Projectile.localAI[0], out Vector2 center, out float outer, out float startAngle, out float sweep);
-			for (int i = 0; i <= 12; i++) {
-				Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
-				Dust.NewDustPerfect(center + dir * BladeReach, DustID.BlueFairy, Vector2.Zero).noGravity = true;
-				Dust.NewDustPerfect(center + dir * outer, DustID.Pixie, Vector2.Zero).noGravity = true;
-			}
 			float bladeLen = BladeLengthNow(player);
 			if (bladeLen > 1f) {
 				GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
+				float controlOuter = ControlOuterNow(player, bladeLen);
+				for (int i = 0; i <= 12; i++) {
+					Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
+					Dust.NewDustPerfect(hand + dir * bladeLen, DustID.BlueFairy, Vector2.Zero).noGravity = true;
+					Dust.NewDustPerfect(hand + dir * controlOuter, DustID.Pixie, Vector2.Zero).noGravity = true;
+				}
 				for (int i = 0; i <= 4; i++) {
 					Vector2 dir = (bladeStart + bladeSweep * i / 4f).ToRotationVector2();
 					Dust.NewDustPerfect(hand + dir * bladeLen, DustID.GemEmerald, Vector2.Zero).noGravity = true;
+				}
+			}
+			else {
+				for (int i = 0; i <= 12; i++) {
+					Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
+					Dust.NewDustPerfect(center + dir * BladeReach, DustID.BlueFairy, Vector2.Zero).noGravity = true;
+					Dust.NewDustPerfect(center + dir * outer, DustID.Pixie, Vector2.Zero).noGravity = true;
 				}
 			}
 		}
