@@ -197,10 +197,9 @@ namespace FrostMelee.Content.Projectiles
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
                             ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f);
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.45f
-                                : Color.Lerp(Core, Flame, MathHelper.Clamp(f * 1.5f, 0f, 1f)) * 0.95f;
-                            if (pass == 1 && f > 0.55f)
-                                ribbonColors[i] = Color.Lerp(Flame, Deep, (f - 0.55f) / 0.45f) * 0.95f;
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.5f
+                                : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
+                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * 0.88f;
                         }
                         FlameRibbon.Draw(device, trail, ribbonWidths, ribbonColors, TrailLen);
                     }
