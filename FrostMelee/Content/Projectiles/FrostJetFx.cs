@@ -448,15 +448,44 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        // Языки — только на врагах, которые держат огонь меча (запас): огонь
-        // ресурс, и чужой Frostburn (стрелы, броня, другие моды) не должен
-        // выглядеть как потраченный язык. Учёт запаса — у клиента владельца
-        private static bool HasSwordFlame(NPC npc)
+        // Наш огонь полностью заменяет визуал Frostburn на врагах (решение
+        // владельца): языки горят на любом враге с этим дебаффом, чем бы
+        // его ни подожгли, а ванильная пыль и свет подавлены хуком ниже
+        // (SuppressVanillaFrostburnVfx). Это только картинка: учёт запаса
+        // Frostbrand и урон самого Frostburn здесь не трогаются.
+        // Frostburn2 — тот же ванильный визуал (та же пыль), заменяем и его
+        private static bool HasFrostburn(NPC npc)
+            => npc.canDisplayBuffs
+                && (npc.FindBuffIndex(BuffID.Frostburn) >= 0
+                    || npc.FindBuffIndex(BuffID.Frostburn2) >= 0);
+
+        // Ванильный визуал Frostburn — пыль IceTorch по всему телу и свет —
+        // живёт в NPC.UpdateNPC_BuffApplyVFX и смотрит только на флаги
+        // onFrostBurn/onFrostBurn2. Гасим флаги ровно на время этого вызова
+        // и тут же возвращаем: урон Frostburn к этому месту тика уже
+        // посчитан (BuffApplyDOTs идёт раньше), а весь остальной код видит
+        // флаги как обычно. Вместо ванильной пыли враг горит нашими языками
+        private static void SuppressVanillaFrostburnVfx(On_NPC.orig_UpdateNPC_BuffApplyVFX orig, NPC npc)
         {
-            if (!Weapons.FrostFireSystem.IsBurning(npc))
-                return false;
-            Player me = Main.LocalPlayer;
-            return me != null && me.active && me.GetModPlayer<Weapons.SwordPlayer>().HoldsFlame(npc);
+            if (npc.friendly)
+            {
+                orig(npc);
+                return;
+            }
+
+            bool frostBurn = npc.onFrostBurn;
+            bool frostBurn2 = npc.onFrostBurn2;
+            npc.onFrostBurn = false;
+            npc.onFrostBurn2 = false;
+            try
+            {
+                orig(npc);
+            }
+            finally
+            {
+                npc.onFrostBurn = frostBurn;
+                npc.onFrostBurn2 = frostBurn2;
+            }
         }
 
         private static Vector2 NpcTongueBase(NPC npc, float across)
@@ -488,33 +517,50 @@ namespace FrostMelee.Content.Projectiles
 
         private static void UpdateTongues()
         {
-            // Подпитка языков на горящих врагах в кадре: 1–3 языка по ширине тела.
-            // Горящий враг = держатель языка запаса меча: пламя на нём теперь
-            // настоящее цельное, а не ванильные искры Frostburn
+            // Подпитка языков на горящих врагах в кадре: 1–3 языка по ширине
+            // тела на КАЖДОМ враге с Frostburn — это и есть весь визуал
+            // горения теперь, ванильной пыли больше нет
             Rectangle screen = new Rectangle((int)Main.screenPosition.X - 240, (int)Main.screenPosition.Y - 240,
                 Main.screenWidth + 480, Main.screenHeight + 480);
+            float fireAmount = FrostMeleeConfigDefaults.FireIntensityScale;
+            // Два прохода: сначала по одному языку КАЖДОМУ горящему врагу,
+            // потом дополнительные широким. Иначе при общем лимите языков
+            // первые по списку широкие враги съедали всё, а остальные
+            // горящие оставались вообще без огня
+            for (int pass = 0; pass < 2; pass++)
             for (int i = 0; i < Main.maxNPCs; i++)
             {
                 NPC npc = Main.npc[i];
                 if (!npc.active || npc.friendly || !screen.Intersects(npc.Hitbox))
                     continue;
-                if (!HasSwordFlame(npc))
+                if (!HasFrostburn(npc))
                     continue;
-                // Сколько языков держит враг — тоже ядрёность: настройку
-                // убавили, лишние языки сразу убираем, а не ждём конца горения
-                int desired = (int)System.Math.Round(
-                    MathHelper.Clamp(npc.width / 26, 1, 3) * FrostMeleeConfigDefaults.FireIntensityScale);
+                // Свет горящего врага теперь тоже наш: ванильный свет
+                // Frostburn подавлен вместе с пылью тем же хуком
+                if (pass == 0)
+                    Lighting.AddLight(npc.Center,
+                        new Vector3(0.08f, 0.42f, 0.8f) * FrostMeleeConfigDefaults.FireHeatScale);
+                // Сколько языков держит враг — ядрёность, но минимум один,
+                // пока настройка не 0: ванильного эффекта больше нет, и
+                // горящий враг без единого языка выглядел бы негорящим.
+                // Лишние при убавлении настройки убираем сразу
+                int desired = fireAmount <= 0f
+                    ? 0
+                    : System.Math.Max(1, (int)System.Math.Round(
+                        MathHelper.Clamp(npc.width / 26, 1, 3) * fireAmount));
                 int have = 0;
                 foreach (Tongue t in tongues)
                     if (t.NpcIndex == i)
                         have++;
-                for (int idx = tongues.Count - 1; idx >= 0 && have > desired; idx--)
-                    if (tongues[idx].NpcIndex == i)
-                    {
-                        tongues.RemoveAt(idx);
-                        have--;
-                    }
-                for (int k = have; k < desired && tongues.Count < MaxTongues - BurstTongueReserve; k++)
+                if (pass == 0)
+                    for (int idx = tongues.Count - 1; idx >= 0 && have > desired; idx--)
+                        if (tongues[idx].NpcIndex == i)
+                        {
+                            tongues.RemoveAt(idx);
+                            have--;
+                        }
+                int target = pass == 0 ? System.Math.Min(desired, 1) : desired;
+                for (int k = have; k < target && tongues.Count < MaxTongues - BurstTongueReserve; k++)
                     SpawnNpcTongue(npc, (k + 0.5f) / desired + Main.rand.NextFloat(-0.08f, 0.08f));
             }
 
@@ -527,7 +573,7 @@ namespace FrostMelee.Content.Projectiles
                 {
                     NPC npc = Main.npc[t.NpcIndex];
                     bool same = npc.active && npc.type == t.NpcType;
-                    bool alive = same && HasSwordFlame(npc);
+                    bool alive = same && HasFrostburn(npc);
                     t.Strength = MathHelper.Clamp(t.Strength + (alive ? 0.06f : -0.08f), 0f, 1f);
                     if (t.Strength <= 0.01f)
                     {
@@ -1020,6 +1066,7 @@ namespace FrostMelee.Content.Projectiles
                 return;
             Main.OnPreDraw += RenderFire;
             On_Main.DrawDust += DrawFireOverDust;
+            On_NPC.UpdateNPC_BuffApplyVFX += SuppressVanillaFrostburnVfx;
         }
 
         // Аура живёт один тик: застрявший меч заново заявляет её в своём AI
@@ -1245,6 +1292,7 @@ namespace FrostMelee.Content.Projectiles
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
             Main.OnPreDraw -= RenderFire;
+            On_NPC.UpdateNPC_BuffApplyVFX -= SuppressVanillaFrostburnVfx;
             DisposeTarget();
             FlameRibbon.Unload();
         }
