@@ -827,6 +827,20 @@ namespace FrostMelee.Content.Projectiles
                         ribbonPoints[idx++] = streamRaw[i];
                 }
 
+                // Живое виляние оси потока: гладкая лента строго по центрам
+                // струй читалась глянцевым кнутом света. Виляние растёт к
+                // хвосту, у острия поток прибит к клинку (точка 0 не тронута)
+                for (int i = 1; i < idx; i++)
+                {
+                    Vector2 back = ribbonPoints[i - 1];
+                    Vector2 fwdP = ribbonPoints[System.Math.Min(idx - 1, i + 1)];
+                    Vector2 dirP = (fwdP - back).SafeNormalize(new Vector2(0f, -1f));
+                    Vector2 perpP = new Vector2(-dirP.Y, dirP.X);
+                    float fi = i / (float)(idx - 1);
+                    float wig = (float)System.Math.Sin(time * 1.6f + i * 1.7f) * (1.2f + 3.2f * fi);
+                    ribbonPoints[i] += perpP * wig;
+                }
+
                 if (idx >= 2)
                 {
                     for (int pass = 0; pass < 2; pass++)
@@ -840,15 +854,20 @@ namespace FrostMelee.Content.Projectiles
                             if (i < idx - 1) { gap += Vector2.Distance(ribbonPoints[i], ribbonPoints[i + 1]); cnt++; }
                             gap /= System.Math.Max(1, cnt);
                             float stretch = MathHelper.Clamp(gap / 20f, 0.7f, 3.5f);
-                            float lumpy = 0.85f + 0.15f * (float)System.Math.Sin(time * 1.2f + i * 1.4f);
+                            // Ширина «кипит» двумя волнами — рваный край огня
+                            // вместо ровной глянцевой ленты
+                            float lumpy = 0.72f + 0.28f * (float)System.Math.Sin(time * 1.7f + i * 2.3f)
+                                * (float)System.Math.Sin(time * 0.9f + i * 0.8f);
                             ribbonWidths[i] = MathHelper.Lerp(11.5f, 3f, f) * lumpy
                                 / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.7f : 0.75f);
                             float dim = 1f / (0.6f + 0.4f * stretch);
+                            // Белое — короткий жар у острия; тело потока глубокое
+                            // синее, иначе лента блестит белым кнутом по всей длине
                             ribbonColors[i] = pass == 0
                                 ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.36f * dim)
                                 : Color.Lerp(
-                                    Color.Lerp(new Color(168, 232, 255), new Color(112, 200, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
-                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.62f * dim);
+                                    Color.Lerp(new Color(175, 238, 255), new Color(70, 160, 255), MathHelper.Clamp(f * 2.6f, 0f, 1f)),
+                                    new Color(30, 110, 250), MathHelper.Clamp((f - 0.35f) * 1.6f, 0f, 1f)) * (0.66f * dim);
                         }
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
                     }
