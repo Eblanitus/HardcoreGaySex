@@ -688,8 +688,10 @@ namespace FrostMelee.Content.Projectiles
                 ribbonWidths[0] = p.Size * 12f * sizeJitter;
                 ribbonWidths[1] = p.Size * 19f * sizeJitter;
                 ribbonWidths[2] = 1f;
-                ribbonColors[0] = hot * (0.7f * fade);
-                ribbonColors[1] = hot * (0.55f * fade);
+                // Тише перемычек: тело пламени теперь соединения (DrawFlameWeb),
+                // язычки — только кончики поверх него
+                ribbonColors[0] = hot * (0.42f * fade);
+                ribbonColors[1] = hot * (0.34f * fade);
                 ribbonColors[2] = cold * (0.5f * fade);
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
             }
@@ -702,44 +704,49 @@ namespace FrostMelee.Content.Projectiles
                 (float)System.Math.Pow(heat, 2f)) * alpha;
         }
 
-        // Соседние частицы сливаются в одну массу пламени: между близкими
-        // парами — ТОЛСТЫЕ мягкие перемычки на всю ширину сгустков с низкой
-        // яркостью. Тонкие нити между соседями (flame-6) читались как
-        // созвездия — линии между звёздочками; перемычка обязана заполнять
-        // объём, а не чертить линию. Дальние пары не связываем вовсе
+        // Соединения — ГЛАВНОЕ тело пламени (требование владельца): между
+        // близкими частицами тянутся широкие яркие перемычки, не хуже самих
+        // сгустков; сгустки и спрайты поверх наоборот приглушены, чтобы
+        // сумма не слипалась в вату. Свободные частицы связываются и с
+        // привязанными к клинку — шлейф буквально пришит к пламени клинка.
+        // Линиями-созвездиями это не читается: перемычка шире сгустков и
+        // мягкая по краям (маска FlameRibbon), это тело огня, а не проволока
         private static void DrawFlameWeb(GraphicsDevice device)
         {
             int n = particles.Count;
             for (int i = 0; i < n; i++)
             {
                 Particle p = particles[i];
-                if (p.Anchored || p.Kind == FlameKind.Spark)
+                if (p.Kind == FlameKind.Spark)
                     continue;
                 int drawn = 0;
                 for (int j = i + 1; j < n && drawn < 4; j++)
                 {
                     Particle q = particles[j];
-                    if (q.Anchored || q.Kind == FlameKind.Spark)
+                    if (q.Kind == FlameKind.Spark)
+                        continue;
+                    // Привязанных между собой уже соединяет лист по клинку
+                    if (p.Anchored && q.Anchored)
                         continue;
                     float dist = Vector2.Distance(p.Position, q.Position);
-                    if (dist < 3f || dist > 40f)
+                    if (dist < 3f || dist > 54f)
                         continue;
                     float oldest = System.Math.Max(p.Age / (float)p.Life, q.Age / (float)q.Life);
-                    float fade = MathHelper.Clamp((1f - oldest) * 2f, 0f, 1f) * (1f - dist / 40f);
+                    float fade = MathHelper.Clamp((1f - oldest) * 2f, 0f, 1f)
+                        * (float)System.Math.Pow(1f - dist / 54f, 0.7f);
                     if (fade < 0.05f)
                         continue;
-                    // Перемычка — только заполнитель щелей: тоньше сгустков и
-                    // заметно тусклее их, иначе масса слипается в вату (flame-7)
-                    float wdt = (p.Size + q.Size) * 22f;
+                    // Длинная перемычка чуть тоньше, но остаётся видимой жилой
+                    float wdt = (p.Size + q.Size) * 36f * (1.1f - dist / 54f * 0.5f);
                     ribbonPoints[0] = q.Position;
                     ribbonPoints[1] = (p.Position + q.Position) * 0.5f + new Vector2(0f, -2f);
                     ribbonPoints[2] = p.Position;
                     ribbonWidths[0] = wdt;
                     ribbonWidths[1] = wdt * 1.05f;
                     ribbonWidths[2] = wdt;
-                    ribbonColors[0] = ParticleHeatColor(q, 0.16f * fade);
-                    ribbonColors[1] = ParticleHeatColor(p, 0.14f * fade);
-                    ribbonColors[2] = ParticleHeatColor(p, 0.16f * fade);
+                    ribbonColors[0] = ParticleHeatColor(q, 0.5f * fade);
+                    ribbonColors[1] = ParticleHeatColor(p, 0.6f * fade);
+                    ribbonColors[2] = ParticleHeatColor(p, 0.5f * fade);
                     FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
                     drawn++;
                 }
@@ -907,8 +914,8 @@ namespace FrostMelee.Content.Projectiles
                 // спрайтов и давали «гирлянду свечек» по дуге взмаха (flame-1).
                 // Свободные тоже тише: яркие точки спрайтов на фоне перемычек
                 // читались звёздочками созвездий (flame-6)
-                float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.15f : 0.12f);
-                float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.28f : 0.24f);
+                float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.15f : 0.07f);
+                float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.28f : 0.16f);
 
                 Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
                     outer * (outerAlpha * fade * bodyDim), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
