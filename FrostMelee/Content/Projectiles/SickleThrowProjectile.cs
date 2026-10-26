@@ -584,7 +584,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < Main.maxNPCs; i++)
                 {
                     NPC npc = Main.npc[i];
-                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                    if (!Weapons.FrostFireSystem.CanBurn(npc))
                         continue;
                     if (Vector2.DistanceSquared(npc.Center, Projectile.Center) <= r2)
                         Weapons.FrostFireSystem.TryIgnite(npc, Main.player[Projectile.owner]);

@@ -46,6 +46,16 @@ namespace FrostMelee.Content.Weapons
             bursts.Clear();
         }
 
+        // Манекен в ванили помечен immortal: здоровье у него не падает, но
+        // удары и дебаффы он как раз должен показывать. Поэтому для него
+        // делаем единственное исключение из запрета на immortal; остальных
+        // бессмертных не трогаем.
+        public static bool IsTargetDummy(NPC npc) => npc != null && npc.type == NPCID.TargetDummy;
+
+        public static bool CanBurn(NPC npc) =>
+            npc != null && npc.active && !npc.friendly && !npc.dontTakeDamage
+            && (!npc.immortal || IsTargetDummy(npc));
+
         // Горит ли цель
         public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BuffID.Frostburn) >= 0;
 
@@ -73,7 +83,7 @@ namespace FrostMelee.Content.Weapons
         // Сырой поджог без учёта запаса (внутренний и запасной путь)
         public static void Ignite(NPC npc)
         {
-            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+            if (!CanBurn(npc))
                 return;
 
             npc.AddBuff(BuffID.Frostburn, BurnTicks);
@@ -85,7 +95,7 @@ namespace FrostMelee.Content.Weapons
         // Возвращает false — запаса нет, враг НЕ загорелся
         public static bool TryIgnite(NPC npc, Player owner)
         {
-            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+            if (!CanBurn(npc))
                 return false;
             if (owner == null || !owner.active)
             {

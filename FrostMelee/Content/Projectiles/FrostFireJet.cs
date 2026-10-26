@@ -118,7 +118,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < Main.maxNPCs; i++)
                 {
                     NPC npc = Main.npc[i];
-                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                    if (!Weapons.FrostFireSystem.CanBurn(npc))
                         continue;
                     if (!npc.Hitbox.Intersects(hitbox))
                         continue;
