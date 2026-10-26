@@ -33,6 +33,18 @@ namespace FrostMelee
         [Slider]
         [DefaultValue(50)]
         public int FrostFireIntensity { get; set; } = 50;
+
+        // Временная ручка подбора длины струи встречи. 100 — длина из
+        // flame-25. Сразу стоит 60: ещё примерно на 40% короче, как
+        // попросил владелец. Когда он выберет значение, его можно будет
+        // вшить в код и убрать эту настройку.
+        [Label("Длина струи встречи (%)")]
+        [Tooltip("Временная настройка для подбора длины струи Frostbrand во встрече. 100 — прежняя длина, сейчас стоит 60 — примерно на 40% короче.")]
+        [Range(20, 150)]
+        [Increment(5)]
+        [Slider]
+        [DefaultValue(60)]
+        public int FrostBraceJetLengthPercent { get; set; } = 60;
     }
 
     // Доступ из любых мест: до загрузки конфига и на выделенном сервере — включено
@@ -62,5 +74,11 @@ namespace FrostMelee
         // холоднее и синее с рождения, выше — дольше держится белым жаром
         public static float FireHeatScale =>
             FireIntensityScale <= 0f ? 0f : MathHelper.Clamp(0.6f + 0.4f * FireIntensityScale, 0.6f, 1.4f);
+
+        // Длина струи встречи относительно flame-25. По умолчанию 60%,
+        // то есть ещё примерно на 40% короче. Если конфиг ещё не загружен,
+        // используем то же значение, а не прежние 100%.
+        public static float BraceJetLengthScale =>
+            MathHelper.Clamp((ModContent.GetInstance<FrostMeleeConfig>()?.FrostBraceJetLengthPercent ?? 60) / 100f, 0.2f, 1.5f);
     }
 }

@@ -183,8 +183,14 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.localAI[1] < FrostJetGrowTicks)
                     Projectile.localAI[1]++;
                 float grow = Projectile.localAI[1] / FrostJetGrowTicks;
-                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow);
-                int ticks = Math.Max(12, (int)Math.Ceiling(reach / FrostJetSpeed));
+                // Временный регулятор из настроек: 100% — длина flame-25,
+                // по умолчанию стоит 60% (ещё примерно на 40% короче).
+                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow)
+                    * FrostMeleeConfigDefaults.BraceJetLengthScale;
+                // Минимум 4: струи рождаются раз в 4 тика, иначе на самой
+                // короткой настройке поток распадётся на отдельные точки.
+                // Прежний минимум 12 не давал сделать струю короче 54 px.
+                int ticks = Math.Max(4, (int)Math.Ceiling(reach / FrostJetSpeed));
 
                 Vector2 jetBase = butt;
                 Vector2 jetTip = butt + dir * geo.Length;
