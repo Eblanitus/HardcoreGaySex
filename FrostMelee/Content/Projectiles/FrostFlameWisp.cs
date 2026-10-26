@@ -158,11 +158,11 @@ namespace FrostMelee.Content.Projectiles
             var sp = Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>();
             if (sp.HoldsFlame(target))
             {
-                target.AddBuff(BuffID.Frostburn, Weapons.FrostFireSystem.BurnTicks);
+                target.AddBuff(Weapons.FrostFireSystem.BurnBuff, Weapons.FrostFireSystem.BurnTicks);
                 return;
             }
             sp.AddFlameHolder(target);
-            target.AddBuff(BuffID.Frostburn, Weapons.FrostFireSystem.BurnTicks);
+            target.AddBuff(Weapons.FrostFireSystem.BurnBuff, Weapons.FrostFireSystem.BurnTicks);
             Projectile.Kill();
         }
 

@@ -563,7 +563,7 @@ namespace FrostMelee.Content.Projectiles
         }
 
         // Застрявший Frostbrand разгорается: аура растёт до предела, поджигает соседей,
-        // а если клинок висит в враге — всё время обновляет ему Frostburn.
+        // а если клинок висит в враге — всё время обновляет ему Frostbite.
         private void UpdateLodgedFrostbrand(NPC lodged)
         {
             if (!IsFrostbrand)

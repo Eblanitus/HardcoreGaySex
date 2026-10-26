@@ -24,6 +24,10 @@ namespace FrostMelee.Content.Weapons
     public class FrostFireSystem : ModSystem
     {
         public const int BurnTicks = 180;         // 3 с горения
+        // Фростбранд — хардмодный, поэтому его горение — Frostbite
+        // (BuffID.Frostburn2), а не дохардмодный Frostburn. Весь учёт
+        // запаса, «горит ли» и забор огня тычком смотрят именно сюда.
+        public const int BurnBuff = BuffID.Frostburn2;
 
         private class BurstVisual
         {
@@ -56,8 +60,8 @@ namespace FrostMelee.Content.Weapons
             npc != null && npc.active && !npc.friendly && !npc.dontTakeDamage
             && (!npc.immortal || IsTargetDummy(npc));
 
-        // Горит ли цель
-        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BuffID.Frostburn) >= 0;
+        // Горит ли цель холодным огнём Фростбранда (Frostbite)
+        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BurnBuff) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) => IsBurning(npc);
@@ -65,14 +69,14 @@ namespace FrostMelee.Content.Weapons
         // Сколько тиков горения осталось (0 — не горит)
         public static int BurnRemaining(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             return index < 0 ? 0 : npc.buffTime[index];
         }
 
         // Тычок забирает горение с цели: снимает бафф и возвращает остаток тиков
         public static int TakeBurn(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             if (index < 0)
                 return 0;
             int ticks = npc.buffTime[index];
@@ -86,7 +90,7 @@ namespace FrostMelee.Content.Weapons
             if (!CanBurn(npc))
                 return;
 
-            npc.AddBuff(BuffID.Frostburn, BurnTicks);
+            npc.AddBuff(BurnBuff, BurnTicks);
         }
 
         // Поджог с учётом конечного запаса владельца: новый враг загорается,
@@ -107,18 +111,18 @@ namespace FrostMelee.Content.Weapons
             {
                 // Сервер и чужие клиенты учёт не ведут (как полировка в MP):
                 // поджог не блокируем, запас считает клиент владельца
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             if (sp.HoldsFlame(npc))
             {
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             if (sp.FreeFlames > 0 || sp.TryConsumeOrbitingFlame())
             {
                 sp.AddFlameHolder(npc);
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             return false;

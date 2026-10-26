@@ -35,7 +35,7 @@ namespace FrostMelee.Content.Projectiles
         private static readonly Color IceTail = new Color(120, 210, 255);
         private static readonly Color IceEdge = new Color(40, 110, 230);
 
-        // === Только ледяное копьё: иней, Frostburn, раскол льда на полном разгоне ===
+        // === Только ледяное копьё: иней, Frostbite, раскол льда на полном разгоне ===
         private const int RimeCrystals = 14;          // кристалликов на лезвии при полном инее
         private const float RimeBladeFrac = 0.6f;    // доля длины копья от острия назад, покрытая инеем
         private const float RimeEdgeWidth = 8f;
