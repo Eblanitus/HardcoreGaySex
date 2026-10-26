@@ -9,6 +9,14 @@ namespace FrostMelee.Content.Weapons
     // Один источник правды: SwordPlayer, SwordGlobalItem, SwordUI берут отсюда.
     public static class SwordTypes
     {
+        // Собственный ModItem: числовой тип известен только после регистрации
+        // предмета, поэтому Айсберг сам записывает его сюда в SetDefaults.
+        // До этого здесь 0, и проверки по нему просто ничего не находят.
+        public static int AisbergType;
+
+        public static bool IsAisbergId(int itemType) =>
+            AisbergType > 0 && itemType == AisbergType;
+
         public static readonly int[] Swords = new int[]
         {
             ItemID.IceBlade,   // Ледяной клинок
@@ -22,6 +30,8 @@ namespace FrostMelee.Content.Weapons
 
         public static bool IsSwordId(int itemType)
         {
+            if (IsAisbergId(itemType))
+                return true;
             foreach (int type in Swords)
                 if (type == itemType)
                     return true;
@@ -32,9 +42,11 @@ namespace FrostMelee.Content.Weapons
         // Меч — «дуга и вес»: стихия взмах. Тычки и встреча возможны, но слабее.
         public static float SwingDamageMult(Item item) => 1f;
 
-        public static float StabDamageMult(Item item) => 0.85f;
+        public static float StabDamageMult(Item item) =>
+            item != null && IsAisbergId(item.type) ? 0.8f : 0.85f;
 
-        public static float SpearDamageMult(Item item) => 0.8f;
+        public static float SpearDamageMult(Item item) =>
+            item != null && IsAisbergId(item.type) ? 1f : 0.8f;
 
         // Бросок мечей — как у палок, а не как у копья: крученый, в полёте
         // вертится, на земле ложится и settle-ится (SickleThrowProjectile).
@@ -42,7 +54,8 @@ namespace FrostMelee.Content.Weapons
 
         public static float StabKnockbackMult(Item item) => 0.5f;
 
-        // Меч короткий и быстрый: тычки резкие
-        public static float StabTimeMult(Item item) => 0.85f;
+        // Меч короткий и быстрый: тычки резкие. Айсберг тяжёлый — без ускорения
+        public static float StabTimeMult(Item item) =>
+            item != null && IsAisbergId(item.type) ? 1f : 0.85f;
     }
 }

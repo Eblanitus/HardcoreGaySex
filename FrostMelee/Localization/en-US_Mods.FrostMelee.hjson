@@ -1,3 +1,10 @@
+Items: {
+	Aisberg: {
+		DisplayName: Aisberg
+		Tooltip: "Ice chunks explode when they crack and inflict Frostbite"
+	}
+}
+
 Projectiles: {
 	SickleArcProjectile.DisplayName: Sickle Arc Projectile
 	SickleStabProjectile.DisplayName: Sickle Stab Projectile

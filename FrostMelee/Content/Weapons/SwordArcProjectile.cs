@@ -104,7 +104,7 @@ namespace FrostMelee.Content.Weapons
             // Визуал (все клиенты): Ice Blade точится об воздух; Фростбранд
             // записывает настоящий путь клинка для ленты и сыплет угли пламени
             if (!Main.dedServ) {
-                if (IsIceBlade(player))
+                if (IsIceBlade(player) || IsAisberg(player))
                     UpdateHone(player, maxAnim);
                 else if ((SwordItem != 0 ? SwordItem : player.HeldItem.type) == ItemID.Frostbrand) {
                     RecordFlameBlade(player);
@@ -595,6 +595,11 @@ namespace FrostMelee.Content.Weapons
         private bool IsIceBlade(Player player) {
             int item = SwordItem != 0 ? SwordItem : player.HeldItem.type;
             return item == ItemID.IceBlade;
+        }
+
+        private bool IsAisberg(Player player) {
+            int item = SwordItem != 0 ? SwordItem : player.HeldItem.type;
+            return SwordTypes.IsAisbergId(item);
         }
 
         private static float HoneGlintAt(float progress) => Smooth01((progress - HoneStart) / HoneSpan);
@@ -1109,6 +1114,14 @@ namespace FrostMelee.Content.Weapons
                 if (Main.player[Projectile.owner].GetModPlayer<SwordPlayer>().AddPolish(SwordItem))
                     HoneHitBurst(Main.player[Projectile.owner], target, SwordItem);
             }
+            // Айсберг: глыбы только от прямого попадания дуги (доктрина:
+            // пустой взмах дистанционного урона не даёт). Темп — AisbergPlayer.
+            if (SwordTypes.IsAisbergId(SwordItem) && Projectile.owner == Main.myPlayer) {
+                Player owner = Main.player[Projectile.owner];
+                if (owner.GetModPlayer<AisbergPlayer>().TryStartBlockCooldown())
+                    AisbergChunk.SpawnSwingChunks(owner, Projectile.GetSource_FromThis(),
+                        target.Center, Projectile.damage, Projectile.knockBack);
+            }
             // Frostbrand сам НЕ поджигает: поджигает только струя. У взмаха это
             // веер струй по дуге (SpawnArcJets в AI) — пламя, которое клинок
             // несёт за собой по ходу взмаха
@@ -1140,7 +1153,7 @@ namespace FrostMelee.Content.Weapons
             float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
             Player owner = Main.player[Projectile.owner];
-            if (IsIceBlade(owner)) {
+            if (IsIceBlade(owner) || IsAisberg(owner)) {
                 DrawHone(owner, texture, scale, spriteEffects, percentageOfLife, lerpTime, maxAnim);
                 return false;
             }

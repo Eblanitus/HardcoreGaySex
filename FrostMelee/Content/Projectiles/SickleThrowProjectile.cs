@@ -139,6 +139,7 @@ namespace FrostMelee.Content.Projectiles
 
         private bool IsIce => (int)Projectile.ai[2] == ItemID.IceSickle;
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
+        private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
 
         public override void SetDefaults()
         {
@@ -505,6 +506,11 @@ namespace FrostMelee.Content.Projectiles
             // Волна льда по поверхности от броска ледяного клинка (маленькая, т.к. не убийство)
             if ((int)Projectile.ai[2] == ItemID.IceBlade && Projectile.owner == Main.myPlayer) {
                 SpawnIceWave((int)Projectile.ai[2], false);
+            }
+            // Айсберг: крупные глыбы в момент втыкания, из точки контакта
+            if (IsAisberg && Projectile.owner == Main.myPlayer) {
+                AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                    Projectile.GetSource_FromThis(), contact, Projectile.damage, Projectile.knockBack);
             }
             return true;
         }
@@ -874,8 +880,15 @@ namespace FrostMelee.Content.Projectiles
                 // то же условие, что и само втыкание ниже, иначе меч торчит
                 // во враге, а волны нет — «эффект не срабатывает»
                 if (stickNpcHit && Projectile.owner == Main.myPlayer) {
-                    bool isKill = target.life <= 0;
-                    SpawnIceWave(thrownItem, isKill);
+                    if (IsAisberg) {
+                        Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
+                        AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                            Projectile.GetSource_FromThis(), tip, Projectile.damage, Projectile.knockBack);
+                    }
+                    else {
+                        bool isKill = target.life <= 0;
+                        SpawnIceWave(thrownItem, isKill);
+                    }
                 }
             }
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)

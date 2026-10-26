@@ -213,6 +213,12 @@ namespace FrostMelee.Content.Projectiles
             Projectile.spriteDirection = dir.X >= 0 ? 1 : -1;
             Projectile.rotation = Projectile.ai[1] - geo.AngleFor(Projectile.spriteDirection == -1);
 
+            // Айсберг: выставленный клинок разбивает свои глыбы. Раскол
+            // встречей дополнительно замораживает поверхность вокруг.
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
+                AisbergChunk.CrackTouched(Projectile,
+                    box => Colliding(Projectile.Hitbox, box) == true, true);
+
             UpdateBraceFx(player, dir, geo);
 
             // Копьё копит заморозку каждый тик, пока выставлено: чем быстрее игрок, тем быстрее набор (стоя почти ноль)

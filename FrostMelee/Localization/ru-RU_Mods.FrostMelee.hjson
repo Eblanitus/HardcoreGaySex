@@ -1,3 +1,10 @@
+Items: {
+	Aisberg: {
+		DisplayName: Айсберг
+		Tooltip: "Ледяные глыбы при расколе взрываются и накладывают Фростбайт"
+	}
+}
+
 Projectiles: {
 	SickleArcProjectile.DisplayName: Дуга серпа
 	SickleStabProjectile.DisplayName: Выпад серпом
