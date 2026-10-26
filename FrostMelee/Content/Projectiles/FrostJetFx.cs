@@ -147,11 +147,11 @@ namespace FrostMelee.Content.Projectiles
             {
                 Particle trail = EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
                     0.2f, 0.6f, 0.3f, 9, 13, 0.24f, 0.34f, false);
-                // Свободная частица клинка В РУКЕ уносит часть скорости клинка:
-                // без этого на быстром начале взмаха она остаётся висеть там,
-                // где родилась, и выглядит отставшей (замечание владельца)
+                // Свободная частица клинка В РУКЕ уносит почти всю скорость
+                // клинка: на половинной скорости игрок на крыльях её просто
+                // перегонял, и пламя отрывалось кометами по траектории полёта
                 if (anchored && trail != null)
-                    trail.Velocity += bladeVelocity * 0.5f;
+                    trail.Velocity += bladeVelocity * 0.85f;
             }
 
             if (Main.rand.NextFloat() < 0.1f * intensity)
@@ -166,7 +166,7 @@ namespace FrostMelee.Content.Projectiles
                     : dir * Main.rand.NextFloat(0.1f, 0.35f) + perp * Main.rand.NextFloat(-0.15f, 0.15f);
                 velocity += new Vector2(0f, -Main.rand.NextFloat(0.1f, anchored ? 0.6f : 0.35f));
                 if (anchored)
-                    velocity += bladeVelocity * 0.3f;
+                    velocity += bladeVelocity * 0.6f;
                 Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f) * emitSizeScale);
             }
         }
@@ -520,10 +520,27 @@ namespace FrostMelee.Content.Projectiles
                 }
                 else
                 {
+                    // Шлейф клинка в руке на скорости не отрывается: частица
+                    // подхватывается потоком клинка и резинкой тянется к нему —
+                    // чем дальше отстала, тем сильнее тяга, а совсем отставшая
+                    // быстро остывает и тает. Без этого на крыльях пламя
+                    // оставалось висеть кометами по всей траектории полёта
+                    if (p.Kind == FlameKind.Trail && hasBlade)
+                    {
+                        p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity * 0.92f, 0.22f);
+                        Vector2 toBlade = NearestBladePoint(p.Position) - p.Position;
+                        float d = toBlade.Length();
+                        if (d > 30f)
+                            p.Velocity += toBlade.SafeNormalize(Vector2.Zero) * MathHelper.Clamp((d - 30f) * 0.012f, 0f, 0.9f);
+                        if (d > 110f)
+                            p.Temperature = MathHelper.Max(0f, p.Temperature - 0.08f);
+                    }
                     p.Position += p.Velocity;
                     if (p.Velocity.LengthSquared() > 0.04f)
                         p.Rotation = p.Velocity.ToRotation();
-                    p.Stretch = MathHelper.Clamp(1.05f + p.Velocity.Length() * 0.08f, 1.05f, 2.4f);
+                    // Потолок растяжения ниже: на скорости спрайты вытягивались
+                    // в огромные кометы на пол-экрана
+                    p.Stretch = MathHelper.Clamp(1.05f + p.Velocity.Length() * 0.045f, 1.05f, 1.8f);
                 }
             }
         }
@@ -625,15 +642,18 @@ namespace FrostMelee.Content.Projectiles
             FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
         }
 
-        private static float DistanceToBlade(Vector2 point)
+        private static Vector2 NearestBladePoint(Vector2 point)
         {
             if (!bladeLineValid)
-                return 0f;
+                return point;
             Vector2 ab = bladeTip - bladeButt;
             float lenSq = ab.LengthSquared();
             float t = lenSq > 0.01f ? MathHelper.Clamp(Vector2.Dot(point - bladeButt, ab) / lenSq, 0f, 1f) : 0f;
-            return Vector2.Distance(point, bladeButt + ab * t);
+            return bladeButt + ab * t;
         }
+
+        private static float DistanceToBlade(Vector2 point)
+            => bladeLineValid ? Vector2.Distance(point, NearestBladePoint(point)) : 0f;
 
         // Свободные частицы (брошенный/застрявший меч, струи): каждая — короткий
         // язычок по ходу движения с подъёмом вверх; плотная россыпь сливается

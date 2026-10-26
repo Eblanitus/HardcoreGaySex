@@ -21,7 +21,7 @@ namespace FrostMelee
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261026-flame-3";
+        public const string BuildTag = "20261026-flame-4";
 
         public override void Load()
         {
