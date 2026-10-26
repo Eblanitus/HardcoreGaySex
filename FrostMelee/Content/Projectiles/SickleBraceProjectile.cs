@@ -143,36 +143,6 @@ namespace FrostMelee.Content.Projectiles
             Vector2 dir = SpearDir;
             float armRot = Projectile.ai[1] - MathHelper.PiOver2;
 
-            // Выдвиг: первые DeployTicks серп выдвигается вперёд, дальше висит
-            // Фростбранд: узкая струя холодного пламени из лезвия, пока
-            // встреча выставлена и меч в руке. Держишь — жжёт, отпустил — гаснет.
-            if ((int)Projectile.ai[2] == ItemID.Frostbrand
-                && Projectile.owner == Main.myPlayer
-                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
-            {
-                // Чем дольше держишь встречу, тем дальше от острия тянется струя (до предела)
-                if (Projectile.localAI[1] < FrostJetGrowTicks)
-                    Projectile.localAI[1]++;
-                float grow = Projectile.localAI[1] / FrostJetGrowTicks;
-                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow);
-                int ticks = Math.Max(12, (int)Math.Ceiling(reach / FrostJetSpeed));
-
-                float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
-                Vector2 jetBase = Projectile.Center - SpearDir * half;
-                Vector2 jetTip = Projectile.Center + SpearDir * half;
-                FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir,
-                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity,
-                    1f, FrostJetFx.HandSource(Projectile.owner));
-                if (Main.GameUpdateCount % 4 == 0)
-                {
-                    // Струя наследует скорость игрока: без этого медленные
-                    // (4.5) языки на крыльях тут же отстают и висят цепочкой
-                    // комет по траектории полёта — пламя «отрывается от меча»
-                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed + player.velocity,
-                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
-                }
-            }
-
             if (Projectile.localAI[0] < DeployTicks)
                 Projectile.localAI[0]++;
             float t = Projectile.localAI[0] / DeployTicks;
@@ -198,6 +168,38 @@ namespace FrostMelee.Content.Projectiles
             SickleSprite.Geometry geo = SickleSprite.Get((int)Projectile.ai[2]);
             Vector2 butt = hand - dir * (geo.Length * (GripBehind + DeployPullBack * (1f - deploy)));
             Projectile.Center = butt + dir * (geo.Length * 0.5f);
+
+            // Фростбранд: огонь на клинке и струю выпускаем ТОЛЬКО теперь,
+            // когда меч уже стоит в позе этого тика. Раньше это делалось до
+            // постановки Center — по месту прошлого тика, и пока меч
+            // выдвигался вперёд, огонь сидел не на самой текстуре меча.
+            // Теперь отрезок огня butt → tip — ровно приклад и остриё того
+            // спрайта, который рисуется, и пламя едет вместе с выдвигом
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand
+                && Projectile.owner == Main.myPlayer
+                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
+            {
+                // Чем дольше держишь встречу, тем дальше от острия тянется струя (до предела)
+                if (Projectile.localAI[1] < FrostJetGrowTicks)
+                    Projectile.localAI[1]++;
+                float grow = Projectile.localAI[1] / FrostJetGrowTicks;
+                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow);
+                int ticks = Math.Max(12, (int)Math.Ceiling(reach / FrostJetSpeed));
+
+                Vector2 jetBase = butt;
+                Vector2 jetTip = butt + dir * geo.Length;
+                FrostJetFx.EmitBlade(jetBase, jetTip, dir,
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity,
+                    1f, FrostJetFx.HandSource(Projectile.owner));
+                if (Main.GameUpdateCount % 4 == 0)
+                {
+                    // Струя наследует скорость игрока: без этого медленные
+                    // (4.5) языки на крыльях тут же отстают и висят цепочкой
+                    // комет по траектории полёта — пламя «отрывается от меча»
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, dir * FrostJetSpeed + player.velocity,
+                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
+                }
+            }
 
             // Поворот: вектор «приклад → острие» спрайта вдоль серпа. SET, не +=.
             Projectile.spriteDirection = dir.X >= 0 ? 1 : -1;

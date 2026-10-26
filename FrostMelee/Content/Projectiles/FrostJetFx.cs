@@ -95,6 +95,12 @@ namespace FrostMelee.Content.Projectiles
 
         private static readonly List<VanillaBurnDustRef> vanillaBurnDust = new();
         private static bool[] dustWasActive;
+        // Запасной отбор на кадр: горящие враги, у которых помеченной пыли
+        // не нашлось (например, пыль родилась до перезагрузки мода). Новых
+        // частиц запасной путь не создаёт — берёт ту же ванильную пыль
+        // IceTorch, которая уже лежит на теле горящего врага
+        private static readonly List<int> vanillaBurnFallbackNpcs = new();
+        private static bool[] npcHasTaggedVanillaBurnDust;
 
         private static readonly Vector2[] ribbonPoints = new Vector2[96];
         private static readonly float[] ribbonWidths = new float[96];
@@ -545,22 +551,28 @@ namespace FrostMelee.Content.Projectiles
         // количество и поведение полностью игровые; на 0 нашего пламени
         // поверх них просто нет
         private static float NpcBurnSizeScale
-            => MathHelper.Lerp(0.82f, FrostMeleeConfigDefaults.FireSizeScale, 0.55f);
+            => MathHelper.Lerp(0.95f, FrostMeleeConfigDefaults.FireSizeScale, 0.55f);
         private static float NpcBurnHeatScale
             => FrostMeleeConfigDefaults.FireIntensityScale <= 0f
                 ? 0f
-                : MathHelper.Lerp(0.78f, FrostMeleeConfigDefaults.FireHeatScale, 0.65f);
+                : MathHelper.Lerp(0.88f, FrostMeleeConfigDefaults.FireHeatScale, 0.65f);
 
         // Собрать на этот кадр ванильные частицы горящих врагов рядом с
         // экраном, сгруппировав по врагу для перемычек между ними
         private static void CollectVanillaBurnDust()
         {
             vanillaBurnDust.Clear();
-            if (FrostMeleeConfigDefaults.FireIntensityScale <= 0f)
+            vanillaBurnFallbackNpcs.Clear();
+            if (FrostMeleeConfigDefaults.FireIntensityScale <= 0f || Main.dust == null)
                 return;
+            if (npcHasTaggedVanillaBurnDust == null || npcHasTaggedVanillaBurnDust.Length < Main.maxNPCs)
+                npcHasTaggedVanillaBurnDust = new bool[Main.maxNPCs];
+            System.Array.Clear(npcHasTaggedVanillaBurnDust, 0, Main.maxNPCs);
             Rectangle view = new Rectangle(
                 (int)Main.screenPosition.X - TargetPad - 80, (int)Main.screenPosition.Y - TargetPad - 80,
                 Main.screenWidth + (TargetPad + 80) * 2, Main.screenHeight + (TargetPad + 80) * 2);
+
+            // Главный путь: пыль, помеченная в момент рождения у врага
             for (int i = 0; i < Main.dust.Length; i++)
             {
                 Dust dust = Main.dust[i];
@@ -577,7 +589,76 @@ namespace FrostMelee.Content.Projectiles
                 if (!view.Contains(dust.position.ToPoint()))
                     continue;
                 vanillaBurnDust.Add(new VanillaBurnDustRef { Particle = dust, Tag = tag });
+                npcHasTaggedVanillaBurnDust[tag.NpcIndex] = true;
             }
+
+            // Запасной путь — только для горящего врага, у которого
+            // помеченной пыли в этом кадре не оказалось (пыль старше
+            // перезагрузки мода, метки при ней очищены): берём ту же
+            // ванильную пыль IceTorch, которая уже лежит на его теле.
+            // Своих частиц при этом не появляется, а враг с помеченной
+            // пылью сюда не попадает и лишнего огня не получает
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                if (npcHasTaggedVanillaBurnDust[i])
+                    continue;
+                NPC npc = Main.npc[i];
+                if (!npc.active || npc.friendly || !HasFrostburn(npc))
+                    continue;
+                Rectangle body = npc.Hitbox;
+                body.Inflate(56, 56);
+                if (view.Intersects(body))
+                    vanillaBurnFallbackNpcs.Add(i);
+            }
+            if (vanillaBurnFallbackNpcs.Count > 0)
+            {
+                for (int i = 0; i < Main.dust.Length; i++)
+                {
+                    Dust dust = Main.dust[i];
+                    if (dust == null || !dust.active || dust.type != DustID.IceTorch)
+                        continue;
+                    if (dust.customData as VanillaBurnTag != null)
+                        continue;
+                    Point at = dust.position.ToPoint();
+                    if (!view.Contains(at))
+                        continue;
+                    int best = -1;
+                    float bestDistSq = float.MaxValue;
+                    foreach (int npcIndex in vanillaBurnFallbackNpcs)
+                    {
+                        NPC npc = Main.npc[npcIndex];
+                        Rectangle body = npc.Hitbox;
+                        body.Inflate(56, 56);
+                        if (!body.Contains(at))
+                            continue;
+                        float distSq = Vector2.DistanceSquared(dust.position, npc.Center);
+                        if (distSq < bestDistSq)
+                        {
+                            bestDistSq = distSq;
+                            best = npcIndex;
+                        }
+                    }
+                    if (best < 0)
+                        continue;
+                    NPC owner = Main.npc[best];
+                    vanillaBurnDust.Add(new VanillaBurnDustRef
+                    {
+                        Particle = dust,
+                        Tag = new VanillaBurnTag
+                        {
+                            NpcIndex = best,
+                            NpcType = owner.type,
+                            // Обычный стартовый размер пыли Frostburn:
+                            // по нему сила пламени честно убывает с
+                            // уменьшением самой частицы
+                            BirthScale = 2.2f,
+                            Phase = i * 0.618034f,
+                            SpawnTick = Main.GameUpdateCount >= 2 ? Main.GameUpdateCount - 2 : 0
+                        }
+                    });
+                }
+            }
+
             vanillaBurnDust.Sort((a, b) =>
                 a.Tag.NpcIndex != b.Tag.NpcIndex
                     ? a.Tag.NpcIndex.CompareTo(b.Tag.NpcIndex)
@@ -586,18 +667,23 @@ namespace FrostMelee.Content.Projectiles
 
         // Сила пламени из одной ванильной частицы: чем моложе и крупнее
         // частица, тем жарче. Размер ванильной пыли сам убывает за её
-        // жизнь — по нему и видно возраст без своих таймеров
+        // жизнь — по нему и видно возраст без своих таймеров. Убывание
+        // берём корнем и пламя видно сразу: в прошлой сборке сила падала
+        // вровень с размером, и у большинства частиц (они уже не молодые)
+        // пламя получалось совсем слабым — на враге было видно ванильные
+        // частицы, а нашего огня на них почти не было видно
         private static float VanillaBurnStrength(VanillaBurnDustRef r)
         {
             float byScale = MathHelper.Clamp(r.Particle.scale / r.Tag.BirthScale, 0f, 1f);
+            byScale = (float)System.Math.Sqrt(byScale);
             float age = Main.GameUpdateCount - r.Tag.SpawnTick;
-            return byScale * MathHelper.Clamp(age / 3f, 0f, 1f);
+            return byScale * MathHelper.Clamp((age + 1f) / 2f, 0f, 1f);
         }
 
         private static Color VanillaBurnColor(float strength, float alpha)
         {
             float heat = MathHelper.Clamp(strength, 0f, 1f);
-            return Color.Lerp(new Color(30, 112, 248), new Color(140, 222, 255), heat * heat) * alpha;
+            return Color.Lerp(new Color(18, 82, 232), new Color(105, 205, 255), heat * heat) * alpha;
         }
 
         private static void ClearVanillaBurnTags()
@@ -914,24 +1000,31 @@ namespace FrostMelee.Content.Projectiles
                     {
                         VanillaBurnDustRef b = vanillaBurnDust[j];
                         float dist = Vector2.Distance(a.Particle.position, b.Particle.position);
-                        if (dist < 3f || dist > 62f)
+                        const float LinkDist = 78f;
+                        if (dist < 3f || dist > LinkDist)
                             continue;
                         float bStrength = VanillaBurnStrength(b);
                         float fade = System.Math.Min(aStrength, bStrength)
-                            * (float)System.Math.Pow(1f - dist / 62f, 0.7f) * heatScale;
-                        if (fade < 0.04f)
+                            * (float)System.Math.Pow(1f - dist / LinkDist, 0.7f) * heatScale;
+                        if (fade < 0.035f)
                             continue;
-                        float wdt = (a.Particle.scale + b.Particle.scale) * 6.5f * sizeScale
-                            * (1.05f - dist / 62f * 0.45f);
+                        // Толщину перемычки берём не только по нынешнему
+                        // размеру частицы: ванильная пыль к концу жизни
+                        // вдвое мельче, а пламя на ней всё ещё должно
+                        // читаться телом огня, а не ниткой
+                        float aScale = MathHelper.Max(a.Particle.scale, a.Tag.BirthScale * 0.62f);
+                        float bScale = MathHelper.Max(b.Particle.scale, b.Tag.BirthScale * 0.62f);
+                        float wdt = (aScale + bScale) * 8.2f * sizeScale
+                            * (1.08f - dist / LinkDist * 0.42f);
                         ribbonPoints[0] = b.Particle.position;
                         ribbonPoints[1] = (a.Particle.position + b.Particle.position) * 0.5f + new Vector2(0f, -2f);
                         ribbonPoints[2] = a.Particle.position;
                         ribbonWidths[0] = wdt;
-                        ribbonWidths[1] = wdt * 1.05f;
+                        ribbonWidths[1] = wdt * 1.08f;
                         ribbonWidths[2] = wdt;
-                        ribbonColors[0] = VanillaBurnColor(bStrength, 0.3f * fade);
-                        ribbonColors[1] = VanillaBurnColor(aStrength, 0.36f * fade);
-                        ribbonColors[2] = VanillaBurnColor(aStrength, 0.3f * fade);
+                        ribbonColors[0] = VanillaBurnColor(bStrength, 0.55f * fade);
+                        ribbonColors[1] = VanillaBurnColor(aStrength, 0.65f * fade);
+                        ribbonColors[2] = VanillaBurnColor(aStrength, 0.55f * fade);
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
                         drawn++;
                     }
@@ -940,7 +1033,11 @@ namespace FrostMelee.Content.Projectiles
             }
 
             // Язычок из каждой ванильной частицы: начинается прямо в ней
-            // и тянется вверх, слегка отклоняясь против её движения
+            // и тянется вверх, слегка отклоняясь против её движения.
+            // Рисуем двумя проходами, как языки вспышек: широкая тёмно-синяя
+            // оболочка и яркое ядро поверх. Один проход прошлой сборки на
+            // светлом враге днём почти не читался — было видно ванильные
+            // частицы, а нашего пламени на них не было видно
             foreach (VanillaBurnDustRef r in vanillaBurnDust)
             {
                 Dust dust = r.Particle;
@@ -952,24 +1049,41 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 perp = new Vector2(-up.Y, up.X);
                 float flick = 0.85f + 0.25f * (float)System.Math.Sin(time * 1.1f + r.Tag.Phase * 3f)
                     * (float)System.Math.Sin(time * 0.43f + r.Tag.Phase);
-                float len = (10f + dust.scale * 13f) * sizeScale * flick;
+                // Длина и ширина не падают вровень с размером частицы:
+                // пока ванильная частица видна, из неё виден и язычок
+                float effScale = MathHelper.Max(dust.scale, r.Tag.BirthScale * 0.62f);
+                float len = (14f + effScale * 18f) * sizeScale * flick;
                 float age = Main.GameUpdateCount - r.Tag.SpawnTick;
                 float wob = (float)System.Math.Sin(time * 0.55f + r.Tag.Phase + age * 0.12f) * 2.4f;
                 ribbonPoints[0] = dust.position - up * 2f;
                 ribbonPoints[1] = dust.position + up * len * 0.34f + perp * wob * 0.35f;
                 ribbonPoints[2] = dust.position + up * len * 0.68f + perp * wob * 0.8f;
                 ribbonPoints[3] = dust.position + up * len + perp * wob * 1.25f;
-                float wdt = (3f + dust.scale * 4.5f) * sizeScale;
-                ribbonWidths[0] = wdt * 0.75f;
-                ribbonWidths[1] = wdt * 1.15f;
-                ribbonWidths[2] = wdt * 0.7f;
-                ribbonWidths[3] = 1f;
+                float wdt = (4f + effScale * 6f) * sizeScale;
                 float env = strength * heatScale;
-                ribbonColors[0] = VanillaBurnColor(strength, 0.62f * env);
-                ribbonColors[1] = new Color(55, 160, 255) * (0.55f * env);
-                ribbonColors[2] = new Color(35, 125, 250) * (0.5f * env);
-                ribbonColors[3] = new Color(16, 70, 205) * (0.42f * env);
-                FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 4);
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    float wMul = pass == 0 ? 1.55f : 0.78f;
+                    ribbonWidths[0] = wdt * 0.8f * wMul;
+                    ribbonWidths[1] = wdt * 1.18f * wMul;
+                    ribbonWidths[2] = wdt * 0.72f * wMul;
+                    ribbonWidths[3] = 1f;
+                    if (pass == 0)
+                    {
+                        ribbonColors[0] = new Color(24, 98, 238) * (0.5f * env);
+                        ribbonColors[1] = new Color(18, 78, 220) * (0.46f * env);
+                        ribbonColors[2] = new Color(12, 52, 180) * (0.42f * env);
+                        ribbonColors[3] = new Color(8, 34, 130) * (0.36f * env);
+                    }
+                    else
+                    {
+                        ribbonColors[0] = VanillaBurnColor(strength, 0.78f * env);
+                        ribbonColors[1] = new Color(75, 180, 255) * (0.68f * env);
+                        ribbonColors[2] = new Color(40, 130, 250) * (0.58f * env);
+                        ribbonColors[3] = new Color(20, 80, 215) * (0.46f * env);
+                    }
+                    FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 4);
+                }
             }
         }
 
