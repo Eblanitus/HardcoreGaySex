@@ -182,7 +182,9 @@ namespace FrostMelee.Content.Weapons
                 // половины — поэтому масштаб с запасом, чтобы видимый край
                 // доходил до радиуса урона
                 float scale = b.Radius * 2f * 1.55f * (0.45f + 0.55f * open) / glow.Width;
-                float a = b.Big ? 0.6f : 0.44f;
+                // Жар вспышки — по ядрёности из конфига; размер пятна не
+                // трогаем: оно показывает зону урона
+                float a = (b.Big ? 0.6f : 0.44f) * FrostMeleeConfigDefaults.FireHeatScale;
                 Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(40, 120, 255) * (fade * a * 0.45f),
                     0f, center, scale, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(150, 220, 255) * (fade * a),

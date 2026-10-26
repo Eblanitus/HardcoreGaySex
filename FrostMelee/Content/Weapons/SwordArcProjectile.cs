@@ -423,8 +423,12 @@ namespace FrostMelee.Content.Weapons
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             float level = 0.3f + 0.7f * full;              // пустой меч заметно бледнее, но след виден
             float glowBoost = 0.85f + 0.35f * sp.FireGlow; // горящие рядом подкармливают яркость
-            // Ядрёность из конфига владельца — та же, что у огня на клинке
-            float flameEnv = env * level * glowBoost * FlameSoftness * FrostMeleeConfigDefaults.FireIntensityScale;
+            // Ядрёность из конфига — НЕ прозрачность готовой дуги: жар
+            // (яркость и белизна ядра), толщина ленты, размер головки и
+            // число языков на хвосте. При 100 всё ровно как настроено
+            float fireHeat = FrostMeleeConfigDefaults.FireHeatScale;
+            float fireSize = FrostMeleeConfigDefaults.FireSizeScale;
+            float flameEnv = env * level * glowBoost * FlameSoftness * fireHeat;
 
             // ФОНОВЫЙ слой — светящийся веер-сектор на всю дугу, как у косы
             // (там фон читается широкой светящейся площадью с ободком по кругу
@@ -482,7 +486,9 @@ namespace FrostMelee.Content.Weapons
                     float flick = 1f + full * wave * (0.3f + 0.7f * t) + 0.06f * bulge - 0.04f * t * t;
                     fbAngles[i] = fbHistAngle[i];
                     fbROut[i] = fbHistRadius[i] * flick;
-                    float innerFrac = MathHelper.Lerp(0.68f, 0.34f, bulge);
+                    // Толщина языка (1 − внутренний радиус) — по ядрёности:
+                    // больше настройка — физически толще лента пламени
+                    float innerFrac = 1f - (1f - MathHelper.Lerp(0.68f, 0.34f, bulge)) * fireSize;
                     fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * innerFrac);
                     n++;
                 }
@@ -492,7 +498,7 @@ namespace FrostMelee.Content.Weapons
                 float outerNow = ArcLineRadius(Projectile.localAI[0]);
                 for (int i = 0; i < n; i++) {
                     fbROut[i] = outerNow;
-                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * FlameInnerFrac);
+                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * (1f - (1f - FlameInnerFrac) * fireSize));
                 }
             }
             if (n < 2)
@@ -506,8 +512,11 @@ namespace FrostMelee.Content.Weapons
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             Main.spriteBatch.End();
             try {
+                // Жар ядра по ядрёности: холодная настройка синее,
+                // горячая — белее (при 100 смешение прежнее, 0.3)
+                float coreMix = MathHelper.Clamp(0.55f - 0.25f * FrostMeleeConfigDefaults.FireIntensityScale, 0.05f, 0.55f);
                 IceRibbon.Draw(device, fbAngles, n, center, fbROut, fbRIn,
-                    gt, flameEnv, Color.Lerp(FlameCore, FlameTail, 0.3f), FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
+                    gt, flameEnv, Color.Lerp(FlameCore, FlameTail, coreMix), FlameTail, FlameEdge, streaks: true, streakStrength: FlameStreaks);
             }
             finally {
                 Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
@@ -522,19 +531,21 @@ namespace FrostMelee.Content.Weapons
             float headFlick = 0.85f + 0.15f * (float)Math.Sin(gt * 2.3f);
             Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null,
                 IceArcFx.Additive(FlameCore, flameEnv), 0f, gorigin,
-                TrailHeadDot * 1.35f * headFlick / glow.Width, SpriteEffects.None, 0f);
+                TrailHeadDot * 1.35f * headFlick * fireSize / glow.Width, SpriteEffects.None, 0f);
 
             if (full > 0.02f) {
-                // Языки на хвосте: короткие вытянутые всполохи вдоль хода ленты
-                for (int i = 0; i < FlameTongues; i++) {
-                    float t = (i + 0.5f) / FlameTongues * 0.85f;
+                // Языки на хвосте: короткие вытянутые всполохи вдоль хода ленты.
+                // Сколько их и какой длины — по ядрёности (количество огня)
+                int tongueCount = (int)Math.Round(FlameTongues * FrostMeleeConfigDefaults.FireIntensityScale);
+                for (int i = 0; i < tongueCount; i++) {
+                    float t = (i + 0.5f) / tongueCount * 0.85f;
                     float tw = 0.5f + 0.5f * (float)Math.Sin(gt * 1.4f + i * 2.4f);
                     if (tw < 0.3f)
                         continue;
                     Vector2 p0 = FlamePoint(center, n, t);
                     Vector2 p1 = FlamePoint(center, n, Math.Min(1f, t + 0.06f));
                     float tang = (p0 - p1).ToRotation(); // по ходу взмаха: от хвоста к голове
-                    float len = FlameTongueSize * tw * (1f - t * 0.3f);
+                    float len = FlameTongueSize * tw * (1f - t * 0.3f) * fireSize;
                     Color c = Color.Lerp(FlameTail, FlameCore, 0.35f + 0.4f * tw);
                     Main.EntitySpriteDraw(glow, p0 - Main.screenPosition, null,
                         IceArcFx.Additive(c, 0.95f * tw * flameEnv * (1f - t * 0.5f)), tang, gorigin,
@@ -546,10 +557,10 @@ namespace FrostMelee.Content.Weapons
             float peak = PeakPulse(progress, maxAnim) * flameEnv;
             if (peak > 0.03f) {
                 Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(FlameEdge, peak * PeakFlashAlpha), 0f,
-                    gorigin, PeakFlashSize * (0.7f + 0.5f * peak) / glow.Width, SpriteEffects.None, 0f);
+                    gorigin, PeakFlashSize * (0.7f + 0.5f * peak) * fireSize / glow.Width, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, IceArcFx.Additive(FlameCore, peak * PeakFlashAlpha), 0f,
-                    gorigin, PeakFlashSize * 0.4f / glow.Width, SpriteEffects.None, 0f);
-                IceArcFx.DrawSparkle(glow, tip, PeakStarSize * peak, head + MathHelper.PiOver4, 2,
+                    gorigin, PeakFlashSize * 0.4f * fireSize / glow.Width, SpriteEffects.None, 0f);
+                IceArcFx.DrawSparkle(glow, tip, PeakStarSize * peak * fireSize, head + MathHelper.PiOver4, 2,
                     IceArcFx.Additive(Color.Lerp(FlameTail, FlameCore, 0.5f), peak * 0.9f), IceArcFx.Additive(FlameCore, peak));
             }
         }

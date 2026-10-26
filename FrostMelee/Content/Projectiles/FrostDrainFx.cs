@@ -91,7 +91,10 @@ namespace FrostMelee.Content.Projectiles
             NPC npc = Main.npc[(int)Projectile.ai[0]];
             origin = npc.active ? npc.Center : Projectile.Center;
             originRadius = npc.active ? Math.Max(npc.width, npc.height) * 0.6f : 20f;
-            int n = (int)MathHelper.Lerp(MinWisps, MaxWisps, Ratio);
+            // Сколько языков срывается с врага — по ядрёности из конфига:
+            // настройка меняет количество самого огня, а не прозрачность
+            int n = (int)Math.Round((int)MathHelper.Lerp(MinWisps, MaxWisps, Ratio)
+                * FrostMeleeConfigDefaults.FireIntensityScale);
             wisps = new Wisp[n];
             for (int i = 0; i < n; i++)
             {
@@ -223,8 +226,11 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
             Vector2 go = glow.Size() / 2f;
-            // Ядрёность из конфига владельца — общая со всем ледяным огнём
-            float intensity = FrostMeleeConfigDefaults.FireIntensityScale;
+            // Ядрёность из конфига — жар (яркость) и крупность языков,
+            // а не прозрачность готовой картинки. Сколько языков летит —
+            // там же при рождении (Init)
+            float intensity = FrostMeleeConfigDefaults.FireHeatScale;
+            float fireSize = FrostMeleeConfigDefaults.FireSizeScale;
             float bright = MathHelper.Lerp(0.85f, 1.15f, Ratio) * intensity;
 
             // 1) кольцо холодного огня схлопывается в врага — горение «срывают»
@@ -240,7 +246,7 @@ namespace FrostMelee.Content.Projectiles
                     Vector2 p = origin + ang.ToRotationVector2() * r;
                     float tw = 0.7f + 0.3f * (float)Math.Sin(i * 2.1f + Age);
                     Main.EntitySpriteDraw(glow, p - Main.screenPosition, null, Add(Flame, a * tw), ang,
-                        go, new Vector2(15f / glow.Width, 6f / glow.Height), SpriteEffects.None, 0f);
+                        go, new Vector2(15f * fireSize / glow.Width, 6f * fireSize / glow.Height), SpriteEffects.None, 0f);
                 }
                 Main.EntitySpriteDraw(glow, origin - Main.screenPosition, null, Add(Deep, a * 0.7f), 0f,
                     go, originRadius * 1.6f * (1f - 0.5f * t) / glow.Width, SpriteEffects.None, 0f);
@@ -274,7 +280,7 @@ namespace FrostMelee.Content.Projectiles
                         for (int i = 0; i < TrailLen; i++)
                         {
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
-                            ribbonWidths[i] = MathHelper.Lerp(13f, 2.5f, f) * w.Size * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonWidths[i] = MathHelper.Lerp(13f, 2.5f, f) * w.Size * (pass == 0 ? 1.8f : 0.8f) * fireSize;
                             ribbonColors[i] = pass == 0
                                 ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.4f * bright)
                                 : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
@@ -298,9 +304,9 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + w.Phase);
                 Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.78f * bright), 0f,
-                    go, 20f * w.Size * flick / glow.Width, SpriteEffects.None, 0f);
+                    go, 20f * w.Size * flick * fireSize / glow.Width, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Core, 0.85f * bright), 0f,
-                    go, 9f * w.Size / glow.Width, SpriteEffects.None, 0f);
+                    go, 9f * w.Size * fireSize / glow.Width, SpriteEffects.None, 0f);
             }
 
             // 3) клинок принял пламя: свечение вдоль клинка и звезда у острия
@@ -312,10 +318,10 @@ namespace FrostMelee.Content.Projectiles
                 float len = d.Length();
                 Vector2 mid = Vector2.Lerp(butt, tip, 0.6f);
                 Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Flame, pulse * 0.72f * intensity), d.ToRotation(),
-                    go, new Vector2(len * 1.1f / glow.Width, 22f / glow.Height), SpriteEffects.None, 0f);
+                    go, new Vector2(len * 1.1f / glow.Width, 22f * fireSize / glow.Height), SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, mid - Main.screenPosition, null, Add(Core, pulse * 0.6f * intensity), d.ToRotation(),
-                    go, new Vector2(len * 0.8f / glow.Width, 8f / glow.Height), SpriteEffects.None, 0f);
-                float star = 38f * pulse;
+                    go, new Vector2(len * 0.8f / glow.Width, 8f * fireSize / glow.Height), SpriteEffects.None, 0f);
+                float star = 38f * pulse * fireSize;
                 for (int r = 0; r < 2; r++)
                     Main.EntitySpriteDraw(glow, tip - Main.screenPosition, null, Add(Core, pulse * 0.8f * intensity), d.ToRotation() + MathHelper.PiOver2 * r,
                         go, new Vector2(star / glow.Width, star * 0.12f / glow.Height), SpriteEffects.None, 0f);

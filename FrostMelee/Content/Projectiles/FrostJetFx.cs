@@ -117,9 +117,10 @@ namespace FrostMelee.Content.Projectiles
         private static Vector2 targetOrigin;
         private static bool targetHasContent;
         private const int TargetPad = 96;
-        // Общая мягкость огня при ядрёности 100 в конфиге владельца:
-        // множитель вывода буфера на экран и сила подложки. Настройка
-        // «ядрёность» умножает оба сверху (DrawFireOverDust)
+        // Общая мягкость вывода буфера на экран и сила подложки — константы.
+        // Ядрёность из конфига сюда НЕ лезет (замечание владельца: настройка
+        // не должна быть прозрачностью готовой картинки) — она меняет само
+        // пламя при рождении: количество, крупность и жар (ScaledCount, Add)
         private const float FireSoftness = 0.66f;
         private const float UnderlayStrength = 0.25f;
         private static BlendState underlayBlend;
@@ -180,41 +181,50 @@ namespace FrostMelee.Content.Projectiles
                 bladeLineValid = true;
             }
 
-            // 3, а не 4: частицы теперь соединены лентами и перемычками, и
-            // прежняя плотность слипалась в сплошное белое облако (flame-7)
-            int bladeCount = System.Math.Max(1, (int)System.Math.Round(3f * intensity));
+            // 3, а не 4 при полном запасе и ядрёности 100: частицы соединены
+            // лентами и перемычками, и прежняя плотность слипалась в сплошное
+            // белое облако (flame-7). Порции ниже масштабирует ScaledCount —
+            // ядрёность меняет само количество огня, а не его прозрачность
+            int bladeCount = ScaledCount(System.Math.Max(1, (int)System.Math.Round(3f * intensity)));
             for (int i = 0; i < bladeCount; i++)
             {
                 float along = MathHelper.Clamp((i + 0.5f) / bladeCount + Main.rand.NextFloat(-0.07f, 0.07f), 0.02f, 0.96f);
                 EmitLineParticle(butt, tip, dir, perp, FlameKind.Blade, along, -0.02f, 0.06f, 0.06f, 6, 10, 0.26f, 0.36f, anchored);
             }
 
-            int nearCount = intensity >= 0.55f ? 2 : 1;
+            int nearCount = ScaledCount(intensity >= 0.55f ? 2 : 1);
             for (int i = 0; i < nearCount; i++)
             {
-                float along = nearCount == 2 ? (i == 0 ? 0.28f : 0.7f) : 0.5f;
+                // При большой ядрёности частиц больше двух — размазываем
+                // их по той же зоне клинка, а не ставим все в одну точку
+                float along = nearCount == 1 ? 0.5f : MathHelper.Lerp(0.28f, 0.7f, i / (float)(nearCount - 1));
                 EmitLineParticle(butt, tip, dir, perp, FlameKind.Near, along, 0f, 0.14f, 0.12f, 7, 11, 0.28f, 0.38f, anchored);
             }
 
-            // Ореол — одна частица в тик в случайном месте клинка: лист
-            // ореола собирается из живых за ~12 тиков по всей длине
-            EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, Main.rand.NextFloat(0.15f, 0.85f),
-                0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, anchored);
+            // Ореол — одна частица в тик в случайном месте клинка при
+            // ядрёности 100: лист ореола собирается из живых за ~12 тиков
+            // по всей длине; настройка делает ореол реже или гуще
+            for (int i = 0, haloCount = ScaledCount(1); i < haloCount; i++)
+                EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, Main.rand.NextFloat(0.15f, 0.85f),
+                    0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, anchored);
 
             if (intensity >= 0.35f)
             {
-                Particle trail = EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
-                    0.2f, 0.6f, 0.3f, 9, 13, 0.24f, 0.34f, false);
-                // Свободная частица клинка В РУКЕ уносит большую часть скорости
-                // клинка: на половинной скорости игрок на крыльях её просто
-                // перегонял, и пламя отрывалось кометами по траектории полёта.
-                // Но не всю: скорость клинка на выпаде тычка выстреливала
-                // шлейф далеко за остриё — пламя «сидело не там»
-                if (anchored && trail != null)
-                    trail.Velocity += bladeVelocity * 0.65f;
+                for (int i = 0, trailCount = ScaledCount(1); i < trailCount; i++)
+                {
+                    Particle trail = EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
+                        0.2f, 0.6f, 0.3f, 9, 13, 0.24f, 0.34f, false);
+                    // Свободная частица клинка В РУКЕ уносит большую часть скорости
+                    // клинка: на половинной скорости игрок на крыльях её просто
+                    // перегонял, и пламя отрывалось кометами по траектории полёта.
+                    // Но не всю: скорость клинка на выпаде тычка выстреливала
+                    // шлейф далеко за остриё — пламя «сидело не там»
+                    if (anchored && trail != null)
+                        trail.Velocity += bladeVelocity * 0.65f;
+                }
             }
 
-            if (Main.rand.NextFloat() < 0.1f * intensity)
+            if (Main.rand.NextFloat() < 0.1f * intensity * FrostMeleeConfigDefaults.FireIntensityScale)
             {
                 float along = Main.rand.NextFloat(0.1f, 0.8f);
                 Vector2 position = Vector2.Lerp(butt, tip, along) + perp * Main.rand.NextFloat(-2.5f, 2.5f);
@@ -246,15 +256,20 @@ namespace FrostMelee.Content.Projectiles
 
             // Частиц меньше, чем раньше: тело струи теперь несёт общая лента
             // потока, частицы — только фактура и жар вокруг неё. Прежняя
-            // плотность вместе с лентой и перемычками давала белое облако
-            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.02f, 0.06f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
-            EmitJetParticle(center, dir, perp, FlameKind.Near, 0f, 0.15f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
-            EmitJetParticle(center, dir, perp, FlameKind.Halo, 0.05f, 0.35f, 0.22f, 9, 13, 0.36f, 0.48f, baseVelocity);
+            // плотность вместе с лентой и перемычками давала белое облако.
+            // Порции масштабирует ядрёность из конфига (ScaledCount)
+            for (int i = 0, count = ScaledCount(1); i < count; i++)
+                EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.02f, 0.06f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
+            for (int i = 0, count = ScaledCount(1); i < count; i++)
+                EmitJetParticle(center, dir, perp, FlameKind.Near, 0f, 0.15f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
+            for (int i = 0, count = ScaledCount(1); i < count; i++)
+                EmitJetParticle(center, dir, perp, FlameKind.Halo, 0.05f, 0.35f, 0.22f, 9, 13, 0.36f, 0.48f, baseVelocity);
 
             if (Main.rand.NextFloat() < 0.5f)
-                EmitJetParticle(center, dir, perp, FlameKind.Trail, 0.25f, 0.7f, 0.3f, 9, 13, 0.24f, 0.34f, baseVelocity);
+                for (int i = 0, count = ScaledCount(1); i < count; i++)
+                    EmitJetParticle(center, dir, perp, FlameKind.Trail, 0.25f, 0.7f, 0.3f, 9, 13, 0.24f, 0.34f, baseVelocity);
 
-            if (Main.rand.NextFloat() < 0.08f)
+            if (Main.rand.NextFloat() < 0.08f * FrostMeleeConfigDefaults.FireIntensityScale)
             {
                 Vector2 position = center + perp * Main.rand.NextFloat(-3.5f, 3.5f) + dir * Main.rand.NextFloat(0f, 4f);
                 Vector2 velocity = dir * Main.rand.NextFloat(1.2f, 2.2f)
@@ -325,6 +340,22 @@ namespace FrostMelee.Content.Projectiles
             Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax));
         }
 
+        // Сколько частиц родить при ядрёности из конфига: базовая порция
+        // умножается на настройку, дробная часть — шансом. При настройке
+        // 100 порции ровно прежние; при 50 — в среднем вдвое реже (огня
+        // физически меньше), при 200 — вдвое гуще
+        private static int ScaledCount(int baseCount)
+        {
+            float amount = FrostMeleeConfigDefaults.FireIntensityScale;
+            if (baseCount <= 0 || amount <= 0f)
+                return 0;
+            float want = baseCount * amount;
+            int n = (int)want;
+            if (Main.rand.NextFloat() < want - n)
+                n++;
+            return n;
+        }
+
         private static Particle Add(Vector2 position, Vector2 velocity, FlameKind kind, int life, float size)
         {
             if (particles.Count >= MaxParticles)
@@ -339,6 +370,10 @@ namespace FrostMelee.Content.Projectiles
                 FlameKind.Trail => Main.rand.NextFloat(0.025f, 0.07f),
                 _ => Main.rand.NextFloat(0.03f, 0.08f)
             };
+            // Ядрёность вшита в саму частицу: крупнее размер (от него —
+            // толщина листов, перемычек и язычков) и выше стартовый жар.
+            // Жар выше 1 не белая вспышка, а запас: пламя дольше остывает
+            // до синего, то есть дольше остаётся ярким
             Particle p = new Particle
             {
                 Position = position,
@@ -346,18 +381,18 @@ namespace FrostMelee.Content.Projectiles
                 Drift = angle.ToRotationVector2() * drift,
                 Age = 0,
                 Life = life,
-                Size = size,
+                Size = size * FrostMeleeConfigDefaults.FireSizeScale,
                 Rotation = angle,
                 RotationSpeed = Main.rand.NextFloat(-0.08f, 0.08f),
                 Kind = kind,
-                Temperature = kind switch
+                Temperature = (kind switch
                 {
                     FlameKind.Blade => 1f,
                     FlameKind.Near => 0.85f,
                     FlameKind.Halo => 0.65f,
                     FlameKind.Trail => 0.55f,
                     _ => 0.7f
-                },
+                }) * FrostMeleeConfigDefaults.FireHeatScale,
                 Stretch = 1f,
                 Source = emitSource
             };
@@ -387,7 +422,9 @@ namespace FrostMelee.Content.Projectiles
         {
             if (Main.dedServ)
                 return;
-            int count = big ? 12 : 8;
+            // Языков во вспышке — по ядрёности: настройка меняет количество
+            // самого огня и здесь (длину не трогаем: она = зона урона)
+            int count = ScaledCount(big ? 12 : 8);
             // Свободный язык проходит ~1/(1-0.94) ≈ 16.7 своих стартовых
             // скоростей плюс длину самого языка
             float reachScale = radius > 0f ? radius / (big ? 120f : 85f) : 1f;
@@ -463,11 +500,20 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 if (!HasSwordFlame(npc))
                     continue;
-                int desired = (int)MathHelper.Clamp(npc.width / 26, 1, 3);
+                // Сколько языков держит враг — тоже ядрёность: настройку
+                // убавили, лишние языки сразу убираем, а не ждём конца горения
+                int desired = (int)System.Math.Round(
+                    MathHelper.Clamp(npc.width / 26, 1, 3) * FrostMeleeConfigDefaults.FireIntensityScale);
                 int have = 0;
                 foreach (Tongue t in tongues)
                     if (t.NpcIndex == i)
                         have++;
+                for (int idx = tongues.Count - 1; idx >= 0 && have > desired; idx--)
+                    if (tongues[idx].NpcIndex == i)
+                    {
+                        tongues.RemoveAt(idx);
+                        have--;
+                    }
                 for (int k = have; k < desired && tongues.Count < MaxTongues - BurstTongueReserve; k++)
                     SpawnNpcTongue(npc, (k + 0.5f) / desired + Main.rand.NextFloat(-0.08f, 0.08f));
             }
@@ -508,7 +554,11 @@ namespace FrostMelee.Content.Projectiles
                 float shrink = t.NpcIndex >= 0 ? 1f : 1f - SmoothFlame((t.Age - (t.Life - 9)) / 9f);
                 // Лижущее дыхание: длина языка гуляет, кончик виляет всё сильнее к концу
                 float breathe = 0.78f + 0.22f * (float)System.Math.Sin(time * 0.23f + t.Phase);
-                float effLen = t.Length * grow * shrink * breathe * (0.35f + 0.65f * t.Strength);
+                // Крупность языков на врагах — по ядрёности, вживую. У
+                // свободных языков вспышки длину не масштабируем: она
+                // показывает зону урона взрыва
+                float effLen = t.Length * grow * shrink * breathe * (0.35f + 0.65f * t.Strength)
+                    * (t.NpcIndex >= 0 ? FrostMeleeConfigDefaults.FireSizeScale : 1f);
                 int n = t.Nodes.Length;
                 float seg = effLen / (n - 1);
                 t.Nodes[0] = t.Base;
@@ -646,7 +696,7 @@ namespace FrostMelee.Content.Projectiles
             float time = Main.GameUpdateCount;
             float flick = 0.8f + 0.12f * (float)System.Math.Sin(time * 0.9f + t.Phase * 3f)
                 + 0.08f * (float)System.Math.Sin(time * 2.3f + t.Phase * 7f);
-            float env = t.Strength * flick;
+            float env = t.Strength * flick * FrostMeleeConfigDefaults.FireHeatScale;
             if (t.NpcIndex < 0)
                 env *= MathHelper.Clamp((t.Life - t.Age) / 8f, 0f, 1f) * MathHelper.Clamp(t.Age / 3f, 0f, 1f);
             if (env <= 0.02f)
@@ -664,7 +714,7 @@ namespace FrostMelee.Content.Projectiles
                     // иначе язык — гладкая капля-свечка (flame-1)
                     float ragged = 0.78f + 0.22f * (float)System.Math.Sin(time * 1.35f + t.Phase * 7f + k * 2.2f)
                         * (float)System.Math.Sin(time * 0.7f + k * 1.3f);
-                    ribbonWidths[k] = t.Width * profile * ragged * wMul;
+                    ribbonWidths[k] = t.Width * profile * ragged * wMul * FrostMeleeConfigDefaults.FireSizeScale;
                     // Белое — только жар у самого основания; тело языка синее
                     ribbonColors[k] = pass == 0
                         ? Color.Lerp(new Color(28, 105, 245), new Color(8, 34, 130), f) * (0.42f * env)
@@ -949,15 +999,16 @@ namespace FrostMelee.Content.Projectiles
                             float lumpy = 0.72f + 0.28f * (float)System.Math.Sin(time * 1.7f + i * 2.3f)
                                 * (float)System.Math.Sin(time * 0.9f + i * 0.8f);
                             ribbonWidths[i] = MathHelper.Lerp(11.5f, 3f, f) * lumpy
-                                / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.7f : 0.75f);
+                                / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.7f : 0.75f)
+                                * FrostMeleeConfigDefaults.FireSizeScale;
                             float dim = 1f / (0.6f + 0.4f * stretch);
                             // Белое — короткий жар у острия; тело потока глубокое
                             // синее, иначе лента блестит белым кнутом по всей длине
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.28f * dim)
+                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.28f * dim * FrostMeleeConfigDefaults.FireHeatScale)
                                 : Color.Lerp(
                                     Color.Lerp(new Color(175, 238, 255), new Color(70, 160, 255), MathHelper.Clamp(f * 2.6f, 0f, 1f)),
-                                    new Color(30, 110, 250), MathHelper.Clamp((f - 0.35f) * 1.6f, 0f, 1f)) * (0.5f * dim);
+                                    new Color(30, 110, 250), MathHelper.Clamp((f - 0.35f) * 1.6f, 0f, 1f)) * (0.5f * dim * FrostMeleeConfigDefaults.FireHeatScale);
                         }
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
                     }
@@ -1157,19 +1208,14 @@ namespace FrostMelee.Content.Projectiles
             SpriteBatch sb = Main.spriteBatch;
             Vector2 at = targetOrigin - Main.screenPosition;
             Matrix view = Main.GameViewMatrix.TransformationMatrix;
-            // Ядрёность из конфига владельца: весь буферный огонь ярче/тише
-            // одним множителем; подложка следом, но с потолком — иначе на
-            // большой ядрёности вокруг пламени ляжет чёрное пятно
-            float intensity = FrostMeleeConfigDefaults.FireIntensityScale;
-
             sb.Begin(SpriteSortMode.Deferred, underlayBlend, SamplerState.LinearClamp,
                 DepthStencilState.None, RasterizerState.CullNone, null, view);
-            sb.Draw(fireTarget, at, Color.White * MathHelper.Min(UnderlayStrength * intensity, 0.4f));
+            sb.Draw(fireTarget, at, Color.White * UnderlayStrength);
             sb.End();
 
             sb.Begin(SpriteSortMode.Deferred, screenBlend, SamplerState.LinearClamp,
                 DepthStencilState.None, RasterizerState.CullNone, null, view);
-            sb.Draw(fireTarget, at, Color.White * (FireSoftness * intensity));
+            sb.Draw(fireTarget, at, Color.White * FireSoftness);
             sb.End();
         }
 

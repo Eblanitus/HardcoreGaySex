@@ -181,8 +181,10 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
             Vector2 go = glow.Size() / 2f;
-            // Ядрёность из конфига владельца — общая со всем ледяным огнём
-            float intensity = FrostMeleeConfigDefaults.FireIntensityScale;
+            // Ядрёность из конфига — жар (яркость) и крупность огонька,
+            // а не прозрачность готовой картинки
+            float intensity = FrostMeleeConfigDefaults.FireHeatScale;
+            float fireSize = FrostMeleeConfigDefaults.FireSizeScale;
 
             // Хвост — цельная лента пламени по следу: огонёк тянется живым
             // языком, а не цепочкой отдельных пятен (как струя FrostFireJet)
@@ -200,7 +202,7 @@ namespace FrostMelee.Content.Projectiles
                         for (int i = 0; i < TrailLen; i++)
                         {
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
-                            ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f) * fireSize;
                             ribbonColors[i] = pass == 0
                                 ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.4f * intensity)
                                 : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
@@ -217,9 +219,9 @@ namespace FrostMelee.Content.Projectiles
             }
             float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + Phase);
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.75f * intensity), 0f,
-                go, 17f * flick / glow.Width, SpriteEffects.None, 0f);
+                go, 17f * flick * fireSize / glow.Width, SpriteEffects.None, 0f);
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 0.8f * intensity), 0f,
-                go, 7f / glow.Width, SpriteEffects.None, 0f);
+                go, 7f * fireSize / glow.Width, SpriteEffects.None, 0f);
 
             // Звёздный блик-крестик: огонёк — живой ресурс (бьёт, уходит со
             // взмахом), и в одной палитре с декоративным пламенем, вспышкой
@@ -230,7 +232,7 @@ namespace FrostMelee.Content.Projectiles
             float spin = Age * 0.04f + Phase;
             for (int k = 0; k < 2; k++)
                 Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, strength * glint * intensity),
-                    spin + k * MathHelper.PiOver2, go, new Vector2(30f / glow.Width, 2.4f / glow.Height),
+                    spin + k * MathHelper.PiOver2, go, new Vector2(30f * fireSize / glow.Width, 2.4f * fireSize / glow.Height),
                     SpriteEffects.None, 0f);
             return false;
         }
