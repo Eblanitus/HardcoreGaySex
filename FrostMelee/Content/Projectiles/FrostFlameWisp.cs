@@ -30,6 +30,8 @@ namespace FrostMelee.Content.Projectiles
         private static readonly Color Deep = new Color(60, 140, 255);
 
         private Vector2[] trail;
+        private readonly float[] ribbonWidths = new float[TrailLen];
+        private readonly Color[] ribbonColors = new Color[TrailLen];
 
         public bool IsOrbiting => (int)Projectile.ai[0] == StateOrbit;
         private int State => (int)Projectile.ai[0];
@@ -177,18 +179,37 @@ namespace FrostMelee.Content.Projectiles
                 return false;
             Vector2 go = glow.Size() / 2f;
 
-            for (int k = TrailLen - 1; k > 0; k--)
+            // Хвост — цельная лента пламени по следу: огонёк тянется живым
+            // языком, а не цепочкой отдельных пятен (как струя FrostFireJet)
+            float trailSpan = 0f;
+            for (int k = 1; k < TrailLen; k++)
+                trailSpan += Vector2.Distance(trail[k], trail[k - 1]);
+            if (trailSpan > 2f)
             {
-                Vector2 a = trail[k], b = trail[k - 1];
-                Vector2 d = b - a;
-                float len = d.Length();
-                if (len < 0.5f)
-                    continue;
-                float f = 1f - k / (float)TrailLen;
-                float wdt = 3f + 8f * f;
-                Color c = Color.Lerp(Deep, Flame, f);
-                Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, Add(c, f * 0.9f),
-                    d.ToRotation(), go, new Vector2((len + wdt) / glow.Width, wdt / glow.Height), SpriteEffects.None, 0f);
+                GraphicsDevice device = Main.graphics.GraphicsDevice;
+                Main.spriteBatch.End();
+                try
+                {
+                    for (int pass = 0; pass < 2; pass++)
+                    {
+                        for (int i = 0; i < TrailLen; i++)
+                        {
+                            float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
+                            ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonColors[i] = pass == 0
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.45f
+                                : Color.Lerp(Core, Flame, MathHelper.Clamp(f * 1.5f, 0f, 1f)) * 0.95f;
+                            if (pass == 1 && f > 0.55f)
+                                ribbonColors[i] = Color.Lerp(Flame, Deep, (f - 0.55f) / 0.45f) * 0.95f;
+                        }
+                        FlameRibbon.Draw(device, trail, ribbonWidths, ribbonColors, TrailLen);
+                    }
+                }
+                finally
+                {
+                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                }
             }
             float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + Phase);
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.95f), 0f,

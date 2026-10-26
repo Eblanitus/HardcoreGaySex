@@ -51,6 +51,8 @@ namespace FrostMelee.Content.Projectiles
         }
 
         private Wisp[] wisps;
+        private readonly float[] ribbonWidths = new float[TrailLen];
+        private readonly Color[] ribbonColors = new Color[TrailLen];
         private Vector2 origin;      // где стоял враг в момент забора
         private float originRadius;
         private int absorbed;        // сколько языков уже влилось в клинок
@@ -245,24 +247,53 @@ namespace FrostMelee.Content.Projectiles
                     go, originRadius * (1.1f - 0.6f * t) / glow.Width, SpriteEffects.None, 0f);
             }
 
-            // 2) языки пламени: сужающийся хвост + яркая голова
+            // 2) языки пламени: цельные ленты по следам (как струя и огонёк
+            // запаса), головы — спрайтами поверх
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            bool batchClosed = false;
+            try
+            {
+                foreach (Wisp w in wisps)
+                {
+                    if (w.Done || w.Delay > 0)
+                        continue;
+                    float span = 0f;
+                    for (int k = 1; k < TrailLen; k++)
+                        span += Vector2.Distance(w.Trail[k], w.Trail[k - 1]);
+                    if (span <= 2f)
+                        continue;
+                    if (!batchClosed)
+                    {
+                        Main.spriteBatch.End();
+                        batchClosed = true;
+                    }
+                    for (int pass = 0; pass < 2; pass++)
+                    {
+                        for (int i = 0; i < TrailLen; i++)
+                        {
+                            float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
+                            ribbonWidths[i] = MathHelper.Lerp(13f, 2.5f, f) * w.Size * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonColors[i] = pass == 0
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.45f * bright)
+                                : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 1.5f, 0f, 1f)), Deep,
+                                    MathHelper.Clamp((f - 0.55f) / 0.45f, 0f, 1f)) * (0.95f * bright);
+                        }
+                        FlameRibbon.Draw(device, w.Trail, ribbonWidths, ribbonColors, TrailLen);
+                    }
+                }
+            }
+            finally
+            {
+                if (batchClosed)
+                {
+                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                }
+            }
             foreach (Wisp w in wisps)
             {
                 if (w.Done || w.Delay > 0)
                     continue;
-                for (int k = TrailLen - 1; k > 0; k--)
-                {
-                    Vector2 a = w.Trail[k], b = w.Trail[k - 1];
-                    Vector2 d = b - a;
-                    float len = d.Length();
-                    if (len < 0.5f)
-                        continue;
-                    float f = 1f - k / (float)TrailLen;
-                    float wdt = (4f + 10f * f) * w.Size;
-                    Color c = Color.Lerp(Deep, Flame, f);
-                    Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, Add(c, f * 0.95f * bright),
-                        d.ToRotation(), go, new Vector2((len + wdt) / glow.Width, wdt / glow.Height), SpriteEffects.None, 0f);
-                }
                 float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + w.Phase);
                 Main.EntitySpriteDraw(glow, w.Pos - Main.screenPosition, null, Add(Flame, 0.95f * bright), 0f,
                     go, 20f * w.Size * flick / glow.Width, SpriteEffects.None, 0f);

@@ -12,6 +12,13 @@ namespace FrostMelee.Content.Projectiles
     {
         public override string Texture => "FrostMelee/Items/Frostbrand";
 
+        // След центров для цельной ленты струи (PreDraw): голова — history[0]
+        private const int HistLen = 10;
+        private readonly Vector2[] history = new Vector2[HistLen];
+        private readonly float[] ribbonWidths = new float[HistLen];
+        private readonly Color[] ribbonColors = new Color[HistLen];
+        private int histN;
+
         public override void SetDefaults()
         {
             Projectile.width = 18;
@@ -35,6 +42,15 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.ai[0] > 0f)
                     Projectile.timeLeft = (int)Projectile.ai[0];
             }
+
+            if (histN == 0)
+                for (int k = 0; k < HistLen; k++)
+                    history[k] = Projectile.Center;
+            for (int k = HistLen - 1; k > 0; k--)
+                history[k] = history[k - 1];
+            history[0] = Projectile.Center;
+            if (histN < HistLen)
+                histN++;
 
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             // Досрочной смерти у струи нет: сколько задали при спавне, столько живёт.
@@ -103,20 +119,43 @@ namespace FrostMelee.Content.Projectiles
             float pulse = 1f + 0.08f * (float)System.Math.Sin(Main.GameUpdateCount * 0.35f + Projectile.whoAmI * 1.7f);
             float flicker = 0.85f + 0.15f * (float)System.Math.Sin(Main.GameUpdateCount * 0.5f + Projectile.whoAmI);
             float reachScale = MathHelper.Clamp(Projectile.ai[0] / 12f, 1f, 2.5f);
-            float length = 22f * pulse * reachScale;
-            float width = 16f * pulse * (0.9f + 0.1f * reachScale);
-            float rotation = dir.ToRotation();
-            Vector2 center = Projectile.Center - Main.screenPosition;
-            Vector2 origin = glow.Size() / 2f;
 
-            Main.EntitySpriteDraw(glow, center - dir * 2f, null,
-                new Color(40, 115, 240) * (0.35f * flicker * fade), rotation, origin,
-                new Vector2(length * 0.8f / glow.Width, width * 0.78f / glow.Height),
-                SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, center + dir * 1f, null,
-                new Color(120, 205, 255) * (0.85f * fade), rotation, origin,
-                new Vector2(length * 0.42f / glow.Width, width * 0.38f / glow.Height),
-                SpriteEffects.None, 0f);
+            // Цельная струя: лента по следу снаряда — жирная яркая голова и
+            // тающий хвост вместо пары светящихся эллипсов. Частицы
+            // FrostJetFx.EmitJet остаются вокруг искрами и жаром
+            int n = histN;
+            if (n >= 2)
+            {
+                float headW = 15f * pulse * (0.9f + 0.1f * reachScale);
+                GraphicsDevice device = Main.graphics.GraphicsDevice;
+                Main.spriteBatch.End();
+                try
+                {
+                    for (int pass = 0; pass < 2; pass++)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            float f = i / (float)(n - 1);   // 0 — голова, 1 — хвост
+                            ribbonWidths[i] = headW * (1f - f * 0.85f) * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonColors[i] = pass == 0
+                                ? Color.Lerp(new Color(30, 105, 240), new Color(8, 34, 130), f) * (0.45f * flicker * fade)
+                                : Color.Lerp(new Color(200, 246, 255), new Color(45, 130, 250), f) * (0.95f * fade);
+                        }
+                        FlameRibbon.Draw(device, history, ribbonWidths, ribbonColors, n);
+                    }
+                }
+                finally
+                {
+                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                }
+            }
+
+            // Яркое ядро у головы струи
+            Vector2 origin = glow.Size() / 2f;
+            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition + dir * 1f, null,
+                new Color(150, 220, 255) * (0.8f * fade), dir.ToRotation(), origin,
+                new Vector2(12f / glow.Width, 7f / glow.Height), SpriteEffects.None, 0f);
             return false;
         }
     }

@@ -47,6 +47,34 @@ namespace FrostMelee.Content.Projectiles
 
         private static readonly List<Particle> particles = new();
 
+        // Живой язык цельного пламени: цепочка узлов от основания к кончику.
+        // Основание сидит на горящем враге (NpcIndex) или летит свободно
+        // (вспышка взрыва); узлы тянутся вверх с вилянием и отставанием —
+        // пламя лижет и тянется за движением, а не висит россыпью пятен
+        private sealed class Tongue
+        {
+            public readonly Vector2[] Nodes = new Vector2[7];
+            public Vector2 Base;
+            public Vector2 Vel;
+            public Vector2 GrowDir = new Vector2(0f, -1f);
+            public int Age;
+            public int Life;
+            public float Phase;
+            public float Length;
+            public float Width;
+            public int NpcIndex = -1;
+            public float Across;
+            public float Strength = 1f;
+        }
+
+        private static readonly List<Tongue> tongues = new();
+        private const int MaxTongues = 56;
+        private static readonly Vector2[] ribbonPoints = new Vector2[96];
+        private static readonly float[] ribbonWidths = new float[96];
+        private static readonly Color[] ribbonColors = new Color[96];
+        private static readonly List<Particle> sheetMain = new();
+        private static readonly List<Particle> sheetHalo = new();
+
         private static Vector2 bladeButt;
         private static Vector2 bladeTip;
         private static Vector2 bladeDir = Vector2.UnitX;
@@ -283,9 +311,140 @@ namespace FrostMelee.Content.Projectiles
             particles.RemoveAt(index);
         }
 
+        // Языки вспышки холодного огня (взрыв горящего врага): веер коротких
+        // языков из центра, тянутся вверх и тают. Вызывает FrostFireSystem.Burst
+        public static void BurstTongues(Vector2 center, bool big)
+        {
+            if (Main.dedServ)
+                return;
+            int count = big ? 9 : 6;
+            for (int i = 0; i < count && tongues.Count < MaxTongues; i++)
+            {
+                Vector2 dir = Main.rand.NextFloat(MathHelper.TwoPi).ToRotationVector2();
+                Tongue t = new Tongue
+                {
+                    Base = center,
+                    Vel = dir * Main.rand.NextFloat(1.2f, big ? 3.6f : 2.6f),
+                    GrowDir = (dir + new Vector2(0f, -0.8f)).SafeNormalize(new Vector2(0f, -1f)),
+                    Life = Main.rand.Next(16, 26),
+                    Phase = Main.rand.NextFloat(MathHelper.TwoPi),
+                    Length = Main.rand.NextFloat(big ? 34f : 24f, big ? 58f : 40f),
+                    Width = Main.rand.NextFloat(11f, 17f)
+                };
+                for (int k = 0; k < t.Nodes.Length; k++)
+                    t.Nodes[k] = center + t.GrowDir * (t.Length * 0.3f * k / (t.Nodes.Length - 1));
+                tongues.Add(t);
+            }
+        }
+
+        private static Vector2 NpcTongueBase(NPC npc, float across)
+            => new Vector2(npc.position.X + npc.width * across, npc.position.Y + npc.height * 0.3f);
+
+        private static void SpawnNpcTongue(NPC npc, float across)
+        {
+            Tongue t = new Tongue
+            {
+                NpcIndex = npc.whoAmI,
+                Across = MathHelper.Clamp(across, 0.1f, 0.9f),
+                Phase = Main.rand.NextFloat(MathHelper.TwoPi),
+                Length = MathHelper.Clamp(npc.height * 0.85f + 16f, 30f, 110f),
+                Width = MathHelper.Clamp(npc.width * 0.42f, 12f, 40f),
+                Strength = 0f // разгорится плавно в UpdateTongues
+            };
+            t.Base = NpcTongueBase(npc, t.Across);
+            for (int k = 0; k < t.Nodes.Length; k++)
+                t.Nodes[k] = t.Base + new Vector2(0f, -t.Length * 0.3f * k / (t.Nodes.Length - 1));
+            tongues.Add(t);
+        }
+
+        private static float SmoothFlame(float x)
+        {
+            x = MathHelper.Clamp(x, 0f, 1f);
+            return x * x * (3f - 2f * x);
+        }
+
+        private static void UpdateTongues()
+        {
+            // Подпитка языков на горящих врагах в кадре: 1–3 языка по ширине тела.
+            // Горящий враг = держатель языка запаса меча: пламя на нём теперь
+            // настоящее цельное, а не ванильные искры Frostburn
+            Rectangle screen = new Rectangle((int)Main.screenPosition.X - 240, (int)Main.screenPosition.Y - 240,
+                Main.screenWidth + 480, Main.screenHeight + 480);
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC npc = Main.npc[i];
+                if (!npc.active || npc.friendly || !screen.Intersects(npc.Hitbox))
+                    continue;
+                if (!Weapons.FrostFireSystem.IsBurning(npc))
+                    continue;
+                int desired = MathHelper.Clamp(npc.width / 26, 1, 3);
+                int have = 0;
+                foreach (Tongue t in tongues)
+                    if (t.NpcIndex == i)
+                        have++;
+                for (int k = have; k < desired && tongues.Count < MaxTongues; k++)
+                    SpawnNpcTongue(npc, (k + 0.5f) / desired + Main.rand.NextFloat(-0.08f, 0.08f));
+            }
+
+            float time = Main.GameUpdateCount;
+            for (int i = tongues.Count - 1; i >= 0; i--)
+            {
+                Tongue t = tongues[i];
+                t.Age++;
+                if (t.NpcIndex >= 0)
+                {
+                    NPC npc = Main.npc[t.NpcIndex];
+                    bool alive = npc.active && Weapons.FrostFireSystem.IsBurning(npc);
+                    t.Strength = MathHelper.Clamp(t.Strength + (alive ? 0.06f : -0.08f), 0f, 1f);
+                    if (t.Strength <= 0.01f)
+                    {
+                        tongues.RemoveAt(i);
+                        continue;
+                    }
+                    if (npc.active)
+                        t.Base = NpcTongueBase(npc, t.Across);
+                    t.GrowDir = new Vector2(0f, -1f);
+                }
+                else
+                {
+                    if (t.Age >= t.Life)
+                    {
+                        tongues.RemoveAt(i);
+                        continue;
+                    }
+                    t.Base += t.Vel;
+                    t.Vel *= 0.94f;
+                    t.Vel.Y -= 0.06f;
+                }
+
+                float grow = SmoothFlame(System.Math.Min(1f, t.Age / 8f));
+                float shrink = t.NpcIndex >= 0 ? 1f : 1f - SmoothFlame((t.Age - (t.Life - 9)) / 9f);
+                // Лижущее дыхание: длина языка гуляет, кончик виляет всё сильнее к концу
+                float breathe = 0.78f + 0.22f * (float)System.Math.Sin(time * 0.23f + t.Phase);
+                float effLen = t.Length * grow * shrink * breathe * (0.35f + 0.65f * t.Strength);
+                int n = t.Nodes.Length;
+                float seg = effLen / (n - 1);
+                t.Nodes[0] = t.Base;
+                Vector2 dir = t.GrowDir;
+                for (int k = 1; k < n; k++)
+                {
+                    float sway = (float)System.Math.Sin(time * 0.31f + t.Phase + k * 0.85f) * 0.16f * k / (n - 1);
+                    Vector2 want = t.Nodes[k - 1] + dir.RotatedBy(sway) * seg;
+                    // Отставание узлов даёт текучесть: враг дёрнулся — пламя потянулось за ним
+                    t.Nodes[k] = Vector2.Lerp(t.Nodes[k], want, 0.6f);
+                    dir = (t.Nodes[k] - t.Nodes[k - 1]).SafeNormalize(dir);
+                }
+            }
+        }
+
         public override void PostUpdateEverything()
         {
-            if (Main.dedServ || particles.Count == 0)
+            if (Main.dedServ)
+                return;
+
+            UpdateTongues();
+
+            if (particles.Count == 0)
                 return;
 
             bool hasBlade = Main.GameUpdateCount - bladeFrame <= BladeGraceTicks;
@@ -363,10 +522,126 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
+        // Один язык двумя проходами: широкая тёмно-синяя оболочка и яркое
+        // бело-голубое ядро поверх. Ширина — колокол: узко у основания,
+        // жирно на трети, в нитку на кончике
+        private static void DrawTongue(GraphicsDevice device, Tongue t)
+        {
+            int n = t.Nodes.Length;
+            float time = Main.GameUpdateCount;
+            float flick = 0.82f + 0.18f * (float)System.Math.Sin(time * 0.9f + t.Phase * 3f);
+            float env = t.Strength * flick;
+            if (t.NpcIndex < 0)
+                env *= MathHelper.Clamp((t.Life - t.Age) / 8f, 0f, 1f) * MathHelper.Clamp(t.Age / 3f, 0f, 1f);
+            if (env <= 0.02f)
+                return;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                float wMul = pass == 0 ? 1.85f : 0.85f;
+                for (int k = 0; k < n; k++)
+                {
+                    float f = k / (float)(n - 1);
+                    ribbonPoints[k] = t.Nodes[k];
+                    float profile = (float)System.Math.Pow(
+                        System.Math.Sin(System.Math.PI * MathHelper.Clamp(0.12f + 0.88f * f, 0f, 1f)), 0.75f);
+                    ribbonWidths[k] = t.Width * profile * wMul;
+                    ribbonColors[k] = pass == 0
+                        ? Color.Lerp(new Color(22, 88, 235), new Color(6, 26, 110), f) * (0.5f * env)
+                        : Color.Lerp(
+                            Color.Lerp(new Color(205, 247, 255), new Color(120, 205, 255), MathHelper.Clamp(f * 1.6f, 0f, 1f)),
+                            new Color(35, 120, 250), MathHelper.Clamp((f - 0.45f) * 1.8f, 0f, 1f)) * (0.95f * env);
+                }
+                FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
+            }
+        }
+
+        // Цельный лист пламени по клинку В РУКЕ: привязанные частицы уже лежат
+        // вдоль клинка — соединяем их лентой по порядку вдоль лезвия, и россыпь
+        // пятен превращается в одно пламя на кромке. Спрайты частиц поверх
+        // остаются приглушённым жаром (см. PostDrawTiles)
+        private static void DrawBladeSheets(GraphicsDevice device)
+        {
+            sheetMain.Clear();
+            sheetHalo.Clear();
+            foreach (Particle p in particles)
+            {
+                if (!p.Anchored)
+                    continue;
+                if (p.Kind == FlameKind.Halo)
+                    sheetHalo.Add(p);
+                else if (p.Kind == FlameKind.Blade || p.Kind == FlameKind.Near)
+                    sheetMain.Add(p);
+            }
+            DrawSheet(device, sheetHalo, 58f, 0.34f);
+            DrawSheet(device, sheetMain, 34f, 0.95f);
+        }
+
+        private static void DrawSheet(GraphicsDevice device, List<Particle> list, float widthScale, float strength)
+        {
+            if (list.Count < 3)
+                return;
+            list.Sort((a, b) => a.Along.CompareTo(b.Along));
+            int n = System.Math.Min(list.Count, ribbonPoints.Length);
+            float time = Main.GameUpdateCount;
+            for (int i = 0; i < n; i++)
+            {
+                Particle p = list[i];
+                ribbonPoints[i] = p.Position;
+                // Ширина дышит бегущей волной вдоль клинка: пламя «течёт» к острию
+                float wave = 0.8f + 0.2f * (float)System.Math.Sin(time * 0.7f - p.Along * 11f + p.Wobble);
+                ribbonWidths[i] = p.Size * widthScale * wave;
+                float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
+                Color c = Color.Lerp(new Color(18, 75, 215), new Color(175, 240, 255), heat);
+                float t = p.Age / (float)p.Life;
+                ribbonColors[i] = c * (strength * MathHelper.Clamp((1f - t) * 2f, 0f, 1f));
+            }
+            FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
+        }
+
+        // Свободные частицы (брошенный/застрявший меч, струи): каждая — короткий
+        // язычок по ходу движения с подъёмом вверх; плотная россыпь сливается
+        // в общее пламя, как языки настоящего костра
+        private static void DrawLooseLicks(GraphicsDevice device)
+        {
+            float time = Main.GameUpdateCount;
+            foreach (Particle p in particles)
+            {
+                if (p.Anchored || p.Kind == FlameKind.Spark)
+                    continue;
+                Vector2 up = (p.Velocity * 0.65f + new Vector2(0f, -0.85f)).SafeNormalize(new Vector2(0f, -1f));
+                Vector2 perp = new Vector2(-up.Y, up.X);
+                float len = 7f + p.Size * 52f;
+                float wob = (float)System.Math.Sin(time * 0.5f + p.Rotation * 7f + p.Age * 0.4f) * 1.6f;
+                float t = p.Age / (float)p.Life;
+                float fade = MathHelper.Clamp((1f - t) * 1.8f, 0f, 1f) * MathHelper.Clamp(t * 6f + 0.25f, 0f, 1f);
+                float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
+                Color hot = Color.Lerp(new Color(30, 105, 240), new Color(190, 244, 255), heat);
+                Color cold = Color.Lerp(new Color(8, 34, 130), new Color(40, 125, 250), heat);
+                ribbonPoints[0] = p.Position - up * len * 0.35f;
+                ribbonPoints[1] = p.Position + perp * wob * 0.4f;
+                ribbonPoints[2] = p.Position + up * len * 0.65f + perp * wob;
+                ribbonWidths[0] = p.Size * 20f;
+                ribbonWidths[1] = p.Size * 34f;
+                ribbonWidths[2] = 1f;
+                ribbonColors[0] = hot * (0.85f * fade);
+                ribbonColors[1] = hot * (0.7f * fade);
+                ribbonColors[2] = cold * (0.5f * fade);
+                FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
+            }
+        }
+
         public override void PostDrawTiles()
         {
-            if (Main.dedServ || particles.Count == 0)
+            if (Main.dedServ || (particles.Count == 0 && tongues.Count == 0))
                 return;
+
+            // Сначала цельное пламя лентами (батч на входе закрыт): языки на
+            // врагах и вспышках, лист по клинку, язычки свободных частиц
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            foreach (Tongue t in tongues)
+                DrawTongue(device, t);
+            DrawBladeSheets(device);
+            DrawLooseLicks(device);
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed)
@@ -415,11 +690,15 @@ namespace FrostMelee.Content.Projectiles
                 };
                 float stretch = MathHelper.Clamp(p.Stretch, 1f, 2.8f);
                 Vector2 scaleVec = new Vector2(scale * stretch, scale * (0.9f - 0.1f * (stretch - 1f)));
+                // Тело пламени теперь несут ленты выше; спрайты частиц — только
+                // жар поверх и искры, поэтому приглушены (полная сила — искрам)
+                float bodyDim = p.Kind == FlameKind.Spark ? 1f : 0.45f;
+                float coreDim = p.Kind == FlameKind.Spark ? 1f : 0.6f;
 
                 Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
-                    outer * (outerAlpha * fade), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
+                    outer * (outerAlpha * fade * bodyDim), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
-                    core * (coreAlpha * fade), p.Rotation, origin,
+                    core * (coreAlpha * fade * coreDim), p.Rotation, origin,
                     scaleVec * 0.58f, SpriteEffects.None, 0f);
             }
 
@@ -429,6 +708,7 @@ namespace FrostMelee.Content.Projectiles
         public override void OnWorldUnload()
         {
             particles.Clear();
+            tongues.Clear();
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
         }
@@ -436,8 +716,10 @@ namespace FrostMelee.Content.Projectiles
         public override void Unload()
         {
             particles.Clear();
+            tongues.Clear();
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
+            FlameRibbon.Unload();
         }
     }
 }

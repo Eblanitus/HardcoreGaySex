@@ -141,6 +141,9 @@ namespace FrostMelee.Content.Weapons
                 Big = big,
                 Life = big ? 14 : 10
             });
+            // Цельные языки веером из центра — пламя взрыва, а не только
+            // светящийся круг и пыль; пыль выше остаётся искрами
+            Projectiles.FrostJetFx.BurstTongues(center, big);
         }
 
         public override void PostUpdateEverything()
