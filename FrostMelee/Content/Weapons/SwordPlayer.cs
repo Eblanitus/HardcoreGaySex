@@ -623,7 +623,7 @@ namespace FrostMelee.Content.Weapons
             // Каждый тик: на быстром взмахе частицы раз в 2 тика дают разрывы,
             // и огонь кажется прыгающим вслед за клинком. Сила пламени — от числа
             // горящих врагов рядом (FireIntensity), на возврате тычка — слабее.
-            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity * (1f - 0.8f * retract));
+            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity * (1f - 0.8f * retract), 1f, FrostJetFx.HandSource(Player.whoAmI));
         }
 
         public float StabRetractProgress => StabRetract01();

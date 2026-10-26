@@ -218,6 +218,18 @@ namespace FrostMelee.Content.Projectiles
                 go, 17f * flick / glow.Width, SpriteEffects.None, 0f);
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 1f), 0f,
                 go, 7f / glow.Width, SpriteEffects.None, 0f);
+
+            // Звёздный блик-крестик: огонёк — живой ресурс (бьёт, уходит со
+            // взмахом), и в одной палитре с декоративным пламенем, вспышкой
+            // взрыва и забором тычком он терялся. Крест не похож ни на язык,
+            // ни на пятно — огонёк узнаётся сразу. В полёте (бьёт) — ярче
+            float glint = 0.55f + 0.45f * (float)Math.Sin(Age * 0.22f + Phase);
+            float strength = State == StateOrbit ? 0.6f : 0.9f;
+            float spin = Age * 0.04f + Phase;
+            for (int k = 0; k < 2; k++)
+                Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, strength * glint),
+                    spin + k * MathHelper.PiOver2, go, new Vector2(30f / glow.Width, 2.4f / glow.Height),
+                    SpriteEffects.None, 0f);
             return false;
         }
     }

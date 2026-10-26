@@ -555,10 +555,11 @@ namespace FrostMelee.Content.Projectiles
             Vector2 center = VisualCenter(geo);
             Vector2 butt = center - axis * half;
             Vector2 tip = center + axis * half;
+            int source = FrostJetFx.LooseSource(Projectile.whoAmI);
             FrostJetFx.EmitBladeLoose(butt, tip, axis,
-                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity, 1f, source);
             if (Main.GameUpdateCount % 2 == 0)
-                FrostJetFx.EmitJet(center, axis);
+                FrostJetFx.EmitJet(center, axis, default, source);
         }
 
         // Застрявший Frostbrand разгорается: аура растёт до предела, поджигает соседей,
@@ -616,8 +617,11 @@ namespace FrostMelee.Content.Projectiles
             // На второй половине «нагрева» пламени вдвое больше (второй проход),
             // а сами языки крупнее — до +70% размера при полном heat
             int passes = heat >= 0.5f ? 2 : 1;
+            int source = FrostJetFx.LooseSource(Projectile.whoAmI);
             for (int pass = 0; pass < passes; pass++)
-                FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow, 1f + 0.7f * heat);
+                FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow, 1f + 0.7f * heat, source);
+            // Зона поджога видна тихим свечением того же радиуса (только картинка)
+            FrostJetFx.LodgedAura(Projectile.Center, radius, 0.4f + 0.6f * grow);
         }
 
         private void CloseFrostTrail()
