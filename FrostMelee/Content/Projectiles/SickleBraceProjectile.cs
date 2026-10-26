@@ -224,7 +224,7 @@ namespace FrostMelee.Content.Projectiles
         // Струя встречи: длина растёт от острия, пока держишь, и упирается в предел
         private const int FrostJetGrowTicks = 90;
         private const float FrostJetMinReach = 24f;
-        private const float FrostJetMaxReach = 96f;
+        private const float FrostJetMaxReach = 72f;
         internal const float FrostJetSpeed = 4.5f;
         private const float ArmDrop = 0.35f;     // кисть у пояса, как у Lance
         private const float UpAngle = 0.75f;     // выше — вторая рука у тела
