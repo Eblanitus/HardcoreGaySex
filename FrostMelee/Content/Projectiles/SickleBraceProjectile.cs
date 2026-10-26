@@ -193,11 +193,15 @@ namespace FrostMelee.Content.Projectiles
                     1f, FrostJetFx.HandSource(Projectile.owner), carryWithBlade: true);
                 if (Main.GameUpdateCount % 4 == 0)
                 {
-                    // Струя наследует скорость игрока: без этого медленные
-                    // (4.5) языки на крыльях тут же отстают и висят цепочкой
-                    // комет по траектории полёта — пламя «отрывается от меча»
+                    // Струя едет вместе с игроком: без этого медленные (4.5)
+                    // языки на крыльях тут же отстают и висят цепочкой комет
+                    // по траектории полёта — пламя «отрывается от меча».
+                    // ai[2] — направление струи: FrostFireJet каждый тик заново
+                    // прибавляет к нему ТЕКУЩУЮ скорость игрока. Скорость из
+                    // одного момента рождения после остановки продолжала нести
+                    // огонь вперёд (или держать его у меча после бега назад).
                     Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, dir * FrostJetSpeed + player.velocity,
-                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
+                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks, 0f, dir.ToRotation());
                 }
             }
 
@@ -223,7 +227,7 @@ namespace FrostMelee.Content.Projectiles
         private const int FrostJetGrowTicks = 90;
         private const float FrostJetMinReach = 24f;
         private const float FrostJetMaxReach = 96f;
-        private const float FrostJetSpeed = 4.5f;
+        internal const float FrostJetSpeed = 4.5f;
         private const float ArmDrop = 0.35f;     // кисть у пояса, как у Lance
         private const float UpAngle = 0.75f;     // выше — вторая рука у тела
         private const float GripBehind = 0.06f;  // хват у самого приклада

@@ -41,6 +41,24 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.timeLeft = (int)Projectile.ai[0];
             }
 
+            // Струя встречи (ai[1] == 0, ai[2] — её направление) едет с
+            // ТЕКУЩЕЙ скоростью игрока. Если прибавить скорость игрока только
+            // при рождении, после остановки старая скорость остаётся жить в
+            // струе: после бега вперёд огонь продолжает уноситься вперёд,
+            // после бега назад — продолжает прижиматься к мечу (наоборот).
+            // Струи веера взмаха (ai[1] == 1/2) сюда не входят.
+            if (Projectile.ai[1] == 0f)
+            {
+                Vector2 jetDir = Projectile.ai[2].ToRotationVector2();
+                Vector2 carriedVelocity = jetDir * SickleBraceProjectile.FrostJetSpeed
+                    + Main.player[Projectile.owner].velocity;
+                if ((carriedVelocity - Projectile.velocity).LengthSquared() > 0.0001f)
+                {
+                    Projectile.velocity = carriedVelocity;
+                    Projectile.netUpdate = true;
+                }
+            }
+
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             // Досрочной смерти у струи нет: сколько задали при спавне, столько живёт.
             // Старая «смерть на возврате тычка» заодно убивала струи взмаха,
