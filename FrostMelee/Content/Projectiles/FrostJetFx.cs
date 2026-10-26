@@ -43,6 +43,9 @@ namespace FrostMelee.Content.Projectiles
             public float Coupling;
             public float Stretch;
             public float Flow;
+            // Тик рождения: старые привязанные частицы переносим вместе с
+            // клинком, а новые и так родились уже на новой линии клинка
+            public uint SpawnTick;
             // Источник огня: перемычки тянутся только внутри одного источника
             // (меч в руке со своими струями — один, каждый брошенный меч —
             // свой). Иначе застрявший меч и меч в руке сшивались «электричеством»
@@ -117,6 +120,17 @@ namespace FrostMelee.Content.Projectiles
         private static Vector2 bladeVelocity;
         private static uint bladeFrame;
         private static bool bladeLineValid;
+        // Линия клинка прошлого тика. По сдвигу старой линии в новую
+        // переносим уже живые привязанные частицы вместе с мечом: без
+        // этого при беге вперёд они только догоняли клинок пружинкой, и
+        // основание тугого листа оставалось далеко позади основного меча
+        private static Vector2 bladePrevButt;
+        private static Vector2 bladePrevTip;
+        private static Vector2 bladePrevDir = Vector2.UnitX;
+        private static bool bladeCarryPending;
+        // Перенос включён только для непрерывной линии встречи: взмах и
+        // тычок оставляем как были, чтобы не менять их огонь заодно
+        private static bool bladeCarryLine;
         // Крупность частиц на время текущего вызова EmitBlade*: читается в
         // EmitLineParticle и искрах. Всё это клиентская косметика в одном
         // потоке внутри тика — статиком безопасно
@@ -172,8 +186,9 @@ namespace FrostMelee.Content.Projectiles
         // Огонь на клинке В РУКЕ (взмах/тычок/встреча): частицы привязаны к линии
         // клинка и тянутся за ней. Линия одна на всех (bladeButt/bladeTip),
         // поэтому так горит только один меч за раз — тот, что в руке
-        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f, int source = 0)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true, sizeScale, source);
+        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f, int source = 0,
+            bool carryWithBlade = false)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true, sizeScale, source, carryWithBlade);
 
         // Огонь на БРОШЕННОМ клинке (летит или застрял): частицы рождаются на
         // лезвии и гаснут на месте, ни к чему не привязаны и общую линию не
@@ -181,9 +196,10 @@ namespace FrostMelee.Content.Projectiles
         // мечом начнут дёргать частицы друг к другу — огонь летает между ними
         // «как электричество» (баг, замеченный владельцем на Дирклопсе)
         public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f, int source = 0)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false, sizeScale, source);
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false, sizeScale, source, carryWithBlade: false);
 
-        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored, float sizeScale, int source)
+        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored, float sizeScale, int source,
+            bool carryWithBlade)
         {
             if (Main.dedServ)
                 return;
@@ -196,7 +212,17 @@ namespace FrostMelee.Content.Projectiles
 
             if (anchored)
             {
-                bladeVelocity = bladeLineValid
+                bool hadBlade = bladeLineValid;
+                bladePrevButt = bladeButt;
+                bladePrevTip = bladeTip;
+                bladePrevDir = bladeDir;
+                // Переносить старые частицы можно только на следующий тик
+                // той же линии встречи: после паузы или смены приёма
+                // старая линия уже чужая, и перенос дёрнул бы остатки
+                // огня в сторону. Взмах и тычок сюда не попадают
+                bladeCarryPending = hadBlade && carryWithBlade && bladeCarryLine
+                    && Main.GameUpdateCount - bladeFrame <= 1;
+                bladeVelocity = hadBlade
                     ? ((butt - bladeButt) + (tip - bladeTip)) * 0.5f
                     : Vector2.Zero;
                 bladeButt = butt;
@@ -204,6 +230,7 @@ namespace FrostMelee.Content.Projectiles
                 bladeDir = dir;
                 bladeFrame = Main.GameUpdateCount;
                 bladeLineValid = true;
+                bladeCarryLine = carryWithBlade;
             }
 
             // 3, а не 4 при полном запасе и ядрёности 100: частицы соединены
@@ -419,6 +446,7 @@ namespace FrostMelee.Content.Projectiles
                     _ => 0.7f
                 }) * FrostMeleeConfigDefaults.FireHeatScale,
                 Stretch = 1f,
+                SpawnTick = Main.GameUpdateCount,
                 Source = emitSource
             };
             particles.Add(p);
@@ -754,10 +782,15 @@ namespace FrostMelee.Content.Projectiles
 
             UpdateTongues();
 
+            bool hasBlade = Main.GameUpdateCount - bladeFrame <= BladeGraceTicks;
+            // Сдвиг линии клинка применяем один раз в этом же обновлении:
+            // флаг гасим сразу, иначе на тиках запаса (BladeGraceTicks)
+            // старые частицы уехали бы ещё раз без нового движения меча
+            bool carryBlade = hasBlade && bladeCarryPending;
+            bladeCarryPending = false;
+
             if (particles.Count == 0)
                 return;
-
-            bool hasBlade = Main.GameUpdateCount - bladeFrame <= BladeGraceTicks;
 
             for (int i = particles.Count - 1; i >= 0; i--)
             {
@@ -804,6 +837,17 @@ namespace FrostMelee.Content.Projectiles
                     p.Along = MathHelper.Clamp(p.Along - p.Flow, 0.02f, 0.96f);
                     Vector2 perp = new Vector2(-bladeDir.Y, bladeDir.X);
                     Vector2 anchor = Vector2.Lerp(bladeButt, bladeTip, p.Along) + perp * p.Side;
+                    // Сначала увозим старую частицу ровно на сдвиг её точки
+                    // на клинке за этот тик. Сама пружинка ниже только
+                    // догоняла меч, поэтому при беге вперёд основание
+                    // тугого листа оставалось далеко позади основного меча.
+                    // Новые частицы не трогаем: они родились на новой линии
+                    if (carryBlade && p.SpawnTick < bladeFrame)
+                    {
+                        Vector2 prevPerp = new Vector2(-bladePrevDir.Y, bladePrevDir.X);
+                        Vector2 prevAnchor = Vector2.Lerp(bladePrevButt, bladePrevTip, p.Along) + prevPerp * p.Side;
+                        p.Position += anchor - prevAnchor;
+                    }
                     // Резина (пожелание владельца): тяга к точке на клинке растёт
                     // с расстоянием — у самой кромки пламя сидит туго и густо, а
                     // оторвавшийся хвост не висит по дуге взмаха рядом белых
@@ -1529,6 +1573,8 @@ namespace FrostMelee.Content.Projectiles
             auras.Clear();
             ClearVanillaBurnTags();
             bladeLineValid = false;
+            bladeCarryPending = false;
+            bladeCarryLine = false;
             bladeVelocity = Vector2.Zero;
             targetHasContent = false;
         }
@@ -1541,6 +1587,8 @@ namespace FrostMelee.Content.Projectiles
             auras.Clear();
             ClearVanillaBurnTags();
             bladeLineValid = false;
+            bladeCarryPending = false;
+            bladeCarryLine = false;
             bladeVelocity = Vector2.Zero;
             Main.OnPreDraw -= RenderFire;
             On_NPC.UpdateNPC_BuffApplyVFX -= CaptureVanillaFrostburnDust;

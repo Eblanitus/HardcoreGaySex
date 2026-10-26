@@ -190,7 +190,7 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 jetTip = butt + dir * geo.Length;
                 FrostJetFx.EmitBlade(jetBase, jetTip, dir,
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity,
-                    1f, FrostJetFx.HandSource(Projectile.owner));
+                    1f, FrostJetFx.HandSource(Projectile.owner), carryWithBlade: true);
                 if (Main.GameUpdateCount % 4 == 0)
                 {
                     // Струя наследует скорость игрока: без этого медленные
