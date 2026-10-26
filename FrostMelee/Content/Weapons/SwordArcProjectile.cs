@@ -1122,9 +1122,6 @@ namespace FrostMelee.Content.Weapons
                     AisbergChunk.SpawnSwingChunks(owner, Projectile.GetSource_FromThis(),
                         target.Center, Projectile.damage, Projectile.knockBack);
             }
-            // Карамелька: единственная фишка — липкая, удар тормозит врага
-            if (SwordItem == ItemID.CandyCaneSword)
-                CandyCaneSlowNPC.Apply(target);
             // Frostbrand сам НЕ поджигает: поджигает только струя. У взмаха это
             // веер струй по дуге (SpawnArcJets в AI) — пламя, которое клинок
             // несёт за собой по ходу взмаха

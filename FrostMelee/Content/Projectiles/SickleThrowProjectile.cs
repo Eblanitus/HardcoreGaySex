@@ -141,6 +141,14 @@ namespace FrostMelee.Content.Projectiles
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
         private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
 
+        // Карамелька-приманка: сколько тиков леденец пролежал/провисел воткнутым.
+        // Дошло до порога — его «съели»: бледнеет и перестаёт манить (CandyCaneLureNPC)
+        private int candyGroundTicks;
+        public bool CandyEaten => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            candyGroundTicks >= Weapons.CandyCaneLureNPC.EatTicks;
+        public bool CandyLureActive => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            (State == StateLying || State == StateStuckTile) && !CandyEaten;
+
         public override void SetDefaults()
         {
             Projectile.width = FlightBox;
@@ -211,6 +219,21 @@ namespace FrostMelee.Content.Projectiles
                 State = StateLying;
                 lyingInit = false;
                 Projectile.netUpdate = true;
+            }
+
+            // Леденец на земле пахнет сладко и манит врагов (рулит ими
+            // CandyCaneLureNPC), пока его не «съедят»: счётчик идёт только
+            // пока меч лежит или воткнут в землю
+            if ((int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+                (State == StateLying || State == StateStuckTile))
+            {
+                candyGroundTicks++;
+                if (!Main.dedServ && !CandyEaten && candyGroundTicks % 18 == 0)
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(10f, 6f),
+                        DustID.Snow, new Vector2(0f, -0.6f), 0, new Color(255, 120, 140), 1f);
+                    d.noGravity = true;
+                }
             }
 
             TryPickup();
@@ -868,9 +891,6 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
                 if (thrownItem == ItemID.IceBlade)
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(thrownItem);
-                // Карамелька липкая: удар тормозит врага
-                if (thrownItem == ItemID.CandyCaneSword)
-                    Weapons.CandyCaneSlowNPC.Apply(target);
                 // Фростбранд: летящий меч сам НЕ поджигает. Убил горящего — взрыв
                 // сильнее и шире тычкового. Поджигает застрявший клинок своей
                 // разгорающейся аурой (UpdateLodgedFrostbrand)
@@ -1057,6 +1077,14 @@ namespace FrostMelee.Content.Projectiles
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
+
+            // Съеденный леденец бледный: белёсая копия поверх той же позы —
+            // видно, что сладкого запаха (и приманки) больше нет
+            if (CandyEaten)
+            {
+                Main.EntitySpriteDraw(texture, butt - Main.screenPosition, null, Color.White * 0.6f,
+                    heading - geo.AngleFor(false), geo.ButtFor(false), scale, SpriteEffects.None, 0f);
+            }
             return false;
         }
     }
