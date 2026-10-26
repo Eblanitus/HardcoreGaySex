@@ -868,6 +868,9 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
                 if (thrownItem == ItemID.IceBlade)
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(thrownItem);
+                // Карамелька липкая: удар тормозит врага
+                if (thrownItem == ItemID.CandyCaneSword)
+                    Weapons.CandyCaneSlowNPC.Apply(target);
                 // Фростбранд: летящий меч сам НЕ поджигает. Убил горящего — взрыв
                 // сильнее и шире тычкового. Поджигает застрявший клинок своей
                 // разгорающейся аурой (UpdateLodgedFrostbrand)

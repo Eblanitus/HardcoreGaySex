@@ -490,6 +490,9 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
+            // Карамелька липкая: удар тормозит врага
+            if (braceItem == ItemID.CandyCaneSword)
+                Weapons.CandyCaneSlowNPC.Apply(target);
             // Frostbrand: выставленный клинок сам НЕ поджигает — поджигает его
             // струя (FrostFireJet из острия в AI), враг должен задеть пламя
             if (Projectile.owner == Main.myPlayer)

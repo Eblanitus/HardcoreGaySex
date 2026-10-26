@@ -244,6 +244,9 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
             }
+            // Карамелька липкая: удар тормозит врага
+            if ((int)Projectile.ai[2] == ItemID.CandyCaneSword)
+                Weapons.CandyCaneSlowNPC.Apply(target);
             // Айсберг: забранный Frostbite ускоряет создание новых глыб
             if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) &&
                 takenBurn.Remove(target.whoAmI, out int aisbergBurn) &&
