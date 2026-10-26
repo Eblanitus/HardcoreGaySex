@@ -23,6 +23,20 @@ namespace FrostMelee.Content
         private static RasterizerState raster;
         private static VertexPositionColorTexture[] verts;
 
+        // Пакетный режим для буфера огня FrostJetFx: все ленты кадра копятся
+        // в один список треугольников и уходят ОДНИМ вызовом отрисовки
+        // (раньше каждая перемычка/язык — свой DrawUserPrimitives, в бою
+        // сотни–тысяча вызовов за кадр). Координаты — от batchOrigin без
+        // зума (буфер сам ложится на экран с зумом при выводе). Альфа
+        // вершины = яркость цвета: буфер копит в альфе «покрытие» огня,
+        // по нему рисуется тёмная подложка под пламенем
+        private static bool batching;
+        private static Vector2 batchOrigin;
+        private static VertexPositionColorTexture[] batchVerts;
+        private static int batchCount;
+        private static BlendState coverBlend;
+        private const int MaxTrianglesPerCall = 30000;
+
         public static void Unload()
         {
             Texture2D a = flameMask;
@@ -32,6 +46,10 @@ namespace FrostMelee.Content
             blend = null;
             raster = null;
             verts = null;
+            batchVerts = null;
+            batchCount = 0;
+            batching = false;
+            coverBlend = null;
             Main.QueueMainThreadAction(() =>
             {
                 a?.Dispose();
@@ -100,7 +118,78 @@ namespace FrostMelee.Content
                 AlphaDestinationBlend = Blend.One
             };
             raster ??= new RasterizerState { CullMode = CullMode.None };
+            coverBlend ??= new BlendState
+            {
+                ColorSourceBlend = Blend.One,
+                ColorDestinationBlend = Blend.One,
+                AlphaSourceBlend = Blend.One,
+                AlphaDestinationBlend = Blend.One
+            };
             return true;
+        }
+
+        // Начать пакет: дальше Draw только копит треугольники до EndBatch
+        public static void BeginBatch(Vector2 origin)
+        {
+            batching = true;
+            batchOrigin = origin;
+            batchCount = 0;
+            batchVerts ??= new VertexPositionColorTexture[6144];
+        }
+
+        // Сбросить пакет без отрисовки (аварийный выход из буфера огня)
+        public static void CancelBatch()
+        {
+            batching = false;
+            batchCount = 0;
+        }
+
+        // Выпустить накопленное одним (или несколькими крупными) вызовами
+        public static void EndBatch(GraphicsDevice device)
+        {
+            batching = false;
+            if (batchCount < 3 || !Ensure(device))
+            {
+                batchCount = 0;
+                return;
+            }
+            effect.World = Matrix.Identity;
+            effect.View = Matrix.Identity;
+            effect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
+            device.BlendState = coverBlend;
+            device.DepthStencilState = DepthStencilState.None;
+            device.RasterizerState = raster;
+            device.SamplerStates[0] = SamplerState.LinearClamp;
+            effect.Texture = flameMask;
+            effect.CurrentTechnique.Passes[0].Apply();
+            int done = 0;
+            while (done < batchCount)
+            {
+                int tris = Math.Min(MaxTrianglesPerCall, (batchCount - done) / 3);
+                if (tris <= 0)
+                    break;
+                device.DrawUserPrimitives(PrimitiveType.TriangleList, batchVerts, done, tris);
+                done += tris * 3;
+            }
+            batchCount = 0;
+        }
+
+        private static void AppendBatch(VertexPositionColorTexture[] strip, int n)
+        {
+            int need = batchCount + (n - 1) * 6;
+            if (batchVerts.Length < need)
+                Array.Resize(ref batchVerts, Math.Max(need, batchVerts.Length * 2));
+            for (int i = 0; i < n - 1; i++)
+            {
+                VertexPositionColorTexture a0 = strip[i * 2], a1 = strip[i * 2 + 1];
+                VertexPositionColorTexture b0 = strip[i * 2 + 2], b1 = strip[i * 2 + 3];
+                batchVerts[batchCount++] = a0;
+                batchVerts[batchCount++] = a1;
+                batchVerts[batchCount++] = b0;
+                batchVerts[batchCount++] = a1;
+                batchVerts[batchCount++] = b1;
+                batchVerts[batchCount++] = b0;
+            }
         }
 
         private static void EnsureVerts(int points)
@@ -116,6 +205,27 @@ namespace FrostMelee.Content
         {
             if (n < 2 || points == null || widths == null || colors == null || !Ensure(device))
                 return;
+
+            if (batching)
+            {
+                EnsureVerts(n);
+                for (int i = 0; i < n; i++)
+                {
+                    Vector2 back = points[Math.Max(0, i - 1)];
+                    Vector2 fwd = points[Math.Min(n - 1, i + 1)];
+                    Vector2 dir = (fwd - back).SafeNormalize(new Vector2(0f, -1f));
+                    Vector2 perp = new Vector2(-dir.Y, dir.X);
+                    float half = Math.Max(0f, widths[i]) * 0.5f;
+                    Color c = colors[i];
+                    c.A = Math.Max(c.R, Math.Max(c.G, c.B));   // покрытие для подложки
+                    float u = i / (float)(n - 1);
+                    Vector2 p = points[i] - batchOrigin;
+                    verts[i * 2] = new VertexPositionColorTexture(new Vector3(p + perp * half, 0f), c, new Vector2(u, 0f));
+                    verts[i * 2 + 1] = new VertexPositionColorTexture(new Vector3(p - perp * half, 0f), c, new Vector2(u, 1f));
+                }
+                AppendBatch(verts, n);
+                return;
+            }
 
             effect.World = Matrix.Identity;
             effect.View = Main.GameViewMatrix.TransformationMatrix;

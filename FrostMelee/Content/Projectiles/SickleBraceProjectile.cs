@@ -161,7 +161,8 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 jetBase = Projectile.Center - SpearDir * half;
                 Vector2 jetTip = Projectile.Center + SpearDir * half;
                 FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir,
-                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity);
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity,
+                    1f, FrostJetFx.HandSource(Projectile.owner));
                 if (Main.GameUpdateCount % 4 == 0)
                 {
                     // Струя наследует скорость игрока: без этого медленные

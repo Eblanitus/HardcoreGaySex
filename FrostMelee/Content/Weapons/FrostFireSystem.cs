@@ -139,11 +139,13 @@ namespace FrostMelee.Content.Weapons
                 Center = center,
                 Radius = radius,
                 Big = big,
-                Life = big ? 14 : 10
+                // Чуть дольше прежних 10/14 тиков: вспышку успеваешь прочитать
+                Life = big ? 20 : 15
             });
             // Цельные языки веером из центра — пламя взрыва, а не только
-            // светящийся круг и пыль; пыль выше остаётся искрами
-            Projectiles.FrostJetFx.BurstTongues(center, big);
+            // светящийся круг и пыль; пыль выше остаётся искрами. Языки
+            // долетают почти до края зоны урона (radius)
+            Projectiles.FrostJetFx.BurstTongues(center, big, radius);
         }
 
         public override void PostUpdateEverything()
@@ -160,29 +162,32 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        public override void PostDrawTiles()
+        public static bool HasBursts => bursts.Count > 0;
+
+        // Вспышка рисуется в буфер огня FrostJetFx (аддитивный батч открыт им,
+        // координаты — от origin буфера). Свечение раскрывается от центра до
+        // края зоны урона: видимое пятно = кого задело (раньше мягкий край
+        // текстуры гас на половине радиуса, и зона урона была шире видимой)
+        public static void DrawBursts(Texture2D glow, Vector2 origin)
         {
-            if (Main.dedServ || bursts.Count == 0)
+            if (bursts.Count == 0)
                 return;
-
-            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
-            if (glow == null || glow.IsDisposed)
-                return;
-
-            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp,
-                DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-
+            Vector2 center = glow.Size() / 2f;
             foreach (BurstVisual b in bursts)
             {
                 float t = b.Age / (float)b.Life;
+                float open = 1f - (1f - t) * (1f - t) * (1f - t);
                 float fade = (1f - t) * (1f - t);
-                float scale = b.Radius * 2f / glow.Width;
-                Color color = new Color(120, 200, 255) * (fade * (b.Big ? 0.9f : 0.6f));
-                Main.EntitySpriteDraw(glow, b.Center - Main.screenPosition, null, color,
-                    0f, glow.Size() / 2f, scale, SpriteEffects.None, 0f);
+                // Мягкий край ThePerfectGlow заметен примерно до 0.6 его
+                // половины — поэтому масштаб с запасом, чтобы видимый край
+                // доходил до радиуса урона
+                float scale = b.Radius * 2f * 1.55f * (0.45f + 0.55f * open) / glow.Width;
+                float a = b.Big ? 0.75f : 0.55f;
+                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(40, 120, 255) * (fade * a * 0.55f),
+                    0f, center, scale, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(150, 220, 255) * (fade * a),
+                    0f, center, scale * 0.4f, SpriteEffects.None, 0f);
             }
-
-            Main.spriteBatch.End();
         }
 
         // Взрыв погибшего горящего врага: задевает и поджигает соседей.

@@ -43,6 +43,10 @@ namespace FrostMelee.Content.Projectiles
             public float Coupling;
             public float Stretch;
             public float Flow;
+            // Источник огня: перемычки тянутся только внутри одного источника
+            // (меч в руке со своими струями — один, каждый брошенный меч —
+            // свой). Иначе застрявший меч и меч в руке сшивались «электричеством»
+            public int Source;
         }
 
         private static readonly List<Particle> particles = new();
@@ -65,10 +69,14 @@ namespace FrostMelee.Content.Projectiles
             public int NpcIndex = -1;
             public float Across;
             public float Strength = 1f;
+            public int NpcType = -1;   // слот NPC мог занять новый враг — языки на него не прыгают
         }
 
         private static readonly List<Tongue> tongues = new();
         private const int MaxTongues = 56;
+        // Столько мест всегда оставлено вспышкам взрыва: языки на врагах
+        // не должны съедать весь лимит, иначе взрыв выходит без пламени
+        private const int BurstTongueReserve = 16;
         private static readonly Vector2[] ribbonPoints = new Vector2[96];
         private static readonly float[] ribbonWidths = new float[96];
         private static readonly Color[] ribbonColors = new Color[96];
@@ -88,25 +96,68 @@ namespace FrostMelee.Content.Projectiles
         // EmitLineParticle и искрах. Всё это клиентская косметика в одном
         // потоке внутри тика — статиком безопасно
         private static float emitSizeScale = 1f;
+        private static int emitSource;
+
+        // Источники для перемычек: меч в руке игрока и его струи — HandSource,
+        // брошенный меч — LooseSource своего снаряда
+        public static int HandSource(int player) => player + 1;
+        public static int LooseSource(int projectile) => 1000 + projectile;
+
+        // === Буфер огня ===
+        // Весь огонь этой системы рисуется сначала в свой буфер (до начала
+        // кадра, Main.OnPreDraw), а на экран выводится одним проходом поверх
+        // врагов, игрока и пыли (после Main.DrawDust):
+        //  1) тёмная подложка по «покрытию» огня — пламя читается на снегу
+        //     и льду, где чистое аддитивное синее сливалось с белым фоном;
+        //  2) само пламя экранным смешением (screen): яркость насыщается
+        //     мягко, слои не выгорают в белое облако.
+        // Буфер без зума, от левого верхнего угла экрана с полями; на экран
+        // ложится с текущим зумом и сдвигом камеры за кадр
+        private static RenderTarget2D fireTarget;
+        private static Vector2 targetOrigin;
+        private static bool targetHasContent;
+        private const int TargetPad = 96;
+        private const float UnderlayStrength = 0.35f;
+        private static BlendState underlayBlend;
+        private static BlendState screenBlend;
+
+        // Аура застрявшего брошенного меча на этот кадр: зона поджога была
+        // невидимой (враги загорались «от ничего»). Рисуется тихим свечением
+        // по земле, без пламени в воздухе (огонь по воздуху не ходит — решение владельца)
+        private struct AuraGlow
+        {
+            public Vector2 Center;
+            public float Radius;
+            public float Strength;
+        }
+        private static readonly List<AuraGlow> auras = new();
+
+        public static void LodgedAura(Vector2 center, float radius, float strength)
+        {
+            if (Main.dedServ)
+                return;
+            auras.Add(new AuraGlow { Center = center, Radius = radius, Strength = MathHelper.Clamp(strength, 0f, 1f) });
+        }
 
         // Огонь на клинке В РУКЕ (взмах/тычок/встреча): частицы привязаны к линии
         // клинка и тянутся за ней. Линия одна на всех (bladeButt/bladeTip),
         // поэтому так горит только один меч за раз — тот, что в руке
-        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true, sizeScale);
+        public static void EmitBlade(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f, int source = 0)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: true, sizeScale, source);
 
         // Огонь на БРОШЕННОМ клинке (летит или застрял): частицы рождаются на
         // лезвии и гаснут на месте, ни к чему не привязаны и общую линию не
         // трогают. Привязывать нельзя: линия одна, и меч в руке с застрявшим
         // мечом начнут дёргать частицы друг к другу — огонь летает между ними
         // «как электричество» (баг, замеченный владельцем на Дирклопсе)
-        public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f)
-            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false, sizeScale);
+        public static void EmitBladeLoose(Vector2 butt, Vector2 tip, Vector2 dir, float intensity = 1f, float sizeScale = 1f, int source = 0)
+            => EmitBladeInternal(butt, tip, dir, intensity, anchored: false, sizeScale, source);
 
-        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored, float sizeScale)
+        private static void EmitBladeInternal(Vector2 butt, Vector2 tip, Vector2 dir, float intensity, bool anchored, float sizeScale, int source)
         {
             if (Main.dedServ)
                 return;
+            emitSource = source;
 
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 perp = new Vector2(-dir.Y, dir.X);
@@ -178,10 +229,11 @@ namespace FrostMelee.Content.Projectiles
         // вместе с веером. Без этого они рождались почти неподвижными, и пока
         // клинок уходил дальше, позади взмаха оставались висеть сгустки
         // «отставшего» пламени (замечание владельца, обведённые сгустки)
-        public static void EmitJet(Vector2 center, Vector2 dir, Vector2 baseVelocity = default)
+        public static void EmitJet(Vector2 center, Vector2 dir, Vector2 baseVelocity = default, int source = 0)
         {
             if (Main.dedServ)
                 return;
+            emitSource = source;
 
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 perp = new Vector2(-dir.Y, dir.X);
@@ -295,7 +347,8 @@ namespace FrostMelee.Content.Projectiles
                     FlameKind.Trail => 0.55f,
                     _ => 0.7f
                 },
-                Stretch = 1f
+                Stretch = 1f,
+                Source = emitSource
             };
             particles.Add(p);
             return p;
@@ -317,28 +370,45 @@ namespace FrostMelee.Content.Projectiles
 
         // Языки вспышки холодного огня (взрыв горящего врага): веер коротких
         // языков из центра, тянутся вверх и тают. Вызывает FrostFireSystem.Burst
-        public static void BurstTongues(Vector2 center, bool big)
+        // radius — зона урона взрыва: языки долетают почти до её края, чтобы
+        // видимый огонь совпадал с тем, кого задело (0 — прежний размер)
+        public static void BurstTongues(Vector2 center, bool big, float radius = 0f)
         {
             if (Main.dedServ)
                 return;
-            int count = big ? 9 : 6;
+            int count = big ? 12 : 8;
+            // Свободный язык проходит ~1/(1-0.94) ≈ 16.7 своих стартовых
+            // скоростей плюс длину самого языка
+            float reachScale = radius > 0f ? radius / (big ? 120f : 85f) : 1f;
+            reachScale = MathHelper.Clamp(reachScale, 0.6f, 2.2f);
             for (int i = 0; i < count && tongues.Count < MaxTongues; i++)
             {
                 Vector2 dir = Main.rand.NextFloat(MathHelper.TwoPi).ToRotationVector2();
                 Tongue t = new Tongue
                 {
                     Base = center,
-                    Vel = dir * Main.rand.NextFloat(1.2f, big ? 3.6f : 2.6f),
+                    Vel = dir * Main.rand.NextFloat(1.2f, big ? 3.6f : 2.6f) * reachScale,
                     GrowDir = (dir + new Vector2(0f, -0.8f)).SafeNormalize(new Vector2(0f, -1f)),
                     Life = Main.rand.Next(16, 26),
                     Phase = Main.rand.NextFloat(MathHelper.TwoPi),
-                    Length = Main.rand.NextFloat(big ? 34f : 24f, big ? 58f : 40f),
+                    Length = Main.rand.NextFloat(big ? 34f : 24f, big ? 58f : 40f) * MathHelper.Lerp(1f, reachScale, 0.6f),
                     Width = Main.rand.NextFloat(11f, 17f)
                 };
                 for (int k = 0; k < t.Nodes.Length; k++)
                     t.Nodes[k] = center + t.GrowDir * (t.Length * 0.3f * k / (t.Nodes.Length - 1));
                 tongues.Add(t);
             }
+        }
+
+        // Языки — только на врагах, которые держат огонь меча (запас): огонь
+        // ресурс, и чужой Frostburn (стрелы, броня, другие моды) не должен
+        // выглядеть как потраченный язык. Учёт запаса — у клиента владельца
+        private static bool HasSwordFlame(NPC npc)
+        {
+            if (!Weapons.FrostFireSystem.IsBurning(npc))
+                return false;
+            Player me = Main.LocalPlayer;
+            return me != null && me.active && me.GetModPlayer<Weapons.SwordPlayer>().HoldsFlame(npc);
         }
 
         private static Vector2 NpcTongueBase(NPC npc, float across)
@@ -349,6 +419,7 @@ namespace FrostMelee.Content.Projectiles
             Tongue t = new Tongue
             {
                 NpcIndex = npc.whoAmI,
+                NpcType = npc.type,
                 Across = MathHelper.Clamp(across, 0.1f, 0.9f),
                 Phase = Main.rand.NextFloat(MathHelper.TwoPi),
                 Length = MathHelper.Clamp((npc.height * 0.85f + 16f) * Main.rand.NextFloat(0.75f, 1.15f), 26f, 115f),
@@ -379,14 +450,14 @@ namespace FrostMelee.Content.Projectiles
                 NPC npc = Main.npc[i];
                 if (!npc.active || npc.friendly || !screen.Intersects(npc.Hitbox))
                     continue;
-                if (!Weapons.FrostFireSystem.IsBurning(npc))
+                if (!HasSwordFlame(npc))
                     continue;
                 int desired = (int)MathHelper.Clamp(npc.width / 26, 1, 3);
                 int have = 0;
                 foreach (Tongue t in tongues)
                     if (t.NpcIndex == i)
                         have++;
-                for (int k = have; k < desired && tongues.Count < MaxTongues; k++)
+                for (int k = have; k < desired && tongues.Count < MaxTongues - BurstTongueReserve; k++)
                     SpawnNpcTongue(npc, (k + 0.5f) / desired + Main.rand.NextFloat(-0.08f, 0.08f));
             }
 
@@ -398,14 +469,15 @@ namespace FrostMelee.Content.Projectiles
                 if (t.NpcIndex >= 0)
                 {
                     NPC npc = Main.npc[t.NpcIndex];
-                    bool alive = npc.active && Weapons.FrostFireSystem.IsBurning(npc);
+                    bool same = npc.active && npc.type == t.NpcType;
+                    bool alive = same && HasSwordFlame(npc);
                     t.Strength = MathHelper.Clamp(t.Strength + (alive ? 0.06f : -0.08f), 0f, 1f);
                     if (t.Strength <= 0.01f)
                     {
                         tongues.RemoveAt(i);
                         continue;
                     }
-                    if (npc.active)
+                    if (same)
                         t.Base = NpcTongueBase(npc, t.Across);
                     t.GrowDir = new Vector2(0f, -1f);
                 }
@@ -591,7 +663,7 @@ namespace FrostMelee.Content.Projectiles
         // Цельный лист пламени по клинку В РУКЕ: привязанные частицы уже лежат
         // вдоль клинка — соединяем их лентой по порядку вдоль лезвия, и россыпь
         // пятен превращается в одно пламя на кромке. Спрайты частиц поверх
-        // остаются приглушённым жаром (см. PostDrawTiles)
+        // остаются приглушённым жаром (см. RenderFire)
         private static void DrawBladeSheets(GraphicsDevice device)
         {
             sheetMain.Clear();
@@ -740,6 +812,8 @@ namespace FrostMelee.Content.Projectiles
                     // Привязанных между собой уже соединяет лист по клинку
                     if (p.Anchored && q.Anchored)
                         continue;
+                    if (p.Source != q.Source)
+                        continue;
                     float dist = Vector2.Distance(p.Position, q.Position);
                     if (dist < 3f || dist > 54f)
                         continue;
@@ -876,86 +950,216 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        public override void PostDrawTiles()
+        public override void Load()
         {
             if (Main.dedServ)
                 return;
+            Main.OnPreDraw += RenderFire;
+            On_Main.DrawDust += DrawFireOverDust;
+        }
 
-            // Сначала цельное пламя лентами (батч на входе закрыт): языки на
-            // врагах и вспышках, общая лента струй, лист по клинку, нити
-            // между частицами, язычки свободных частиц
-            GraphicsDevice device = Main.graphics.GraphicsDevice;
-            foreach (Tongue t in tongues)
-                DrawTongue(device, t);
-            DrawJetStreams(device);
-            DrawBladeSheets(device);
-            DrawFlameWeb(device);
-            DrawLooseLicks(device);
+        // Аура живёт один тик: застрявший меч заново заявляет её в своём AI
+        public override void PreUpdateProjectiles()
+        {
+            auras.Clear();
+        }
+
+        private static bool HasJets()
+        {
+            if (jetTypeCache < 0)
+                jetTypeCache = ModContent.ProjectileType<FrostFireJet>();
+            foreach (Projectile pr in Main.projectile)
+                if (pr.active && pr.type == jetTypeCache)
+                    return true;
+            return false;
+        }
+
+        // До начала кадра (батч закрыт, цель — экран): весь огонь в буфер
+        private static void RenderFire(GameTime gameTime)
+        {
+            targetHasContent = false;
+            if (Main.dedServ || Main.gameMenu)
+                return;
+            if (particles.Count == 0 && tongues.Count == 0 && auras.Count == 0
+                && !Weapons.FrostFireSystem.HasBursts && !HasJets())
+                return;
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow == null || glow.IsDisposed)
                 return;
 
-            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive, SamplerState.LinearClamp,
-                DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-
-            Vector2 origin = glow.Size() / 2f;
-            foreach (Particle p in particles)
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            int w = Main.screenWidth + TargetPad * 2;
+            int h = Main.screenHeight + TargetPad * 2;
+            if (w <= 0 || h <= 0)
+                return;
+            if (fireTarget == null || fireTarget.IsDisposed || fireTarget.Width != w || fireTarget.Height != h)
             {
-                float t = p.Age / (float)p.Life;
-                float fade = p.Kind switch
-                {
-                    FlameKind.Blade => MathHelper.Clamp((1f - t) * 2.2f, 0f, 1f),
-                    FlameKind.Near => MathHelper.Clamp((1f - t) * 1.6f, 0f, 1f),
-                    _ => (1f - t) * (1f - t)
-                };
-                float scale = p.Size * (1f - 0.18f * t);
-                float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
-                Color outerBase = p.Kind switch
-                {
-                    FlameKind.Blade => new Color(25, 110, 255),
-                    FlameKind.Near => new Color(20, 90, 245),
-                    FlameKind.Halo => new Color(10, 55, 210),
-                    FlameKind.Trail => new Color(35, 130, 255),
-                    _ => new Color(80, 200, 255)
-                };
-                Color outer = Color.Lerp(new Color(5, 20, 90), outerBase, heat);
-                Color core = Color.Lerp(new Color(40, 110, 230), new Color(172, 236, 255), (float)System.Math.Pow(heat, 1.4f));
-                float outerAlpha = p.Kind switch
-                {
-                    FlameKind.Blade => 0.42f,
-                    FlameKind.Near => 0.34f,
-                    FlameKind.Halo => 0.24f,
-                    FlameKind.Trail => 0.18f,
-                    _ => 0.4f
-                };
-                float coreAlpha = p.Kind switch
-                {
-                    FlameKind.Blade => 0.72f,
-                    FlameKind.Near => 0.5f,
-                    FlameKind.Halo => 0.3f,
-                    FlameKind.Trail => 0.24f,
-                    _ => 0.5f
-                };
-                float stretch = MathHelper.Clamp(p.Stretch, 1f, 2.8f);
-                Vector2 scaleVec = new Vector2(scale * stretch, scale * (0.9f - 0.1f * (stretch - 1f)));
-                // Тело пламени теперь несут ленты выше; спрайты частиц — только
-                // жар поверх и искры, поэтому приглушены (полная сила — искрам).
-                // Привязанные к клинку гасим сильнее всех: вытянутые белые ядра
-                // спрайтов и давали «гирлянду свечек» по дуге взмаха (flame-1).
-                // Свободные тоже тише: яркие точки спрайтов на фоне перемычек
-                // читались звёздочками созвездий (flame-6)
-                float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.15f : 0.07f);
-                float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.28f : 0.16f);
-
-                Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
-                    outer * (outerAlpha * fade * bodyDim), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
-                Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
-                    core * (coreAlpha * fade * coreDim), p.Rotation, origin,
-                    scaleVec * 0.58f, SpriteEffects.None, 0f);
+                fireTarget?.Dispose();
+                fireTarget = new RenderTarget2D(device, w, h, false, SurfaceFormat.Color, DepthFormat.None, 0,
+                    RenderTargetUsage.PreserveContents);
             }
 
-            Main.spriteBatch.End();
+            RenderTargetBinding[] previous = device.GetRenderTargets();
+            bool batchOpen = false;
+            try
+            {
+                device.SetRenderTarget(fireTarget);
+                device.Clear(Color.Transparent);
+                targetOrigin = Main.screenPosition - new Vector2(TargetPad);
+
+                // Сначала цельное пламя лентами (одним пакетом): языки на
+                // врагах и вспышках, ленты струй, лист по клинку, нити между
+                // частицами, язычки свободных частиц
+                FlameRibbon.BeginBatch(targetOrigin);
+                foreach (Tongue t in tongues)
+                    DrawTongue(device, t);
+                DrawJetStreams(device);
+                DrawBladeSheets(device);
+                DrawFlameWeb(device);
+                DrawLooseLicks(device);
+                FlameRibbon.EndBatch(device);
+
+                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive, SamplerState.LinearClamp,
+                    DepthStencilState.None, RasterizerState.CullNone, null, Matrix.Identity);
+                batchOpen = true;
+
+                DrawAuras(glow);
+                Weapons.FrostFireSystem.DrawBursts(glow, targetOrigin);
+
+                Vector2 origin = glow.Size() / 2f;
+                foreach (Particle p in particles)
+                {
+                    float t = p.Age / (float)p.Life;
+                    float fade = p.Kind switch
+                    {
+                        FlameKind.Blade => MathHelper.Clamp((1f - t) * 2.2f, 0f, 1f),
+                        FlameKind.Near => MathHelper.Clamp((1f - t) * 1.6f, 0f, 1f),
+                        _ => (1f - t) * (1f - t)
+                    };
+                    float scale = p.Size * (1f - 0.18f * t);
+                    float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
+                    Color outerBase = p.Kind switch
+                    {
+                        FlameKind.Blade => new Color(25, 110, 255),
+                        FlameKind.Near => new Color(20, 90, 245),
+                        FlameKind.Halo => new Color(10, 55, 210),
+                        FlameKind.Trail => new Color(35, 130, 255),
+                        _ => new Color(80, 200, 255)
+                    };
+                    Color outer = Color.Lerp(new Color(5, 20, 90), outerBase, heat);
+                    Color core = Color.Lerp(new Color(40, 110, 230), new Color(172, 236, 255), (float)System.Math.Pow(heat, 1.4f));
+                    float outerAlpha = p.Kind switch
+                    {
+                        FlameKind.Blade => 0.42f,
+                        FlameKind.Near => 0.34f,
+                        FlameKind.Halo => 0.24f,
+                        FlameKind.Trail => 0.18f,
+                        _ => 0.4f
+                    };
+                    float coreAlpha = p.Kind switch
+                    {
+                        FlameKind.Blade => 0.72f,
+                        FlameKind.Near => 0.5f,
+                        FlameKind.Halo => 0.3f,
+                        FlameKind.Trail => 0.24f,
+                        _ => 0.5f
+                    };
+                    float stretch = MathHelper.Clamp(p.Stretch, 1f, 2.8f);
+                    Vector2 scaleVec = new Vector2(scale * stretch, scale * (0.9f - 0.1f * (stretch - 1f)));
+                    // Тело пламени теперь несут ленты выше; спрайты частиц — только
+                    // жар поверх и искры, поэтому приглушены (полная сила — искрам).
+                    // Привязанные к клинку гасим сильнее всех: вытянутые белые ядра
+                    // спрайтов и давали «гирлянду свечек» по дуге взмаха (flame-1).
+                    // Свободные тоже тише: яркие точки спрайтов на фоне перемычек
+                    // читались звёздочками созвездий (flame-6)
+                    float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.15f : 0.07f);
+                    float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.28f : 0.16f);
+
+                    Main.EntitySpriteDraw(glow, p.Position - targetOrigin, null,
+                        outer * (outerAlpha * fade * bodyDim), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
+                    Main.EntitySpriteDraw(glow, p.Position - targetOrigin, null,
+                        core * (coreAlpha * fade * coreDim), p.Rotation, origin,
+                        scaleVec * 0.58f, SpriteEffects.None, 0f);
+                }
+
+                Main.spriteBatch.End();
+                batchOpen = false;
+                targetHasContent = true;
+            }
+            finally
+            {
+                // Что бы ни упало внутри — экран не должен остаться
+                // привязанным к буферу огня (иначе чёрный кадр)
+                FlameRibbon.CancelBatch();
+                if (batchOpen)
+                    Main.spriteBatch.End();
+                device.SetRenderTargets(previous);
+            }
+        }
+
+        private static void DrawAuras(Texture2D glow)
+        {
+            if (auras.Count == 0)
+                return;
+            Vector2 origin = glow.Size() / 2f;
+            float time = Main.GameUpdateCount;
+            foreach (AuraGlow a in auras)
+            {
+                // Тихое дыхание: зона видна, но не спорит с пламенем на клинке
+                float breathe = 0.85f + 0.15f * (float)System.Math.Sin(time * 0.08f);
+                float scale = a.Radius * 2.3f / glow.Width;
+                Main.EntitySpriteDraw(glow, a.Center - targetOrigin, null,
+                    new Color(30, 95, 235) * (0.16f * a.Strength * breathe), 0f, origin, scale, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, a.Center - targetOrigin, null,
+                    new Color(70, 160, 255) * (0.08f * a.Strength * breathe), 0f, origin, scale * 0.55f, SpriteEffects.None, 0f);
+            }
+        }
+
+        // После пыли — поверх врагов, игроков, снарядов: подложка, затем пламя
+        private static void DrawFireOverDust(On_Main.orig_DrawDust orig, Main self)
+        {
+            orig(self);
+            if (!targetHasContent || fireTarget == null || fireTarget.IsDisposed || Main.gameMenu)
+                return;
+
+            underlayBlend ??= new BlendState
+            {
+                ColorSourceBlend = Blend.Zero,
+                ColorDestinationBlend = Blend.InverseSourceAlpha,
+                AlphaSourceBlend = Blend.Zero,
+                AlphaDestinationBlend = Blend.One
+            };
+            screenBlend ??= new BlendState
+            {
+                ColorSourceBlend = Blend.One,
+                ColorDestinationBlend = Blend.InverseSourceColor,
+                AlphaSourceBlend = Blend.Zero,
+                AlphaDestinationBlend = Blend.One
+            };
+
+            SpriteBatch sb = Main.spriteBatch;
+            Vector2 at = targetOrigin - Main.screenPosition;
+            Matrix view = Main.GameViewMatrix.TransformationMatrix;
+
+            sb.Begin(SpriteSortMode.Deferred, underlayBlend, SamplerState.LinearClamp,
+                DepthStencilState.None, RasterizerState.CullNone, null, view);
+            sb.Draw(fireTarget, at, Color.White * UnderlayStrength);
+            sb.End();
+
+            sb.Begin(SpriteSortMode.Deferred, screenBlend, SamplerState.LinearClamp,
+                DepthStencilState.None, RasterizerState.CullNone, null, view);
+            sb.Draw(fireTarget, at, Color.White);
+            sb.End();
+        }
+
+        private static void DisposeTarget()
+        {
+            RenderTarget2D target = fireTarget;
+            fireTarget = null;
+            targetHasContent = false;
+            if (target != null)
+                Main.QueueMainThreadAction(() => target.Dispose());
         }
 
         public override void OnWorldUnload()
@@ -963,8 +1167,10 @@ namespace FrostMelee.Content.Projectiles
             particles.Clear();
             tongues.Clear();
             streamJets.Clear();
+            auras.Clear();
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
+            targetHasContent = false;
         }
 
         public override void Unload()
@@ -972,8 +1178,11 @@ namespace FrostMelee.Content.Projectiles
             particles.Clear();
             tongues.Clear();
             streamJets.Clear();
+            auras.Clear();
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
+            Main.OnPreDraw -= RenderFire;
+            DisposeTarget();
             FlameRibbon.Unload();
         }
     }

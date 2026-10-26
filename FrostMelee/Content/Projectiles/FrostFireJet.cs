@@ -49,7 +49,7 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.localAI[0] % 3 == 0)
                 // Скорость снаряда — частицам: пламя летит вместе со струёй,
                 // а не остаётся висеть в месте рождения позади взмаха
-                FrostJetFx.EmitJet(Projectile.Center, dir, Projectile.velocity);
+                FrostJetFx.EmitJet(Projectile.Center, dir, Projectile.velocity, FrostJetFx.HandSource(Projectile.owner));
 
             // Пыль редкая: веер взмаха спавнит струй много, и частая пыль
             // каждой складывалась в рой крестиков, забивавший саму дугу.
