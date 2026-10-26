@@ -135,6 +135,17 @@ namespace FrostMelee.Content.Projectiles
             bool flipped = Projectile.spriteDirection == -1;
             Projectile.rotation = Projectile.velocity.ToRotation() - geo.AngleFor(flipped);
 
+            // Огонь Фростбранда пускает сам снаряд (как встреча): линия клинка
+            // ровно та, что только что поставлена выше. Раньше огонь пускал
+            // SwordPlayer.PostUpdate — ДО обновления снарядов, по позиции
+            // прошлого тика: на быстром выпаде пламя сидело позади клинка
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand)
+            {
+                var sp = player.GetModPlayer<Weapons.SwordPlayer>();
+                FrostJetFx.EmitBlade(butt, butt + Projectile.velocity * geo.Length, Projectile.velocity,
+                    sp.FireIntensity * (1f - 0.8f * Retract01), 1f, FrostJetFx.HandSource(Projectile.owner));
+            }
+
             // Все колющие мечи чистят остриё об воздух: наледь и искры (визуал, все клиенты)
             if (!Main.dedServ)
                 UpdateHone(player, geo);

@@ -611,19 +611,22 @@ namespace FrostMelee.Content.Weapons
         {
             if (Player.HeldItem.type != ItemID.Frostbrand || CurrentMode == Mode.Spear)
                 return;
-            if (CurrentMode == Mode.Swing && Player.itemAnimation <= 0 && !PoseItemVisible)
+            // Тычок: огонь пускает сам снаряд тычка по только что поставленной
+            // линии клинка (как встреча). Отсюда (PostUpdate игрока идёт ДО
+            // обновления снарядов) линия была вчерашней, и на выпаде пламя
+            // сидело позади настоящего клинка
+            if (CurrentMode == Mode.Stab)
                 return;
-            if (CurrentMode == Mode.Stab && !IsMyProjectile(stabProj, ModContent.ProjectileType<SwordStabProjectile>()))
+            if (CurrentMode == Mode.Swing && Player.itemAnimation <= 0 && !PoseItemVisible)
                 return;
             if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
                 return;
 
             Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
-            float retract = CurrentMode == Mode.Stab ? StabRetract01() : 0f;
             // Каждый тик: на быстром взмахе частицы раз в 2 тика дают разрывы,
             // и огонь кажется прыгающим вслед за клинком. Сила пламени — от числа
-            // горящих врагов рядом (FireIntensity), на возврате тычка — слабее.
-            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity * (1f - 0.8f * retract), 1f, FrostJetFx.HandSource(Player.whoAmI));
+            // горящих врагов рядом (FireIntensity)
+            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity, 1f, FrostJetFx.HandSource(Player.whoAmI));
         }
 
         public float StabRetractProgress => StabRetract01();

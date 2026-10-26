@@ -120,7 +120,7 @@ namespace FrostMelee.Content.Projectiles
         // Общая мягкость огня (пожелание владельца: менее ядрёно,
         // прозрачнее): множитель вывода буфера на экран и сила подложки.
         // Альфы слоёв ниже дополнительно убавлены примерно на четверть
-        private const float FireSoftness = 0.78f;
+        private const float FireSoftness = 0.66f;
         private const float UnderlayStrength = 0.25f;
         private static BlendState underlayBlend;
         private static BlendState screenBlend;
@@ -205,11 +205,13 @@ namespace FrostMelee.Content.Projectiles
             {
                 Particle trail = EmitLineParticle(butt, tip, dir, perp, FlameKind.Trail, Main.rand.NextFloat(0.15f, 0.85f),
                     0.2f, 0.6f, 0.3f, 9, 13, 0.24f, 0.34f, false);
-                // Свободная частица клинка В РУКЕ уносит почти всю скорость
+                // Свободная частица клинка В РУКЕ уносит большую часть скорости
                 // клинка: на половинной скорости игрок на крыльях её просто
-                // перегонял, и пламя отрывалось кометами по траектории полёта
+                // перегонял, и пламя отрывалось кометами по траектории полёта.
+                // Но не всю: скорость клинка на выпаде тычка выстреливала
+                // шлейф далеко за остриё — пламя «сидело не там»
                 if (anchored && trail != null)
-                    trail.Velocity += bladeVelocity * 0.85f;
+                    trail.Velocity += bladeVelocity * 0.65f;
             }
 
             if (Main.rand.NextFloat() < 0.1f * intensity)
@@ -224,7 +226,7 @@ namespace FrostMelee.Content.Projectiles
                     : dir * Main.rand.NextFloat(0.1f, 0.35f) + perp * Main.rand.NextFloat(-0.15f, 0.15f);
                 velocity += new Vector2(0f, -Main.rand.NextFloat(0.1f, anchored ? 0.6f : 0.35f));
                 if (anchored)
-                    velocity += bladeVelocity * 0.6f;
+                    velocity += bladeVelocity * 0.5f;
                 Add(position, velocity, FlameKind.Spark, Main.rand.Next(15, 23), Main.rand.NextFloat(0.08f, 0.14f) * emitSizeScale);
             }
         }
@@ -267,7 +269,8 @@ namespace FrostMelee.Content.Projectiles
             FlameKind kind, float along, float speedMin, float speedMax, float sideSpeed,
             int lifeMin, int lifeMax, float sizeMin, float sizeMax, bool anchored)
         {
-            float side = Main.rand.NextFloat(-3.5f, 3.5f);
+            // ±2.2, а не ±3.5: огонь сидит туже на самой кромке, меньше «плавает» вокруг клинка
+            float side = Main.rand.NextFloat(-2.2f, 2.2f);
             Vector2 position = Vector2.Lerp(butt, tip, along) + perp * side;
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
                 + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed);
@@ -290,11 +293,13 @@ namespace FrostMelee.Content.Projectiles
                     FlameKind.Near => 1.55f,
                     _ => 1.3f
                 };
+                // Сползание вдоль клинка вдвое медленнее прежнего: пламя
+                // меньше «плавает» по лезвию туда-сюда
                 p.Flow = kind switch
                 {
-                    FlameKind.Blade => 0.022f,
-                    FlameKind.Near => 0.015f,
-                    _ => 0.008f
+                    FlameKind.Blade => 0.012f,
+                    FlameKind.Near => 0.008f,
+                    _ => 0.005f
                 };
             }
             return p;
@@ -578,17 +583,19 @@ namespace FrostMelee.Content.Projectiles
                     // Резина (пожелание владельца): тяга к точке на клинке растёт
                     // с расстоянием — у самой кромки пламя сидит туго и густо, а
                     // оторвавшийся хвост не висит по дуге взмаха рядом белых
-                    // языков (flame-1), а пружинит обратно к клинку
+                    // языков (flame-1), а пружинит обратно к клинку. Тяга и
+                    // подхват скорости усилены, болтанка убавлена: огонь в руке
+                    // «плавал» вокруг клинка, а в броске (без якоря) сидит лучше
                     float anchorDist = (anchor - p.Position).Length();
-                    float follow = 1f - (float)System.Math.Exp(-(p.Coupling * 0.55f + anchorDist * 0.022f));
-                    float wobble = (float)System.Math.Sin((p.Age + p.Wobble) * 0.55f) * 1.1f;
+                    float follow = 1f - (float)System.Math.Exp(-(p.Coupling * 0.85f + anchorDist * 0.022f));
+                    float wobble = (float)System.Math.Sin((p.Age + p.Wobble) * 0.55f) * 0.6f;
                     p.Position = Vector2.Lerp(p.Position, anchor, follow)
                         + perp * wobble
                         + p.Velocity * 0.2f;
                     // Далеко от клинка пламя быстро остывает и тает, а не висит
                     if (anchorDist > 44f)
                         p.Temperature = MathHelper.Max(0f, p.Temperature - 0.05f);
-                    p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity, p.Coupling * 0.4f);
+                    p.Velocity = Vector2.Lerp(p.Velocity, bladeVelocity, p.Coupling * 0.55f);
                     p.Rotation = bladeDir.ToRotation() + wobble * 0.04f;
                     float baseStretch = p.Kind switch
                     {
@@ -596,7 +603,7 @@ namespace FrostMelee.Content.Projectiles
                         FlameKind.Near => 1.45f,
                         _ => 1.2f
                     };
-                    p.Stretch = MathHelper.Clamp(baseStretch + bladeVelocity.Length() * 0.07f, 1.2f, 2.8f);
+                    p.Stretch = MathHelper.Clamp(baseStretch + bladeVelocity.Length() * 0.05f, 1.2f, 2.1f);
                 }
                 else
                 {
@@ -710,7 +717,7 @@ namespace FrostMelee.Content.Projectiles
                 float bladeDist = DistanceToBlade(p.Position);
                 float thin = MathHelper.Clamp(1.15f - bladeDist * 0.02f, 0.35f, 1.15f) / (0.55f + 0.45f * stretch);
                 // Ширина дышит бегущей волной вдоль клинка: пламя «течёт» к острию
-                float wave = 0.85f + 0.15f * (float)System.Math.Sin(time * 0.7f - p.Along * 11f + p.Wobble);
+                float wave = 0.9f + 0.1f * (float)System.Math.Sin(time * 0.7f - p.Along * 11f + p.Wobble);
                 ribbonWidths[i] = p.Size * widthScale * wave * thin;
                 float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
                 // Белое — только на полном жаре (степень 2): тело листа синее,
