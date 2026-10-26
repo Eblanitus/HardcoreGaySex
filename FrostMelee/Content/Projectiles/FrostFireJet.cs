@@ -46,7 +46,7 @@ namespace FrostMelee.Content.Projectiles
             // Старая «смерть на возврате тычка» заодно убивала струи взмаха,
             // если игрок сразу после взмаха начинал тычок
 
-            if (Projectile.timeLeft % 2 == 0)
+            if ((int)Projectile.localAI[0] % 3 == 0)
                 // Скорость снаряда — частицам: пламя летит вместе со струёй,
                 // а не остаётся висеть в месте рождения позади взмаха
                 FrostJetFx.EmitJet(Projectile.Center, dir, Projectile.velocity);
