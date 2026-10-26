@@ -12,13 +12,8 @@ namespace FrostMelee.Content.Projectiles
     {
         public override string Texture => "FrostMelee/Items/Frostbrand";
 
-        // След центров для цельной ленты струи (PreDraw): голова — history[0]
-        private const int HistLen = 10;
-        private readonly Vector2[] history = new Vector2[HistLen];
-        private readonly Vector2[] ribbonPoints = new Vector2[HistLen];
-        private readonly float[] ribbonWidths = new float[HistLen];
-        private readonly Color[] ribbonColors = new Color[HistLen];
-        private int histN;
+        // Возраст струи в тиках — по нему FrostJetFx выстраивает все живые
+        // струи владельца в одну общую ленту (localAI[0])
 
         public override void SetDefaults()
         {
@@ -35,6 +30,8 @@ namespace FrostMelee.Content.Projectiles
 
         public override void AI()
         {
+            Projectile.localAI[0]++;
+
             // Кто спавнил, тот задаёт длину струи через ai[0] (тики жизни):
             // встреча — растущую, веер взмаха — короткую. 0 = обычная (SetDefaults)
             if (Projectile.localAI[1] == 0f)
@@ -43,15 +40,6 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.ai[0] > 0f)
                     Projectile.timeLeft = (int)Projectile.ai[0];
             }
-
-            if (histN == 0)
-                for (int k = 0; k < HistLen; k++)
-                    history[k] = Projectile.Center;
-            for (int k = HistLen - 1; k > 0; k--)
-                history[k] = history[k - 1];
-            history[0] = Projectile.Center;
-            if (histN < HistLen)
-                histN++;
 
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             // Досрочной смерти у струи нет: сколько задали при спавне, столько живёт.
@@ -115,61 +103,15 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
 
+            // Тело струи рисует FrostJetFx ОДНОЙ общей лентой через все живые
+            // струи владельца от острия — огоньки закреплены друг за друга
+            // (требование владельца). Здесь — только яркий узелок на этой струе
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
             float fade = Projectile.timeLeft < 5 ? Projectile.timeLeft / 5f : 1f;
-            float pulse = 1f + 0.08f * (float)System.Math.Sin(Main.GameUpdateCount * 0.35f + Projectile.whoAmI * 1.7f);
-            float flicker = 0.85f + 0.15f * (float)System.Math.Sin(Main.GameUpdateCount * 0.5f + Projectile.whoAmI);
-            float reachScale = MathHelper.Clamp(Projectile.ai[0] / 12f, 1f, 2.5f);
-
-            // Цельная струя: лента по следу снаряда — жирная яркая голова и
-            // тающий хвост вместо пары светящихся эллипсов. Частицы
-            // FrostJetFx.EmitJet остаются вокруг искрами и жаром
-            int n = histN;
-            if (n >= 2)
-            {
-                float headW = 11.5f * pulse * (0.9f + 0.1f * reachScale);
-                float time = Main.GameUpdateCount;
-                // Край струи лижет и виляет к хвосту, а не идёт ровным лучом
-                Vector2 side = new Vector2(-dir.Y, dir.X);
-                for (int i = 0; i < n; i++)
-                {
-                    float f = i / (float)(n - 1);   // 0 — голова, 1 — хвост
-                    float wig = (float)System.Math.Sin(i * 1.9f + time * 0.7f + Projectile.whoAmI * 1.3f) * 3.2f * f;
-                    ribbonPoints[i] = history[i] + side * wig;
-                }
-                GraphicsDevice device = Main.graphics.GraphicsDevice;
-                Main.spriteBatch.End();
-                try
-                {
-                    for (int pass = 0; pass < 2; pass++)
-                    {
-                        for (int i = 0; i < n; i++)
-                        {
-                            float f = i / (float)(n - 1);
-                            float lumpy = 0.82f + 0.18f * (float)System.Math.Sin(i * 2.3f + time * 1.1f + Projectile.whoAmI);
-                            ribbonWidths[i] = headW * (1f - f * 0.85f) * lumpy * (pass == 0 ? 1.8f : 0.8f);
-                            // Белое — только жар у головы; тело струи синее
-                            ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.5f * flicker * fade)
-                                : Color.Lerp(
-                                    Color.Lerp(new Color(205, 247, 255), new Color(115, 202, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
-                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.88f * fade);
-                        }
-                        FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
-                    }
-                }
-                finally
-                {
-                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
-                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-                }
-            }
-
-            // Яркое ядро у головы струи
             Vector2 origin = glow.Size() / 2f;
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition + dir * 1f, null,
-                new Color(150, 220, 255) * (0.55f * fade), dir.ToRotation(), origin,
-                new Vector2(10f / glow.Width, 6f / glow.Height), SpriteEffects.None, 0f);
+                new Color(150, 220, 255) * (0.5f * fade), dir.ToRotation(), origin,
+                new Vector2(9f / glow.Width, 5.5f / glow.Height), SpriteEffects.None, 0f);
             return false;
         }
     }

@@ -43,6 +43,11 @@ namespace FrostMelee.Content.Projectiles
             public float Coupling;
             public float Stretch;
             public float Flow;
+            // Цепочка: предыдущая частица того же потока. Между соседями
+            // рендер тянет резиновые нити (DrawLinks) — огоньки закреплены
+            // друг за друга, а не рассыпаются по отдельности
+            public Particle Link;
+            public bool Dead;
         }
 
         private static readonly List<Particle> particles = new();
@@ -74,6 +79,10 @@ namespace FrostMelee.Content.Projectiles
         private static readonly Color[] ribbonColors = new Color[96];
         private static readonly List<Particle> sheetMain = new();
         private static readonly List<Particle> sheetHalo = new();
+        private static Particle lastJetChain;
+        private static Particle lastLooseChain;
+        private static readonly List<Projectile> streamJets = new();
+        private static int jetTypeCache = -1;
 
         private static Vector2 bladeButt;
         private static Vector2 bladeTip;
@@ -212,6 +221,12 @@ namespace FrostMelee.Content.Projectiles
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
                 + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed);
             Particle p = Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax) * emitSizeScale);
+            if (!anchored)
+            {
+                // Свободные частицы клинка — в общую цепочку (DrawLinks)
+                p.Link = lastLooseChain;
+                lastLooseChain = p;
+            }
             if (anchored)
             {
                 p.Anchored = true;
@@ -255,7 +270,10 @@ namespace FrostMelee.Content.Projectiles
             Vector2 velocity = dir * Main.rand.NextFloat(speedMin, speedMax)
                 + perp * Main.rand.NextFloat(-sideSpeed, sideSpeed)
                 + baseVelocity * inherit;
-            Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax));
+            Particle p = Add(position, velocity, kind, Main.rand.Next(lifeMin, lifeMax), Main.rand.NextFloat(sizeMin, sizeMax));
+            // Каждая частица струи закреплена за предыдущей (DrawLinks)
+            p.Link = lastJetChain;
+            lastJetChain = p;
         }
 
         private static Particle Add(Vector2 position, Vector2 velocity, FlameKind kind, int life, float size)
@@ -308,6 +326,7 @@ namespace FrostMelee.Content.Projectiles
                 index = particles.FindIndex(p => p.Kind == FlameKind.Near);
             if (index < 0)
                 index = 0;
+            particles[index].Dead = true;
             particles.RemoveAt(index);
         }
 
@@ -462,6 +481,7 @@ namespace FrostMelee.Content.Projectiles
                 p.Age += cleanup ? 3 : 1;
                 if (p.Age >= p.Life)
                 {
+                    p.Dead = true;
                     particles.RemoveAt(i);
                     continue;
                 }
@@ -689,17 +709,125 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
+        private static Color ParticleHeatColor(Particle p, float alpha)
+        {
+            float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
+            return Color.Lerp(new Color(32, 112, 245), new Color(168, 234, 255),
+                (float)System.Math.Pow(heat, 1.4f)) * alpha;
+        }
+
+        // Резиновые нити между соседями цепочек: свободные частицы закреплены
+        // друг за друга, пламя не рассыпается на отдельные огоньки (главное
+        // требование владельца). Растянутая нить тоньше и тусклее, совсем
+        // растянутая не рисуется — порвалась
+        private static void DrawLinks(GraphicsDevice device)
+        {
+            foreach (Particle p in particles)
+            {
+                Particle q = p.Link;
+                if (q == null || q.Dead || p.Kind == FlameKind.Spark)
+                    continue;
+                float dist = Vector2.Distance(p.Position, q.Position);
+                if (dist < 2f || dist > 150f)
+                    continue;
+                float stretch = MathHelper.Clamp(dist / 34f, 1f, 4f);
+                float oldest = System.Math.Max(p.Age / (float)p.Life, q.Age / (float)q.Life);
+                float fade = MathHelper.Clamp((1f - oldest) * 2f, 0f, 1f) / stretch;
+                if (fade < 0.04f)
+                    continue;
+                ribbonPoints[0] = q.Position;
+                ribbonPoints[1] = (p.Position + q.Position) * 0.5f + new Vector2(0f, -2.5f);
+                ribbonPoints[2] = p.Position;
+                ribbonWidths[0] = q.Size * 24f / stretch;
+                ribbonWidths[1] = (p.Size + q.Size) * 13f / stretch;
+                ribbonWidths[2] = p.Size * 24f / stretch;
+                ribbonColors[0] = ParticleHeatColor(q, 0.8f * fade);
+                ribbonColors[1] = ParticleHeatColor(p, 0.65f * fade);
+                ribbonColors[2] = ParticleHeatColor(p, 0.8f * fade);
+                FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
+            }
+        }
+
+        // Все живые струи владельца — ОДНА лента от острия через их центры от
+        // молодой к старой (localAI[0] — возраст): огоньки закреплены друг за
+        // друга и за клинок, а не летят отдельными кометами. Растянутые
+        // места ленты тоньше и тусклее — резина
+        private static void DrawJetStreams(GraphicsDevice device)
+        {
+            if (jetTypeCache < 0)
+                jetTypeCache = ModContent.ProjectileType<FrostFireJet>();
+            streamJets.Clear();
+            foreach (Projectile pr in Main.projectile)
+                if (pr.active && pr.type == jetTypeCache)
+                    streamJets.Add(pr);
+            if (streamJets.Count == 0)
+                return;
+            streamJets.Sort((a, b) => a.owner != b.owner
+                ? a.owner.CompareTo(b.owner)
+                : a.localAI[0].CompareTo(b.localAI[0]));
+
+            float time = Main.GameUpdateCount;
+            int s = 0;
+            while (s < streamJets.Count)
+            {
+                int e = s + 1;
+                while (e < streamJets.Count && streamJets[e].owner == streamJets[s].owner)
+                    e++;
+
+                int idx = 0;
+                bool anchoredToBlade = streamJets[s].owner == Main.myPlayer && bladeLineValid
+                    && Main.GameUpdateCount - bladeFrame <= BladeGraceTicks;
+                if (anchoredToBlade)
+                    ribbonPoints[idx++] = bladeTip;
+                else if (e - s == 1)
+                    ribbonPoints[idx++] = streamJets[s].Center - streamJets[s].velocity * 2.5f;
+                for (int j = s; j < e && idx < ribbonPoints.Length; j++)
+                    ribbonPoints[idx++] = streamJets[j].Center;
+
+                if (idx >= 2)
+                {
+                    for (int pass = 0; pass < 2; pass++)
+                    {
+                        for (int i = 0; i < idx; i++)
+                        {
+                            float f = i / (float)(idx - 1);
+                            float gap = 0f;
+                            int cnt = 0;
+                            if (i > 0) { gap += Vector2.Distance(ribbonPoints[i], ribbonPoints[i - 1]); cnt++; }
+                            if (i < idx - 1) { gap += Vector2.Distance(ribbonPoints[i], ribbonPoints[i + 1]); cnt++; }
+                            gap /= System.Math.Max(1, cnt);
+                            float stretch = MathHelper.Clamp(gap / 26f, 0.7f, 3.5f);
+                            float lumpy = 0.85f + 0.15f * (float)System.Math.Sin(time * 1.2f + i * 2.1f);
+                            ribbonWidths[i] = MathHelper.Lerp(13f, 3f, f) * lumpy
+                                / (0.6f + 0.4f * stretch) * (pass == 0 ? 1.8f : 0.8f);
+                            float dim = 1f / (0.65f + 0.35f * stretch);
+                            ribbonColors[i] = pass == 0
+                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.5f * dim)
+                                : Color.Lerp(
+                                    Color.Lerp(new Color(205, 247, 255), new Color(115, 202, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
+                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.9f * dim);
+                        }
+                        FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
+                    }
+                }
+                s = e;
+            }
+        }
+
         public override void PostDrawTiles()
         {
-            if (Main.dedServ || (particles.Count == 0 && tongues.Count == 0))
+            if (Main.dedServ)
                 return;
 
             // Сначала цельное пламя лентами (батч на входе закрыт): языки на
-            // врагах и вспышках, лист по клинку, язычки свободных частиц
+            // врагах и вспышках, общая лента струй, лист по клинку, нити
+            // между частицами, язычки свободных частиц
             GraphicsDevice device = Main.graphics.GraphicsDevice;
             foreach (Tongue t in tongues)
                 DrawTongue(device, t);
+            DrawJetStreams(device);
             DrawBladeSheets(device);
+            DrawLinks(device);
             DrawLooseLicks(device);
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
@@ -770,6 +898,9 @@ namespace FrostMelee.Content.Projectiles
         {
             particles.Clear();
             tongues.Clear();
+            streamJets.Clear();
+            lastJetChain = null;
+            lastLooseChain = null;
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
         }
@@ -778,6 +909,9 @@ namespace FrostMelee.Content.Projectiles
         {
             particles.Clear();
             tongues.Clear();
+            streamJets.Clear();
+            lastJetChain = null;
+            lastLooseChain = null;
             bladeLineValid = false;
             bladeVelocity = Vector2.Zero;
             FlameRibbon.Unload();
