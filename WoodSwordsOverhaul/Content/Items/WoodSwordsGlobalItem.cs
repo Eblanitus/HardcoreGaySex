@@ -71,7 +71,7 @@ namespace WoodSwordsOverhaul.Content.Items
 			int arcType = ModContent.ProjectileType<WoodSwordArcProjectile>();
 			float adjustedItemScale = player.GetAdjustedItemScale(item);
 			// Дуга — единственный удар взмаха: полный урон взмаха (со стихией оружия)
-			// и полное отбрасывание. К краю дуги они падают — см. WoodSwordArcProjectile.ModifyHitNPC
+			// и полное отбрасывание, без спада — хитбокс равен самой палке (BladeHit)
 			int arcDamage = Math.Max(1, (int)Math.Round(damage * Content.StickTypes.SwingDamageMult(item)));
 
 			// Размер дуги — от реальной длины клинка, а не от ширины картинки: у заточек

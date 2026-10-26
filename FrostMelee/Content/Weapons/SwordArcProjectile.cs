@@ -15,13 +15,12 @@ namespace FrostMelee.Content.Weapons
     // на его swept-веер ложится слабый невидимый иней FrostTrailSystem (только Slow).
     // У Фростбранда инея нет вовсе — это фишка копья, а меч огненный.
     // Дуга — единственный удар взмаха (у самого меча хитбокс убран, см. SwordGlobalItem):
-    // бьёт от рукояти до края нарисованной дуги, по каждой цели раз за взмах.
-    // В зоне клинка — полный урон и отбрасывание, дальше к краю они падают до крошечных.
+    // хитбокс — сам нарисованный клинок (BladeHit), дальше острия взмах не бьёт.
     public class SwordArcProjectile : ModProjectile
     {
         public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.Excalibur;
 
-        // === Геометрия нарисованной дуги (по ней же считается хитбокс) ===
+        // === Геометрия нарисованной дуги ===
         // Снята с текстуры Excalibur: кадр 170×170, центр дуги — центр кадра.
         // В игре видна в основном тонкая линия (кадр 3): в текстуре она лежит на радиусе
         // 78..82 px и по углу от -74° (хвост) до +56° (голова, сторона взмаха) от оси снаряда.
@@ -38,16 +37,6 @@ namespace FrostMelee.Content.Weapons
         // Дуга растёт за взмах: масштаб от ArcScaleStart до ArcScaleStart + ArcScaleGrowth (× ai[2])
         private const float ArcScaleStart = 1f;
         private const float ArcScaleGrowth = 0.6f;
-
-        // Урон и отбрасывание на краю полностью раскрытой дуги (доля от полных).
-        // Отброс на краю заметный (дуга = контроль, не урон).
-        private const float EdgeDamageMult = 0.15f;
-        private const float EdgeKnockbackMult = 0.2f;
-        // Урон падает от полного до EdgeDamageMult за первую долю промежутка «клинок → внешний край»
-        // (smoothstep), дальше держится на EdgeDamageMult. Отброс по-прежнему спадает линейно.
-        private const float DamageFalloffSpan = 0.28f;
-        // Нижняя граница урона дуги до защиты врага, в единицах урона: дробных/нулевых значений нет
-        private const float MinEdgeDamage = 1f;
 
         // Насколько кисть в ванильном взмахе отстоит от центра игрока (до ~15px):
         // остриё дотягивается на длину клинка плюс это смещение
@@ -933,12 +922,12 @@ namespace FrostMelee.Content.Weapons
                 DrawTrailRibbon(player, glow, SwingEnv(Projectile.localAI[0], maxAnim), core, tail, edge);
         }
 
-        // Углы контрольного сектора на момент time (+ центр/радиус серверного
-        // запасного пути): позади клинка и только в уже заметённой части взмаха —
+        // Углы заметённого сектора на момент time (+ центр серверного запасного
+        // пути в BladeHit): позади клинка и только в уже заметённой части взмаха —
         // голова на клинке, хвост не дальше
         // ArcAngleBack+ArcAngleFront назад и не раньше начала взмаха. Раньше
         // сектор стоял головой на +56° ВПЕРЕДИ клинка и бил туда, где клинок
-        // ещё не был; полный урон теперь даёт только сама полоса клинка (TryHit)
+        // ещё не был; бьёт теперь только сам клинок (BladeHit)
         private void GetHitSector(Player player, float time, out Vector2 center, out float outer, out float startAngle, out float sweep) {
             GetArcState(player, time, out float rotation, out float scale);
             // Центр — живая позиция игрока, а не Projectile.Center: тот ставится в AI
@@ -968,7 +957,7 @@ namespace FrostMelee.Content.Weapons
         // Настоящая длина клинка (приклад → остриё) в мире сейчас. БЕЗ масштаба
         // предмета: SwingBladeLayer и запись клинка (fbHistRadius) живут в
         // масштабе 1 — хитбокс обязан совпадать с нарисованным остриём, а не с
-        // BladeReach из спавна. 0 — геометрии нет (выделенный сервер): TryHit
+        // BladeReach из спавна. 0 — геометрии нет (выделенный сервер): BladeHit
         // уходит в запасной сектор, как у копья
         private float BladeLengthNow(Player player) {
             if (Main.dedServ || player.HeldItem.IsAir)
@@ -979,66 +968,30 @@ namespace FrostMelee.Content.Weapons
             return SickleSprite.Get(itemType).Length;
         }
 
-        // Спад от расстояния за кончиком клинка: 0 — как клинком, 1 — край линии дуги
-        private float FalloffEdge(float distance, float reach) => FalloffEdge(distance, reach,
-            LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2]);
-
-        private static float FalloffEdge(float distance, float reach, float maxReach) {
-            if (maxReach <= reach)
-                return 0f;
-            return MathHelper.Clamp((distance - reach) / (maxReach - reach), 0f, 1f);
-        }
-
-        // Внешний радиус контрольной оболочки ОТ КИСТИ сейчас: остриё + прежняя
-        // толщина оболочки (радиус линии от центра минус BladeReach). Оболочка
-        // обязана сидеть на том же центре, что клинок и нарисованная дуга (кисть):
-        // от центра тела получался мёртвый серп сбоку от игрока и перелёт с другой
-        // стороны — хитбокс не совпадал с картинкой (замечание владельца)
-        private float ControlOuterNow(Player player, float bladeLen) {
-            GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
-            return bladeLen + (LineTexOuter * arcScale * BodyDrawScale * LineDrawScale - BladeReach);
-        }
-
-        // Попадание и «краевой» коэффициент урона edge (0 — полный, 1 — минимальный) —
-        // как у копья (SickleArcProjectile.TryHit):
-        // 1) Клинок: заметённый за тик клин от кисти до острия — полный урон.
-        // 2) Контроль дальше острия: сектор позади клинка до края линии, урон падает.
-        // Нет геометрии (сервер) — запасной сектор GetHitSector целиком.
-        private bool TryHit(Rectangle target, out float edge) {
-            edge = 1f;
+        // Попадание взмаха = сам нарисованный клинок: заметённый за тик клин от
+        // кисти до острия (GetBladeWedge). Дальше острия взмах НЕ бьёт вообще:
+        // прежняя контрольная оболочка за остриём (как линия у копья) у мечей
+        // не нарисована ничем — владелец ловил попадания по воздуху за кончиком
+        // клинка («невидимый хитбокс») и велел убрать. Урон поэтому всегда
+        // полный, спада за клинком больше нет.
+        // Нет геометрии (сервер) — запасной сектор от центра не дальше клинка.
+        private bool BladeHit(Rectangle target) {
             Player player = Main.player[Projectile.owner];
-            GetHitSector(player, Projectile.localAI[0], out Vector2 center, out float outer,
-                out float startAngle, out float sweep);
-
             float bladeLen = BladeLengthNow(player);
             if (bladeLen <= 1f) {
-                if (!NearestInWedge(target, center, startAngle, sweep, out float distance, out _) || distance > outer)
-                    return false;
-                edge = FalloffEdge(distance, BladeReach);
-                return true;
+                GetHitSector(player, Projectile.localAI[0], out Vector2 center, out _,
+                    out float startAngle, out float sweep);
+                return NearestInWedge(target, center, startAngle, sweep, out float distance, out _)
+                    && distance <= BladeReach;
             }
 
             GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
-            if (NearestInWedge(target, hand, bladeStart, bladeSweep, out float bladeDist, out _) && bladeDist <= bladeLen) {
-                edge = 0f;
-                return true;
-            }
-
-            // Контроль: оболочка за остриём вокруг кисти в уже заметённой части
-            // сектора (углы — GetHitSector). Цель обязана выступать за остриё
-            float controlOuter = ControlOuterNow(player, bladeLen);
-            if (controlOuter <= bladeLen)
-                return false;
-            if (!NearestInWedge(target, hand, startAngle, sweep, out float dist, out float farthest)
-                || dist > controlOuter || farthest <= bladeLen)
-                return false;
-            float maxReachCenter = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth) * Projectile.ai[2];
-            edge = FalloffEdge(dist, bladeLen, bladeLen + (maxReachCenter - BladeReach));
-            return true;
+            return NearestInWedge(target, hand, bladeStart, bladeSweep, out float bladeDist, out _)
+                && bladeDist <= bladeLen;
         }
 
         public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox) {
-            return TryHit(targetHitbox, out _);
+            return BladeHit(targetHitbox);
         }
 
         private static readonly Vector2[] clipBufferA = new Vector2[16];
@@ -1097,30 +1050,23 @@ namespace FrostMelee.Content.Weapons
             return outCount;
         }
 
-        // Отладка (DebugHitbox): всё от кисти, как настоящий хитбокс: голубая пыль —
-        // остриё по углам контрольного сектора, розовая — край контрольной оболочки,
-        // изумрудная — остриё по клину зоны клинка этого тика
+        // Отладка (DebugHitbox): клин зоны клинка этого тика от кисти — изумрудная
+        // пыль на острие, голубая на середине клинка. Это и есть весь хитбокс
         private void ShowHitbox(Player player) {
-            GetHitSector(player, Projectile.localAI[0], out Vector2 center, out float outer, out float startAngle, out float sweep);
             float bladeLen = BladeLengthNow(player);
             if (bladeLen > 1f) {
                 GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
-                float controlOuter = ControlOuterNow(player, bladeLen);
-                for (int i = 0; i <= 12; i++) {
-                    Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
-                    Dust.NewDustPerfect(hand + dir * bladeLen, DustID.BlueFairy, Vector2.Zero).noGravity = true;
-                    Dust.NewDustPerfect(hand + dir * controlOuter, DustID.Pixie, Vector2.Zero).noGravity = true;
-                }
                 for (int i = 0; i <= 4; i++) {
                     Vector2 dir = (bladeStart + bladeSweep * i / 4f).ToRotationVector2();
                     Dust.NewDustPerfect(hand + dir * bladeLen, DustID.GemEmerald, Vector2.Zero).noGravity = true;
+                    Dust.NewDustPerfect(hand + dir * bladeLen * 0.5f, DustID.BlueFairy, Vector2.Zero).noGravity = true;
                 }
             }
             else {
+                GetHitSector(player, Projectile.localAI[0], out Vector2 center, out _, out float startAngle, out float sweep);
                 for (int i = 0; i <= 12; i++) {
                     Vector2 dir = (startAngle + sweep * i / 12f).ToRotationVector2();
                     Dust.NewDustPerfect(center + dir * BladeReach, DustID.BlueFairy, Vector2.Zero).noGravity = true;
-                    Dust.NewDustPerfect(center + dir * outer, DustID.Pixie, Vector2.Zero).noGravity = true;
                 }
             }
         }
@@ -1133,16 +1079,8 @@ namespace FrostMelee.Content.Weapons
         }
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers) {
-            // Урон и отбрасывание от зоны: клинком — как мечом, дальше острия к краю линии — до крошечных
-            TryHit(target.Hitbox, out float edge);
-            // Урон: крутой спад сразу за клинком, дальше крошечный; защита вычтется уже после этого
-            float falloff = MathHelper.Clamp(edge / DamageFalloffSpan, 0f, 1f);
-            falloff = falloff * falloff * (3f - 2f * falloff);
-            float damageMult = MathHelper.Lerp(1f, EdgeDamageMult, falloff);
-            if (Projectile.damage > 0)
-                damageMult = Math.Max(damageMult, Math.Min(1f, MinEdgeDamage / Projectile.damage));
-            modifiers.SourceDamage *= damageMult;
-            modifiers.Knockback *= MathHelper.Lerp(1f, EdgeKnockbackMult, edge);
+            // Хитбокс = сам клинок (BladeHit): урон и отбрасывание всегда полные,
+            // спада за остриём нет — дальше острия взмах не бьёт вообще.
             // Отталкиваем от игрока в любую сторону, в том числе за спиной. Раньше это
             // стояло в OnHitNPC и не работало: там hit — копия, удар уже нанесён.
             modifiers.HitDirectionOverride = (Main.player[Projectile.owner].Center.X < target.Center.X) ? 1 : (-1);
