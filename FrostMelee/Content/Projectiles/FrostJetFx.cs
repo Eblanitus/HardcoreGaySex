@@ -377,7 +377,7 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 if (!Weapons.FrostFireSystem.IsBurning(npc))
                     continue;
-                int desired = MathHelper.Clamp(npc.width / 26, 1, 3);
+                int desired = (int)MathHelper.Clamp(npc.width / 26, 1, 3);
                 int have = 0;
                 foreach (Tongue t in tongues)
                     if (t.NpcIndex == i)
