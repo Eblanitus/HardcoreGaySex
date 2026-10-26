@@ -125,7 +125,9 @@ namespace FrostMelee.Content.Projectiles
                 bladeLineValid = true;
             }
 
-            int bladeCount = System.Math.Max(1, (int)System.Math.Round(4f * intensity));
+            // 3, а не 4: частицы теперь соединены лентами и перемычками, и
+            // прежняя плотность слипалась в сплошное белое облако (flame-7)
+            int bladeCount = System.Math.Max(1, (int)System.Math.Round(3f * intensity));
             for (int i = 0; i < bladeCount; i++)
             {
                 float along = MathHelper.Clamp((i + 0.5f) / bladeCount + Main.rand.NextFloat(-0.07f, 0.07f), 0.02f, 0.96f);
@@ -139,12 +141,10 @@ namespace FrostMelee.Content.Projectiles
                 EmitLineParticle(butt, tip, dir, perp, FlameKind.Near, along, 0f, 0.14f, 0.12f, 7, 11, 0.28f, 0.38f, anchored);
             }
 
-            int haloCount = intensity >= 0.55f ? 2 : 1;
-            for (int i = 0; i < haloCount; i++)
-            {
-                float along = haloCount == 2 ? (i == 0 ? 0.18f : 0.82f) : 0.5f;
-                EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, along, 0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, anchored);
-            }
+            // Ореол — одна частица в тик в случайном месте клинка: лист
+            // ореола собирается из живых за ~12 тиков по всей длине
+            EmitLineParticle(butt, tip, dir, perp, FlameKind.Halo, Main.rand.NextFloat(0.15f, 0.85f),
+                0.05f, 0.3f, 0.22f, 9, 14, 0.36f, 0.48f, anchored);
 
             if (intensity >= 0.35f)
             {
@@ -564,7 +564,7 @@ namespace FrostMelee.Content.Projectiles
                 return;
             for (int pass = 0; pass < 2; pass++)
             {
-                float wMul = pass == 0 ? 1.85f : 0.85f;
+                float wMul = pass == 0 ? 1.65f : 0.8f;
                 for (int k = 0; k < n; k++)
                 {
                     float f = k / (float)(n - 1);
@@ -580,8 +580,8 @@ namespace FrostMelee.Content.Projectiles
                     ribbonColors[k] = pass == 0
                         ? Color.Lerp(new Color(28, 105, 245), new Color(8, 34, 130), f) * (0.55f * env)
                         : Color.Lerp(
-                            Color.Lerp(new Color(205, 247, 255), new Color(110, 200, 255), MathHelper.Clamp(f * 3.2f, 0f, 1f)),
-                            new Color(30, 110, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.85f * env);
+                            Color.Lerp(new Color(190, 240, 255), new Color(110, 200, 255), MathHelper.Clamp(f * 3.2f, 0f, 1f)),
+                            new Color(30, 110, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.76f * env);
                 }
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
             }
@@ -604,8 +604,8 @@ namespace FrostMelee.Content.Projectiles
                 else if (p.Kind == FlameKind.Blade || p.Kind == FlameKind.Near)
                     sheetMain.Add(p);
             }
-            DrawSheet(device, sheetHalo, 58f, 0.34f);
-            DrawSheet(device, sheetMain, 34f, 0.95f);
+            DrawSheet(device, sheetHalo, 42f, 0.24f);
+            DrawSheet(device, sheetMain, 25f, 0.82f);
         }
 
         private static void DrawSheet(GraphicsDevice device, List<Particle> list, float widthScale, float strength)
@@ -636,8 +636,9 @@ namespace FrostMelee.Content.Projectiles
                 float wave = 0.85f + 0.15f * (float)System.Math.Sin(time * 0.7f - p.Along * 11f + p.Wobble);
                 ribbonWidths[i] = p.Size * widthScale * wave * thin;
                 float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
-                // Белое — только на полном жаре (степень 1.5): тело листа синее
-                Color c = Color.Lerp(new Color(24, 98, 238), new Color(168, 234, 255), (float)System.Math.Pow(heat, 1.5f));
+                // Белое — только на полном жаре (степень 2): тело листа синее,
+                // иначе слои складываются в белое облако (flame-7)
+                Color c = Color.Lerp(new Color(24, 98, 238), new Color(152, 226, 255), (float)System.Math.Pow(heat, 2f));
                 float t = p.Age / (float)p.Life;
                 float dim = MathHelper.Clamp(1.1f - bladeDist * 0.016f, 0.25f, 1f) / (0.6f + 0.4f * stretch);
                 ribbonColors[i] = c * (strength * dim * MathHelper.Clamp((1f - t) * 2f, 0f, 1f));
@@ -670,23 +671,25 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 Vector2 up = (p.Velocity * 0.65f + new Vector2(0f, -0.85f)).SafeNormalize(new Vector2(0f, -1f));
                 Vector2 perp = new Vector2(-up.Y, up.X);
-                float len = 6f + p.Size * 44f;
+                float len = 5f + p.Size * 40f;
                 // Разброс размеров: одинаковые язычки стояли гирляндой свечек
                 float sizeJitter = 0.8f + 0.35f * (float)System.Math.Sin(p.Rotation * 13.7f);
                 float wob = (float)System.Math.Sin(time * 0.5f + p.Rotation * 7f + p.Age * 0.4f) * 1.6f;
                 float t = p.Age / (float)p.Life;
                 float fade = MathHelper.Clamp((1f - t) * 1.8f, 0f, 1f) * MathHelper.Clamp(t * 6f + 0.25f, 0f, 1f);
                 float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
-                Color hot = Color.Lerp(new Color(32, 112, 245), new Color(168, 234, 255), (float)System.Math.Pow(heat, 1.4f));
+                Color hot = Color.Lerp(new Color(32, 112, 245), new Color(152, 226, 255), (float)System.Math.Pow(heat, 2f));
                 Color cold = Color.Lerp(new Color(8, 34, 130), new Color(40, 125, 250), heat);
                 ribbonPoints[0] = p.Position - up * len * 0.35f;
                 ribbonPoints[1] = p.Position + perp * wob * 0.4f;
                 ribbonPoints[2] = p.Position + up * len * 0.65f + perp * wob;
-                ribbonWidths[0] = p.Size * 17f * sizeJitter;
-                ribbonWidths[1] = p.Size * 27f * sizeJitter;
+                // Узкие: кончики должны торчать из массы языками, а не
+                // добавляться к ней круглыми пятнами облака (flame-7)
+                ribbonWidths[0] = p.Size * 12f * sizeJitter;
+                ribbonWidths[1] = p.Size * 19f * sizeJitter;
                 ribbonWidths[2] = 1f;
-                ribbonColors[0] = hot * (0.78f * fade);
-                ribbonColors[1] = hot * (0.62f * fade);
+                ribbonColors[0] = hot * (0.7f * fade);
+                ribbonColors[1] = hot * (0.55f * fade);
                 ribbonColors[2] = cold * (0.5f * fade);
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
             }
@@ -695,8 +698,8 @@ namespace FrostMelee.Content.Projectiles
         private static Color ParticleHeatColor(Particle p, float alpha)
         {
             float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
-            return Color.Lerp(new Color(32, 112, 245), new Color(168, 234, 255),
-                (float)System.Math.Pow(heat, 1.4f)) * alpha;
+            return Color.Lerp(new Color(32, 112, 245), new Color(152, 226, 255),
+                (float)System.Math.Pow(heat, 2f)) * alpha;
         }
 
         // Соседние частицы сливаются в одну массу пламени: между близкими
@@ -719,22 +722,24 @@ namespace FrostMelee.Content.Projectiles
                     if (q.Anchored || q.Kind == FlameKind.Spark)
                         continue;
                     float dist = Vector2.Distance(p.Position, q.Position);
-                    if (dist < 3f || dist > 46f)
+                    if (dist < 3f || dist > 40f)
                         continue;
                     float oldest = System.Math.Max(p.Age / (float)p.Life, q.Age / (float)q.Life);
-                    float fade = MathHelper.Clamp((1f - oldest) * 2f, 0f, 1f) * (1f - dist / 46f);
+                    float fade = MathHelper.Clamp((1f - oldest) * 2f, 0f, 1f) * (1f - dist / 40f);
                     if (fade < 0.05f)
                         continue;
-                    float wdt = (p.Size + q.Size) * 30f;
+                    // Перемычка — только заполнитель щелей: тоньше сгустков и
+                    // заметно тусклее их, иначе масса слипается в вату (flame-7)
+                    float wdt = (p.Size + q.Size) * 22f;
                     ribbonPoints[0] = q.Position;
                     ribbonPoints[1] = (p.Position + q.Position) * 0.5f + new Vector2(0f, -2f);
                     ribbonPoints[2] = p.Position;
                     ribbonWidths[0] = wdt;
                     ribbonWidths[1] = wdt * 1.05f;
                     ribbonWidths[2] = wdt;
-                    ribbonColors[0] = ParticleHeatColor(q, 0.34f * fade);
-                    ribbonColors[1] = ParticleHeatColor(p, 0.3f * fade);
-                    ribbonColors[2] = ParticleHeatColor(p, 0.34f * fade);
+                    ribbonColors[0] = ParticleHeatColor(q, 0.16f * fade);
+                    ribbonColors[1] = ParticleHeatColor(p, 0.14f * fade);
+                    ribbonColors[2] = ParticleHeatColor(p, 0.16f * fade);
                     FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
                     drawn++;
                 }
@@ -817,14 +822,14 @@ namespace FrostMelee.Content.Projectiles
                             gap /= System.Math.Max(1, cnt);
                             float stretch = MathHelper.Clamp(gap / 20f, 0.7f, 3.5f);
                             float lumpy = 0.85f + 0.15f * (float)System.Math.Sin(time * 1.2f + i * 1.4f);
-                            ribbonWidths[i] = MathHelper.Lerp(14f, 3.5f, f) * lumpy
-                                / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonWidths[i] = MathHelper.Lerp(11.5f, 3f, f) * lumpy
+                                / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.7f : 0.75f);
                             float dim = 1f / (0.6f + 0.4f * stretch);
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.5f * dim)
+                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.42f * dim)
                                 : Color.Lerp(
-                                    Color.Lerp(new Color(205, 247, 255), new Color(115, 202, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
-                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.9f * dim);
+                                    Color.Lerp(new Color(190, 240, 255), new Color(115, 202, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
+                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.8f * dim);
                         }
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
                     }
@@ -902,8 +907,8 @@ namespace FrostMelee.Content.Projectiles
                 // спрайтов и давали «гирлянду свечек» по дуге взмаха (flame-1).
                 // Свободные тоже тише: яркие точки спрайтов на фоне перемычек
                 // читались звёздочками созвездий (flame-6)
-                float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.22f : 0.2f);
-                float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.35f : 0.32f);
+                float bodyDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.15f : 0.12f);
+                float coreDim = p.Kind == FlameKind.Spark ? 1f : (p.Anchored ? 0.28f : 0.24f);
 
                 Main.EntitySpriteDraw(glow, p.Position - Main.screenPosition, null,
                     outer * (outerAlpha * fade * bodyDim), p.Rotation, origin, scaleVec, SpriteEffects.None, 0f);
