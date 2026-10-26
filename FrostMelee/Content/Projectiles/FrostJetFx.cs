@@ -186,10 +186,11 @@ namespace FrostMelee.Content.Projectiles
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 perp = new Vector2(-dir.Y, dir.X);
 
+            // Частиц меньше, чем раньше: тело струи теперь несёт общая лента
+            // потока, частицы — только фактура и жар вокруг неё. Прежняя
+            // плотность вместе с лентой и перемычками давала белое облако
             EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.02f, 0.06f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
-            EmitJetParticle(center, dir, perp, FlameKind.Blade, -0.01f, 0.05f, 0.09f, 6, 9, 0.26f, 0.36f, baseVelocity);
             EmitJetParticle(center, dir, perp, FlameKind.Near, 0f, 0.15f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
-            EmitJetParticle(center, dir, perp, FlameKind.Near, 0.04f, 0.2f, 0.12f, 7, 10, 0.28f, 0.38f, baseVelocity);
             EmitJetParticle(center, dir, perp, FlameKind.Halo, 0.05f, 0.35f, 0.22f, 9, 13, 0.36f, 0.48f, baseVelocity);
 
             if (Main.rand.NextFloat() < 0.5f)
@@ -704,6 +705,17 @@ namespace FrostMelee.Content.Projectiles
                 (float)System.Math.Pow(heat, 2f)) * alpha;
         }
 
+        // Цвет соединений: заметно синее сгустков. Перемычек много и они
+        // складываются друг на друга — с белым верхом градиента сумма
+        // выгорала в белое облако/кнут (flame-9), а синяя масса остаётся
+        // холодным пламенем даже в несколько слоёв
+        private static Color WebColor(Particle p, float alpha)
+        {
+            float heat = MathHelper.Clamp(p.Temperature, 0f, 1f);
+            return Color.Lerp(new Color(26, 100, 240), new Color(118, 202, 255),
+                (float)System.Math.Pow(heat, 2f)) * alpha;
+        }
+
         // Соединения — ГЛАВНОЕ тело пламени (требование владельца): между
         // близкими частицами тянутся широкие яркие перемычки, не хуже самих
         // сгустков; сгустки и спрайты поверх наоборот приглушены, чтобы
@@ -737,16 +749,16 @@ namespace FrostMelee.Content.Projectiles
                     if (fade < 0.05f)
                         continue;
                     // Длинная перемычка чуть тоньше, но остаётся видимой жилой
-                    float wdt = (p.Size + q.Size) * 36f * (1.1f - dist / 54f * 0.5f);
+                    float wdt = (p.Size + q.Size) * 30f * (1.1f - dist / 54f * 0.5f);
                     ribbonPoints[0] = q.Position;
                     ribbonPoints[1] = (p.Position + q.Position) * 0.5f + new Vector2(0f, -2f);
                     ribbonPoints[2] = p.Position;
                     ribbonWidths[0] = wdt;
                     ribbonWidths[1] = wdt * 1.05f;
                     ribbonWidths[2] = wdt;
-                    ribbonColors[0] = ParticleHeatColor(q, 0.5f * fade);
-                    ribbonColors[1] = ParticleHeatColor(p, 0.6f * fade);
-                    ribbonColors[2] = ParticleHeatColor(p, 0.5f * fade);
+                    ribbonColors[0] = WebColor(q, 0.3f * fade);
+                    ribbonColors[1] = WebColor(p, 0.36f * fade);
+                    ribbonColors[2] = WebColor(p, 0.3f * fade);
                     FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, 3);
                     drawn++;
                 }
@@ -833,10 +845,10 @@ namespace FrostMelee.Content.Projectiles
                                 / (0.75f + 0.25f * stretch) * (pass == 0 ? 1.7f : 0.75f);
                             float dim = 1f / (0.6f + 0.4f * stretch);
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.42f * dim)
+                                ? Color.Lerp(new Color(32, 112, 245), new Color(8, 34, 130), f) * (0.36f * dim)
                                 : Color.Lerp(
-                                    Color.Lerp(new Color(190, 240, 255), new Color(115, 202, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
-                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.8f * dim);
+                                    Color.Lerp(new Color(168, 232, 255), new Color(112, 200, 255), MathHelper.Clamp(f * 3f, 0f, 1f)),
+                                    new Color(35, 118, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.62f * dim);
                         }
                         FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, idx);
                     }
