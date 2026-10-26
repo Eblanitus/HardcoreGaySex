@@ -68,6 +68,7 @@ namespace FrostMelee.Content.Projectiles
             public float Width;
             public int NpcIndex = -1;
             public float Across;
+            public float Down;      // где по высоте тела врага сидит основание (0 — верх, 1 — низ)
             public float Strength = 1f;
             public int NpcType = -1;   // слот NPC мог занять новый враг — языки на него не прыгают
         }
@@ -488,22 +489,57 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        private static Vector2 NpcTongueBase(NPC npc, float across)
-            => new Vector2(npc.position.X + npc.width * across, npc.position.Y + npc.height * 0.3f);
+        // Огонь на враге — единственный знак горения теперь (ванильный
+        // визуал убран), поэтому ядрёность действует на него мягче, чем на
+        // клинок: на 50% языки были почти не видны на крупных тёмных
+        // врагах (Дирклопс на скрине владельца). Настройки 0 это не
+        // касается — UpdateTongues при нуле языков не держит вовсе
+        private static float NpcBurnSizeScale
+            => MathHelper.Lerp(0.82f, FrostMeleeConfigDefaults.FireSizeScale, 0.55f);
+        private static float NpcBurnHeatScale
+            => FrostMeleeConfigDefaults.FireIntensityScale <= 0f
+                ? 0f
+                : MathHelper.Lerp(0.78f, FrostMeleeConfigDefaults.FireHeatScale, 0.65f);
+
+        // Общий размер тела: высокие узкие враги по одной ширине хитбокса
+        // получали слишком мало и слишком мелкие языки
+        private static float NpcBodySize(NPC npc)
+            => (float)System.Math.Sqrt((double)System.Math.Max(1, npc.width) * System.Math.Max(1, npc.height));
+
+        private static Vector2 NpcTongueBase(NPC npc, float across, float down)
+        {
+            // Видимое тело часто заметно шире хитбокса (у Дирклопса
+            // спрайт ~180 px при хитбоксе 60), поэтому основания
+            // раскладываем шире хитбокса — по общему размеру тела, но без
+            // залезания на прозрачные края больших текстур
+            float spread = MathHelper.Clamp(
+                System.Math.Max(npc.width, NpcBodySize(npc) * 1.2f),
+                npc.width, System.Math.Max(npc.width, 180f));
+            return new Vector2(
+                npc.Center.X + (across - 0.5f) * spread,
+                npc.position.Y + npc.height * down);
+        }
 
         private static void SpawnNpcTongue(NPC npc, float across)
         {
+            // Основания — по телу (от середины книзу), а не только у
+            // макушки: длины хватает дотянуться от основания до верха
+            // врага и выше, пламя лижет тело, а не торчит «чёлкой»
+            float down = Main.rand.NextFloat(0.42f, 0.78f);
             Tongue t = new Tongue
             {
                 NpcIndex = npc.whoAmI,
                 NpcType = npc.type,
                 Across = MathHelper.Clamp(across, 0.1f, 0.9f),
+                Down = down,
                 Phase = Main.rand.NextFloat(MathHelper.TwoPi),
-                Length = MathHelper.Clamp((npc.height * 0.85f + 16f) * Main.rand.NextFloat(0.75f, 1.15f), 26f, 115f),
-                Width = MathHelper.Clamp(npc.width * 0.42f * Main.rand.NextFloat(0.8f, 1.2f), 11f, 42f),
+                Length = MathHelper.Clamp((down + 0.38f) * npc.height * Main.rand.NextFloat(0.9f, 1.18f), 36f, 180f),
+                Width = MathHelper.Clamp(
+                    System.Math.Max(npc.width * 0.42f, NpcBodySize(npc) * 0.3f) * Main.rand.NextFloat(0.85f, 1.2f),
+                    13f, 48f),
                 Strength = 0f // разгорится плавно в UpdateTongues
             };
-            t.Base = NpcTongueBase(npc, t.Across);
+            t.Base = NpcTongueBase(npc, t.Across, t.Down);
             for (int k = 0; k < t.Nodes.Length; k++)
                 t.Nodes[k] = t.Base + new Vector2(0f, -t.Length * 0.3f * k / (t.Nodes.Length - 1));
             tongues.Add(t);
@@ -539,15 +575,20 @@ namespace FrostMelee.Content.Projectiles
                 // Frostburn подавлен вместе с пылью тем же хуком
                 if (pass == 0)
                     Lighting.AddLight(npc.Center,
-                        new Vector3(0.08f, 0.42f, 0.8f) * FrostMeleeConfigDefaults.FireHeatScale);
-                // Сколько языков держит враг — ядрёность, но минимум один,
-                // пока настройка не 0: ванильного эффекта больше нет, и
-                // горящий враг без единого языка выглядел бы негорящим.
-                // Лишние при убавлении настройки убираем сразу
+                        new Vector3(0.09f, 0.5f, 0.9f) * NpcBurnHeatScale);
+                // Сколько языков держит враг — по общему размеру тела, а не
+                // только по ширине хитбокса: высокий узкий босс по ширине
+                // получал один язык на всё тело. Ядрёность — с мягким
+                // полом (NpcBurn*), но минимум один язык, пока настройка
+                // не 0: ванильного эффекта больше нет, и горящий враг без
+                // единого языка выглядел бы негорящим. Лишние при
+                // убавлении настройки убираем сразу
+                int baseDesired = (int)MathHelper.Clamp((float)System.Math.Round(
+                    System.Math.Max(NpcBodySize(npc), npc.width * 0.62f) / 25f), 1f, 4f);
                 int desired = fireAmount <= 0f
                     ? 0
-                    : System.Math.Max(1, (int)System.Math.Round(
-                        MathHelper.Clamp(npc.width / 26, 1, 3) * fireAmount));
+                    : System.Math.Min(5, System.Math.Max(1, (int)System.Math.Round(
+                        baseDesired * (0.45f + 0.55f * fireAmount))));
                 int have = 0;
                 foreach (Tongue t in tongues)
                     if (t.NpcIndex == i)
@@ -581,7 +622,7 @@ namespace FrostMelee.Content.Projectiles
                         continue;
                     }
                     if (same)
-                        t.Base = NpcTongueBase(npc, t.Across);
+                        t.Base = NpcTongueBase(npc, t.Across, t.Down);
                     t.GrowDir = new Vector2(0f, -1f);
                 }
                 else
@@ -604,7 +645,7 @@ namespace FrostMelee.Content.Projectiles
                 // свободных языков вспышки длину не масштабируем: она
                 // показывает зону урона взрыва
                 float effLen = t.Length * grow * shrink * breathe * (0.35f + 0.65f * t.Strength)
-                    * (t.NpcIndex >= 0 ? FrostMeleeConfigDefaults.FireSizeScale : 1f);
+                    * (t.NpcIndex >= 0 ? NpcBurnSizeScale : 1f);
                 int n = t.Nodes.Length;
                 float seg = effLen / (n - 1);
                 t.Nodes[0] = t.Base;
@@ -732,21 +773,34 @@ namespace FrostMelee.Content.Projectiles
 
         // Один язык двумя проходами: широкая тёмно-синяя оболочка и яркое
         // бело-голубое ядро поверх. Ширина — колокол: узко у основания,
-        // жирно на трети, в нитку на кончике
+        // жирно на трети, в нитку на кончике. Языки на врагах — единственным
+        // знаком горения, поэтому у них третий, средний проход и цвета
+        // светлее: двух тусклых проходов на тёмном теле врага не видно
         private static void DrawTongue(GraphicsDevice device, Tongue t)
         {
             int n = t.Nodes.Length;
+            bool npcTongue = t.NpcIndex >= 0;
             float time = Main.GameUpdateCount;
             float flick = 0.8f + 0.12f * (float)System.Math.Sin(time * 0.9f + t.Phase * 3f)
                 + 0.08f * (float)System.Math.Sin(time * 2.3f + t.Phase * 7f);
-            float env = t.Strength * flick * FrostMeleeConfigDefaults.FireHeatScale;
-            if (t.NpcIndex < 0)
+            float env = t.Strength * flick
+                * (npcTongue ? NpcBurnHeatScale : FrostMeleeConfigDefaults.FireHeatScale);
+            if (!npcTongue)
                 env *= MathHelper.Clamp((t.Life - t.Age) / 8f, 0f, 1f) * MathHelper.Clamp(t.Age / 3f, 0f, 1f);
             if (env <= 0.02f)
                 return;
-            for (int pass = 0; pass < 2; pass++)
+
+            float sizeScale = npcTongue ? NpcBurnSizeScale : FrostMeleeConfigDefaults.FireSizeScale;
+            Color outerBase = npcTongue ? new Color(48, 145, 255) : new Color(28, 105, 245);
+            Color outerTip = npcTongue ? new Color(18, 76, 210) : new Color(8, 34, 130);
+            Color coreBase = npcTongue ? new Color(212, 248, 255) : new Color(190, 240, 255);
+            Color coreMid = npcTongue ? new Color(125, 214, 255) : new Color(110, 200, 255);
+            Color coreTip = npcTongue ? new Color(52, 152, 255) : new Color(30, 110, 250);
+            int passes = npcTongue ? 3 : 2;
+            for (int pass = 0; pass < passes; pass++)
             {
-                float wMul = pass == 0 ? 1.65f : 0.8f;
+                bool core = pass == passes - 1;
+                float wMul = core ? 0.8f : pass == 0 ? 1.65f : 1.12f;
                 for (int k = 0; k < n; k++)
                 {
                     float f = k / (float)(n - 1);
@@ -754,16 +808,22 @@ namespace FrostMelee.Content.Projectiles
                     float profile = (float)System.Math.Pow(
                         System.Math.Sin(System.Math.PI * MathHelper.Clamp(0.12f + 0.88f * f, 0f, 1f)), 0.75f);
                     // Рваный край: ширина «кипит» по длине и во времени,
-                    // иначе язык — гладкая капля-свечка (flame-1)
-                    float ragged = 0.78f + 0.22f * (float)System.Math.Sin(time * 1.35f + t.Phase * 7f + k * 2.2f)
+                    // иначе язык — гладкая капля-свечка (flame-1). У языков
+                    // на врагах провалы мельче — тело пламени не рвётся
+                    float ragged = (npcTongue ? 0.86f : 0.78f)
+                        + (npcTongue ? 0.16f : 0.22f) * (float)System.Math.Sin(time * 1.35f + t.Phase * 7f + k * 2.2f)
                         * (float)System.Math.Sin(time * 0.7f + k * 1.3f);
-                    ribbonWidths[k] = t.Width * profile * ragged * wMul * FrostMeleeConfigDefaults.FireSizeScale;
+                    ribbonWidths[k] = t.Width * profile * ragged * wMul * sizeScale
+                        * (npcTongue ? 1.1f : 1f);
                     // Белое — только жар у самого основания; тело языка синее
-                    ribbonColors[k] = pass == 0
-                        ? Color.Lerp(new Color(28, 105, 245), new Color(8, 34, 130), f) * (0.42f * env)
-                        : Color.Lerp(
-                            Color.Lerp(new Color(190, 240, 255), new Color(110, 200, 255), MathHelper.Clamp(f * 3.2f, 0f, 1f)),
-                            new Color(30, 110, 250), MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * (0.58f * env);
+                    if (core)
+                        ribbonColors[k] = Color.Lerp(
+                            Color.Lerp(coreBase, coreMid, MathHelper.Clamp(f * 3.2f, 0f, 1f)),
+                            coreTip, MathHelper.Clamp((f - 0.3f) * 1.6f, 0f, 1f)) * ((npcTongue ? 0.78f : 0.58f) * env);
+                    else if (pass == 0)
+                        ribbonColors[k] = Color.Lerp(outerBase, outerTip, f) * ((npcTongue ? 0.58f : 0.42f) * env);
+                    else
+                        ribbonColors[k] = Color.Lerp(new Color(82, 190, 255), new Color(30, 118, 248), f) * (0.52f * env);
                 }
                 FlameRibbon.Draw(device, ribbonPoints, ribbonWidths, ribbonColors, n);
             }
