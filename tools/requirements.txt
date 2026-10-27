@@ -1,0 +1,2 @@
+# Offline collision-mask generation and asset-data regression tests only.
+Pillow==11.3.0

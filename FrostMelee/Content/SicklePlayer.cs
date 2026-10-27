@@ -53,6 +53,40 @@ namespace FrostMelee.Content
         public float FrostShown;   // шкала для отрисовки: плавно догоняет Frost, чтобы вид не прыгал при тратах и наборе
         private const float FrostShownEase = 0.08f;
         private int frostHold;
+        private float lastSentFrost = -1f;
+        private int frostSyncTicks;
+
+        internal void SendFrost(int toWho = -1, int ignoreClient = -1)
+        {
+            var packet = Mod.GetPacket();
+            packet.Write(global::FrostMelee.FrostMelee.FrostSyncMessage);
+            packet.Write((byte)Player.whoAmI);
+            packet.Write(Frost);
+            packet.Send(toWho, ignoreClient);
+        }
+
+        // Server-side snapshot for a newly joining client.
+        public override void SyncPlayer(int toWho, int fromWho, bool newPlayer)
+        {
+            if (Main.netMode == NetmodeID.Server)
+                SendFrost(toWho, fromWho);
+        }
+
+        private void SyncFrostIfChanged()
+        {
+            if (Main.netMode != NetmodeID.MultiplayerClient)
+                return;
+            // Publish threshold crossings immediately: they select the collision mask.
+            bool crossed = (lastSentFrost >= FrozenSpear.ZoneFrostAt) != (Frost >= FrozenSpear.ZoneFrostAt);
+            if (++frostSyncTicks < 6 && lastSentFrost >= 0f && !crossed)
+                return;
+            frostSyncTicks = 0;
+            if (lastSentFrost == Frost)
+                return;
+            lastSentFrost = Frost;
+            SendFrost();
+        }
+
 
         // Взмах ледяным копьём: возвращает шкалу в момент старта (по ней сила инея) и снимает FrostSpendPerSwing.
         // Паузу таяния не трогает: тает только то, что не потрачено
@@ -297,8 +331,14 @@ namespace FrostMelee.Content
             // Поза и разворот — только для локального игрока, именно PostUpdate:
             // ванилла каждый тик перебивает руки в PlayerFrame и разворот в движении.
             if (Player.whoAmI != Main.myPlayer)
+            {
+                // Remote visuals follow the replicated resource without switching
+                // the global vanilla Item texture for the local player's weapon.
+                FrostShown += (Frost - FrostShown) * FrostShownEase;
                 return;
+            }
             UpdateFrost();
+            SyncFrostIfChanged();
             // Повторно: PostUpdate Weapon Out может идти раньше нашего PreUpdate
             HideFromWeaponOut();
             PoseItemVisible = false;

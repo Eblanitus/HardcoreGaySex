@@ -1,20 +1,14 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using ReLogic.Content;
 using Terraria;
-using Terraria.GameContent;
 using Terraria.ID;
-using Terraria.ModLoader;
 
 namespace FrostMelee.Content
 {
-    // Геометрия серпа по реальным пикселям спрайта (приклад, острие, длина, угол).
-    // ВАЖНО: у серпов (в отличие от палок WoodSwords) острие смотрит ВНИЗ-ВЛЕВО,
-    // приклад — ВВЕРХ-ВПРАВО. Поэтому измеряем по диагонали «приклад = максимум
-    // x-y, острие = минимум x-y» — инвертированная логика StickSprite.
-    // Замер sprite_tip_angle: IceSpear 60x54 (острие 129°).
+    // Геометрия оружия по запечённым alpha-маскам исходных PNG.
+    // CPU-only: одинаковые приклад, острие и зоны лезвия на всех участниках.
+    // Регенерация масок: tools/generate_collision_masks.py из корня репозитория.
     public static class SickleSprite
     {
         public readonly struct Geometry
@@ -74,26 +68,17 @@ namespace FrostMelee.Content
             frozenZoneCache.Clear();
         }
 
-        // Геометрия ИНВЕНТАРНОГО спрайта (то, что в TextureAssets.Item[type]).
+        // Геометрия по общей запечённой маске: одинакова на клиенте и сервере.
         public static Geometry Get(int itemType)
         {
-            if (Main.dedServ || itemType <= 0)
-                return Fallback;
             if (cache.TryGetValue(itemType, out Geometry cached))
                 return cached;
-            Main.instance.LoadItem(itemType);
-            Asset<Texture2D> asset = SickleTextures.Held(itemType) ?? TextureAssets.Item[itemType];
-            if (asset == null || !asset.IsLoaded)
+            WeaponCollisionMasks.Mask mask = WeaponCollisionMasks.Get(itemType);
+            if (mask == null)
                 return Fallback;
-            Texture2D texture = asset.Value;
-            if (texture == null || texture.IsDisposed)
-                return Fallback;
-            // Ванильные мечи: эвристик «тонкий = рукоять, толстый = остриё» их путает
-            // (гарда толще острия) — остриё сажает к руке. Для мечей остриё =
-            // дальний конец от левого нижнего угла, рукоять = ближний.
             Geometry geometry = Weapons.SwordTypes.IsSwordId(itemType)
-                ? MeasureSword(texture)
-                : Measure(texture);
+                ? MeasureSword(mask)
+                : Measure(mask);
             cache[itemType] = geometry;
             return geometry;
         }
@@ -103,7 +88,7 @@ namespace FrostMelee.Content
         // =====================================================================
         // Урон наносит то, что видно: лезвие (голова серпа: у серпа смерти оба
         // лезвия и крюк), а не отрезок оси и не прямоугольник. Зона снимается с
-        // того же рисунка, что рисуют все приёмы (TextureAssets.Item), и описана в
+        // исходного рисунка через общую маску WeaponCollisionMasks и описана в
         // полярных координатах вокруг СЕРЕДИНЫ оси приклад→острие — это точка, где
         // стоит Projectile.Center у тычка/копья/броска и центр вращения у взмаха.
         // Одна и та же зона годится для неподвижной позы и для вращения: при вращении
@@ -147,21 +132,15 @@ namespace FrostMelee.Content
 
         private static readonly Dictionary<int, BladeZone> zoneCache = new();
 
-        // Зона лезвия предмета. null — не клиент / нет рисунка (звать с запасным хитбоксом).
+        // Зона лезвия предмета. null — неизвестный тип оружия.
         public static BladeZone GetZone(int itemType)
         {
-            if (Main.dedServ || itemType <= 0)
-                return null;
             if (zoneCache.TryGetValue(itemType, out BladeZone cached))
                 return cached;
-            Geometry geometry = Get(itemType);
-            Asset<Texture2D> asset = SickleTextures.Held(itemType) ?? TextureAssets.Item[itemType];
-            if (asset == null || !asset.IsLoaded)
+            WeaponCollisionMasks.Mask mask = WeaponCollisionMasks.Get(itemType);
+            if (mask == null)
                 return null;
-            Texture2D texture = asset.Value;
-            if (texture == null || texture.IsDisposed)
-                return null;
-            BladeZone zone = BuildZone(texture, geometry, ZoneHeadThickness);
+            BladeZone zone = BuildZone(mask, Get(itemType), ZoneHeadThickness);
             zoneCache[itemType] = zone;
             return zone;
         }
@@ -179,19 +158,14 @@ namespace FrostMelee.Content
                 return normal;
             if (frozenZoneCache.TryGetValue(itemType, out BladeZone cached))
                 return cached;
-            Texture2D texture = FrozenSpear.GetTexture();
-            if (texture == null)
-                return normal;
-            BladeZone zone = BuildZone(texture, Get(itemType), ZoneHeadThicknessFrozen);
+            BladeZone zone = BuildZone(WeaponCollisionMasks.Frozen, Get(itemType), ZoneHeadThicknessFrozen);
             frozenZoneCache[itemType] = zone;
             return zone;
         }
 
-        private static BladeZone BuildZone(Texture2D texture, Geometry geo, float headThickness)
+        private static BladeZone BuildZone(WeaponCollisionMasks.Mask mask, Geometry geo, float headThickness)
         {
-            int w = texture.Width, h = texture.Height;
-            Color[] data = new Color[w * h];
-            texture.GetData(data);
+            int w = mask.Width, h = mask.Height;
 
             Vector2 axis = geo.Tip - geo.Butt;
             float len = axis.Length();
@@ -207,7 +181,7 @@ namespace FrostMelee.Content
             {
                 for (int x = 0; x < w; x++)
                 {
-                    if (data[y * w + x].A <= 128)
+                    if (!mask.IsSolid(x, y))
                         continue;
                     Vector2 rel = new Vector2(x + 0.5f, y + 0.5f) - geo.Butt;
                     float a = Vector2.Dot(rel, axis);
@@ -417,16 +391,14 @@ namespace FrostMelee.Content
         // Ванилла держит меч за левый нижний угол спрайта (диагональные спрайты),
         // поэтому рукоять — конец БЛИЖЕ к углу, остриё — дальний. Толщина тут
         // обманывает: гарда толще острия (и у Ice Blade кристалл шире рукояти).
-        private static Geometry MeasureSword(Texture2D texture)
+        private static Geometry MeasureSword(WeaponCollisionMasks.Mask mask)
         {
-            int w = texture.Width, h = texture.Height;
-            Color[] data = new Color[w * h];
-            texture.GetData(data);
+            int w = mask.Width, h = mask.Height;
 
             var pts = new List<Vector2>(w * h / 4);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
-                    if (data[y * w + x].A > 128)
+                    if (mask.IsSolid(x, y))
                         pts.Add(new Vector2(x + 0.5f, y + 0.5f));
 
             if (pts.Count < 4)
@@ -469,16 +441,14 @@ namespace FrostMelee.Content
                 -alongMin + 0.5f, alongMax - len + 0.5f);
         }
 
-        private static Geometry Measure(Texture2D texture)
+        private static Geometry Measure(WeaponCollisionMasks.Mask mask)
         {
-            int w = texture.Width, h = texture.Height;
-            Color[] data = new Color[w * h];
-            texture.GetData(data);
+            int w = mask.Width, h = mask.Height;
 
             var pts = new List<Vector2>(w * h / 4);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
-                    if (data[y * w + x].A > 128)
+                    if (mask.IsSolid(x, y))
                         pts.Add(new Vector2(x + 0.5f, y + 0.5f));
 
             if (pts.Count < 4)

@@ -12,3 +12,4 @@
 # Local runtime output
 *.log
 __pycache__/
+.venv/
