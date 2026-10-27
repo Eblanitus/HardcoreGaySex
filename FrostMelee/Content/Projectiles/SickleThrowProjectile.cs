@@ -142,12 +142,14 @@ namespace FrostMelee.Content.Projectiles
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
         private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
 
-        // Карамелька-приманка: сколько тиков леденец пробыл неподвижным —
-        // лежит, воткнут в землю или торчит во враге. Дошло до порога — его
-        // «съели»: перестаёт манить, а по пути потихоньку сереет (PreDraw)
-        private int candyGroundTicks;
+        // Карамелька-приманка: неподвижный леденец (лёжа, в земле или во
+        // враге) тратит заряд сладости владельца (CandyCanePlayer) — тик
+        // приманки за тик заряда. Заряд кончился — «съеден»: не манит и серый
+        private int candyStillTicks; // только ритм сладкой пыли, тикает у всех
+        private Weapons.CandyCanePlayer CandyOwner =>
+            Main.player[Projectile.owner].GetModPlayer<Weapons.CandyCanePlayer>();
         public bool CandyEaten => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
-            candyGroundTicks >= Weapons.CandyCaneLureNPC.EatTicks;
+            CandyOwner.SweetTicks <= 0;
         public bool CandyLureActive => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
             (State == StateLying || State == StateStuckTile || State == StateLodged) && !CandyEaten;
 
@@ -228,13 +230,15 @@ namespace FrostMelee.Content.Projectiles
             }
 
             // Неподвижный леденец пахнет сладко и манит врагов (рулит ими
-            // CandyCaneLureNPC), пока его не «съедят»: счётчик идёт, пока меч
-            // лежит, воткнут в землю или торчит во враге
+            // CandyCaneLureNPC), пока не кончится заряд сладости владельца:
+            // тик неподвижности = тик заряда, считает только владелец
             if ((int)Projectile.ai[2] == ItemID.CandyCaneSword &&
                 (State == StateLying || State == StateStuckTile || State == StateLodged))
             {
-                candyGroundTicks++;
-                if (!Main.dedServ && !CandyEaten && candyGroundTicks % 18 == 0)
+                candyStillTicks++;
+                if (Projectile.owner == Main.myPlayer && CandyOwner.SweetTicks > 0)
+                    CandyOwner.SweetTicks--;
+                if (!Main.dedServ && !CandyEaten && candyStillTicks % 18 == 0)
                 {
                     Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(10f, 6f),
                         DustID.Snow, new Vector2(0f, -0.6f), 0, new Color(255, 120, 140), 1f);
@@ -1084,11 +1088,12 @@ namespace FrostMelee.Content.Projectiles
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
 
-            // Леденец потихоньку сереет, пока его «едят»: серый спрайт поверх
-            // той же позы, сила — доля съеденности (в конце полностью серый).
+            // Леденец сереет по мере потраченного заряда сладости: серый спрайт
+            // поверх той же позы (полный заряд — красный, пустой — серый).
             // Серый спрайт в ванильном размере 44x70, поэтому геометрия своя,
             // а масштаб подогнан под длину нынешнего клинка
-            if (itemType == ItemID.CandyCaneSword && candyGroundTicks > 0)
+            if (itemType == ItemID.CandyCaneSword &&
+                CandyOwner.SweetTicks < Weapons.CandyCaneLureNPC.MaxSweetTicks)
             {
                 candyGrayAsset ??= ModContent.Request<Texture2D>(
                     "FrostMelee/Items/Candy Cane Sword gray", AssetRequestMode.ImmediateLoad);
@@ -1097,8 +1102,7 @@ namespace FrostMelee.Content.Projectiles
                 {
                     candyGrayGeo ??= SickleSprite.GetSwordGeometry(grayTex);
                     SickleSprite.Geometry gGeo = candyGrayGeo.Value;
-                    float gray = MathHelper.Clamp(
-                        candyGroundTicks / (float)Weapons.CandyCaneLureNPC.EatTicks, 0f, 1f);
+                    float gray = 1f - CandyOwner.SweetFrac;
                     float gScale = gGeo.Length > 1f ? scale * geo.Length / gGeo.Length : scale;
                     Main.EntitySpriteDraw(grayTex, butt - Main.screenPosition, null, lightColor * gray,
                         heading - gGeo.AngleFor(false), gGeo.ButtFor(false), gScale, SpriteEffects.None, 0f);
