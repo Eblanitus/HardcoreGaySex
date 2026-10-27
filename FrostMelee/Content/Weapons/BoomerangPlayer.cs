@@ -98,11 +98,12 @@ public class BoomerangPlayer : ModPlayer
 			return;
 		}
 
-		// ЛКМ держать — лёгкие броски без конца, по одному в интервал.
+		// ЛКМ держать — лёгкие броски без конца, но одновременно живёт только один:
+		// следующий уходит сразу, как только предыдущий пойман.
 		if (lmb && !Charging && !swinging) {
 			if (lightCooldown > 0)
 				lightCooldown--;
-			if (lightCooldown <= 0) {
+			if (lightCooldown <= 0 && !LightOut()) {
 				LightThrow(held);
 				lightCooldown = LightThrowIntervalTicks;
 			}
