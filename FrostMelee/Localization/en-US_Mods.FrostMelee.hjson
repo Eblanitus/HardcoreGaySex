@@ -70,9 +70,9 @@ SwordControlsTooltip:
 	'''
 BoomerangControlsTooltip:
 	'''
-	LMB (hold): endless light throws — weak, they come back on their own
+	LMB (hold): endless light throws — weak, trailing a cold vortex, they come back on their own
 	RMB: backswing — hits point blank and spins up your next throw
-	RMB (hold): charge with an aim line, release — heavy throw (bounces off and drops, go pick it up)
+	RMB (hold): charge with an aim line, release — heavy throw (slides like a puck, floats in water, go pick it up)
 	Nothing flies through walls
 	'''
 

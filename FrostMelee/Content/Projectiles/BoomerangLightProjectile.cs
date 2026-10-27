@@ -8,8 +8,9 @@ namespace FrostMelee.Content.Projectiles;
 
 // Лёгкий бросок бумеранга (ЛКМ держать): пугалка, а не охотничье оружие.
 // Проходит врагов насквозь и сам возвращается, поэтому урона почти не наносит
-// и Frostburn не вешает. Сквозь стены НЕ летит ни на вылете, ни на возврате
-// (tileCollide весь полёт) — от поверхностей отскакивает.
+// и Frostburn не вешает. Ледяная фишка — холодный вихрь: врагов рядом с путём
+// сдувает и тормозит без урона. Сквозь стены НЕ летит ни на вылете, ни на
+// возврате (tileCollide весь полёт) — от поверхностей отскакивает.
 public class BoomerangLightProjectile : ModProjectile
 {
 	public const float LaunchSpeed = 13f;
@@ -19,6 +20,12 @@ public class BoomerangLightProjectile : ModProjectile
 	public const float BounceLoss = 0.85f; // отскок от тайлов почти без потери скорости
 	public const int ReturnMaxTicks = 300; // предохранитель: не долетел домой — исчез
 	public const float CatchRadius = 28f;
+
+	// Холодный вихрь: работает и без попадания, но урона не наносит.
+	public const float VortexRadius = 64f;
+	public const float VortexPush = 0.55f; // импульс раз в VortexIntervalTicks, с затуханием к краю
+	public const int VortexSlowTicks = 45;
+	public const int VortexIntervalTicks = 6;
 
 	public override string Texture => $"Terraria/Images/Item_{ItemID.IceBoomerang}";
 
@@ -71,11 +78,55 @@ public class BoomerangLightProjectile : ModProjectile
 			}
 		}
 
+		if (Projectile.localAI[0] % VortexIntervalTicks == 0f)
+			ApplyColdVortex();
+
 		if (Projectile.localAI[0] % 3f == 0f) {
 			Dust d = Dust.NewDustDirect(Projectile.position, Projectile.width, Projectile.height, DustID.Frost, 0f, 0f, 150, default, 0.8f);
 			d.velocity *= 0.2f;
 			d.noGravity = true;
 		}
+	}
+
+	// Холодный вихрь: вращение ледяной лопасти сдувает врагов рядом с путём.
+	// Толчок идёт наружу и по касательной в сторону вращения; урона здесь нет,
+	// только короткий Slow. Толкает только владелец — иначе в сети импульс задвоится.
+	private void ApplyColdVortex()
+	{
+		if (Projectile.owner != Main.myPlayer)
+			return;
+
+		for (int i = 0; i < Main.maxNPCs; i++) {
+			NPC npc = Main.npc[i];
+			if (!npc.active || npc.friendly || npc.life <= 0)
+				continue;
+
+			Vector2 offset = npc.Center - Projectile.Center;
+			float dist = offset.Length();
+			if (dist <= 0.01f || dist > VortexRadius)
+				continue;
+
+			npc.AddBuff(BuffID.Slow, VortexSlowTicks);
+
+			float resist = MathHelper.Clamp(npc.knockBackResist, 0f, 1f);
+			if (resist <= 0f)
+				continue;
+
+			Vector2 away = offset / dist;
+			Vector2 tangent = new Vector2(-away.Y, away.X); // по часовой, как крутится спрайт
+			float falloff = 1f - dist / VortexRadius;
+			Vector2 push = (away * 0.65f + tangent * 0.75f).SafeNormalize(away)
+				* VortexPush * (0.35f + 0.65f * falloff) * resist;
+			npc.velocity += push;
+		}
+
+		// Одна ванильная пылинка по кольцу вихря — поток должен быть виден.
+		float angle = Main.rand.NextFloat(MathHelper.TwoPi);
+		Vector2 ringOffset = angle.ToRotationVector2() * (VortexRadius * 0.65f);
+		Vector2 ringTangent = new Vector2(-ringOffset.Y, ringOffset.X).SafeNormalize(Vector2.Zero);
+		Dust d = Dust.NewDustDirect(Projectile.Center + ringOffset - new Vector2(2f), 4, 4,
+			DustID.Frost, ringTangent.X * 1.4f, ringTangent.Y * 1.4f, 150, default, 0.75f);
+		d.noGravity = true;
 	}
 
 	public override bool OnTileCollide(Vector2 oldVelocity)
