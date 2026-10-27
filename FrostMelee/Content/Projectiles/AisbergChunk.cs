@@ -46,9 +46,8 @@ namespace FrostMelee.Content.Projectiles
 
         public override void SetDefaults()
         {
-            // Кадр спрайта 32x32, рисуется в масштабе 0.95/1.7 — коробка по рисунку
-            Projectile.width = 30;
-            Projectile.height = 30;
+            Projectile.width = 24;
+            Projectile.height = 24;
             Projectile.friendly = true;
             Projectile.DamageType = DamageClass.Melee;
             Projectile.penetrate = 1;
@@ -70,7 +69,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.frame = Math.Abs((int)Projectile.ai[1]) % 3;
                 Projectile.scale = IsLarge ? LargeScale : SmallScale;
                 Vector2 center = Projectile.Center;
-                Projectile.width = Projectile.height = IsLarge ? 54 : 30;
+                Projectile.width = Projectile.height = IsLarge ? 48 : 24;
                 Projectile.Center = center;
                 spin = (Projectile.whoAmI % 2 == 0 ? 1f : -1f) * (IsLarge ? 0.07f : 0.14f);
             }

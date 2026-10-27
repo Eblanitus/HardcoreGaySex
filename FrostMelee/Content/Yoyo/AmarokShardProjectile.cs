@@ -15,10 +15,8 @@ namespace FrostMelee.Content.Yoyo
     {
         public override void SetDefaults()
         {
-            // Спрайт 16x8 быстро вращается — описывает круг ~16; коробка 14
-            // почти по рисунку, без пустых углов полного квадрата 16
-            Projectile.width = 14;
-            Projectile.height = 14;
+            Projectile.width = 10;
+            Projectile.height = 10;
             Projectile.friendly = true;
             Projectile.DamageType = DamageClass.Melee;
             Projectile.penetrate = 1;

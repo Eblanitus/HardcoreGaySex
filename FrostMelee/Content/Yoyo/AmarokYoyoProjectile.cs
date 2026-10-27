@@ -35,7 +35,7 @@ namespace FrostMelee.Content.Yoyo
         private const float BurstDamageMult = 0.5f; // урон осколка от удара
         private const float BurstSpeed = 9f;
         private const int BaseSize = 16;
-        private const int FullSize = 40;            // ширина снежинки полного набора по спрайту (40x36)
+        private const int SizePerChunk = 1;         // px к ширине за сосульку
         private const float SpriteOverhang = 1.42f; // квадрат в повороте 45° вылезает за хитбокс на корень из двух
         private const float IceGrowEase = 0.35f;    // сглаживание визуального счёта сосулек
         private const int PopTicks = 12;            // тиков пружины появления новой сосульки
@@ -346,8 +346,7 @@ namespace FrostMelee.Content.Yoyo
         private void ApplySize()
         {
             Vector2 c = Projectile.Center;
-            // Хитбокс идёт ровно за рисунком снежинки: 16 без льда, 40 на полном
-            int want = BaseSize + chunks * (FullSize - BaseSize) / MaxChunks;
+            int want = BaseSize + chunks * SizePerChunk;
             int size = want;
             // Проверяем с запасом на вращение: картинка на диагональных углах
             // расползается шире хитбокса — иначе её углы протыкают стену
@@ -355,7 +354,7 @@ namespace FrostMelee.Content.Yoyo
             while (size > BaseSize && Collision.SolidCollision(
                 c - new Vector2(test / 2f, test / 2f), test, test))
             {
-                size -= 2;
+                size -= SizePerChunk;
                 test = (int)(size * SpriteOverhang);
             }
             Projectile.width = size;
