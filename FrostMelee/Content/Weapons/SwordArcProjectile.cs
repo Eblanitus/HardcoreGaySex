@@ -110,7 +110,10 @@ namespace FrostMelee.Content.Weapons
                     RecordFlameBlade(player);
                     SpawnFlameSparks(player, maxAnim);
                 }
-                // Праздничные мечи: своих частиц взмаха нет — только шаблонная дуга
+                // Праздничные мечи: своих частиц взмаха нет, но настоящий путь
+                // клинка записываем — дуга строится по нему, как у остальных
+                else if (FestiveSwords.IsFestive(SwordItem != 0 ? SwordItem : player.HeldItem.type))
+                    RecordFlameBlade(player);
             }
 
             if (DebugHitbox && Projectile.owner == Main.myPlayer)
@@ -922,26 +925,35 @@ namespace FrostMelee.Content.Weapons
                 return;
             FestiveSwords.ArcColors(SwordItem != 0 ? SwordItem : player.HeldItem.type, out Color core, out Color tail, out Color edge);
 
-            Vector2 pos = Projectile.Center - Main.screenPosition;
+            // Форма как у остальных мечей движка: веер и лента по настоящему
+            // клинку из записи (fbHist*) — центр кисть, радиус = длина клинка
+            // весь взмах. Формульный радиус рос за взмах на 60% (ArcScaleAt),
+            // и к концу дуга уезжала далеко за клинок. Нет записи (первый
+            // тик) — формульный путь вокруг центра тела
+            bool rec = fbHasBlade && fbHistCount >= 1;
+            Vector2 center = rec ? player.itemLocation : Projectile.Center;
+            Vector2 pos = center - Main.screenPosition;
             Rectangle body = texture.Frame(1, 4);
             Rectangle line = texture.Frame(1, 4, 0, 3);
             Vector2 origin = body.Size() / 2f;
             // Посадка веера как у Фростбранда и Ice Blade: передний край — ровно
             // на клинке, веер целиком позади него
             float dir = Projectile.ai[0] >= 0f ? 1f : -1f;
-            float rot = Projectile.rotation - dir * IceArcFx.HeadAngle;
+            float rot = (rec ? fbHistAngle[0] : Projectile.rotation) - dir * IceArcFx.HeadAngle;
+            float fanScale = rec ? fbHistRadius[0] / LineTexOuter : scale * LineDrawScale;
             // тело: полупрозрачное свечение формы взмаха, две копии на одном угле
             Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(tail, fade * 0.16f),
-                rot, origin, scale * LineDrawScale, fx, 0f);
+                rot, origin, fanScale, fx, 0f);
             Main.EntitySpriteDraw(texture, pos, body, IceArcFx.Additive(Color.Lerp(tail, core, 0.4f), fade * 0.08f),
-                rot, origin, scale * LineDrawScale * 0.975f, fx, 0f);
+                rot, origin, fanScale * 0.975f, fx, 0f);
             // линия по кромке взмаха
             Main.EntitySpriteDraw(texture, pos, line, core * (fade * 0.3f),
-                rot, origin, scale * LineDrawScale, fx, 0f);
+                rot, origin, fanScale, fx, 0f);
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
             if (glow != null && !glow.IsDisposed)
-                DrawTrailRibbon(player, glow, SwingEnv(Projectile.localAI[0], maxAnim), core, tail, edge);
+                DrawTrailRibbon(player, glow, SwingEnv(Projectile.localAI[0], maxAnim), core, tail, edge,
+                    rec ? center : null, rec);
         }
 
         // Углы заметённого сектора на момент time (+ центр серверного запасного
