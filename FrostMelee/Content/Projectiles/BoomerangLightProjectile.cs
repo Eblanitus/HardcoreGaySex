@@ -6,10 +6,10 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Projectiles;
 
-// Лёгкий бросок бумеранга (ПКМ-тап): слабый, проходит врагов насквозь и сам возвращается.
-// Сквозь стены НЕ летит ни на вылете, ни на возврате (tileCollide весь полёт) —
-// от поверхностей отскакивает. Это единственный «безопасный» удар,
-// поэтому урон ниже базового (доктрина: бесплатный дальний урон слаб).
+// Лёгкий бросок бумеранга (ЛКМ держать): пугалка, а не охотничье оружие.
+// Проходит врагов насквозь и сам возвращается, поэтому урона почти не наносит
+// и Frostburn не вешает. Сквозь стены НЕ летит ни на вылете, ни на возврате
+// (tileCollide весь полёт) — от поверхностей отскакивает.
 public class BoomerangLightProjectile : ModProjectile
 {
 	public const float LaunchSpeed = 13f;
@@ -19,7 +19,6 @@ public class BoomerangLightProjectile : ModProjectile
 	public const float BounceLoss = 0.85f; // отскок от тайлов почти без потери скорости
 	public const int ReturnMaxTicks = 300; // предохранитель: не долетел домой — исчез
 	public const float CatchRadius = 28f;
-	public const int FrostburnTicks = 180;
 
 	public override string Texture => $"Terraria/Images/Item_{ItemID.IceBoomerang}";
 
@@ -88,11 +87,5 @@ public class BoomerangLightProjectile : ModProjectile
 			Projectile.velocity.Y = -oldVelocity.Y * BounceLoss;
 		SoundEngine.PlaySound(SoundID.Dig, Projectile.Center);
 		return false;
-	}
-
-	public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
-	{
-		if (Main.rand.NextBool(3))
-			target.AddBuff(BuffID.Frostburn, FrostburnTicks);
 	}
 }

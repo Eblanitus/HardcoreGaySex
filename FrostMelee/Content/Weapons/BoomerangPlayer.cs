@@ -17,7 +17,7 @@ public class BoomerangPlayer : ModPlayer
 	public const int TapThresholdTicks = 18; // как у мечей (SwordPlayer)
 	public const int ChargeFullTicks = 45;
 	public const int LightThrowIntervalTicks = 18; // темп лёгких бросков при зажатом ЛКМ
-	public const float LightDamageMult = 0.8f;  // бесплатный возврат = слабый урон
+	public const float LightDamageMult = 0.2f;  // пугалка: возвращается сам, поэтому урона почти нет
 	public const float HeavyDamageMin = 1.1f;
 	public const float HeavyDamageMax = 2.0f;
 
