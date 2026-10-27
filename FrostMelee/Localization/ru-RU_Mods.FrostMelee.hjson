@@ -24,6 +24,8 @@ Projectiles: {
 	// FrostFlameWisp.DisplayName: Frost Flame Wisp
 	// AisbergBlast.DisplayName: Aisberg Blast
 	// AisbergChunk.DisplayName: Aisberg Chunk
+	// BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
+	// BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
 }
 
 Stance: {
@@ -66,7 +68,6 @@ SwordControlsTooltip:
 	ПКМ (зажать): тычки остриём
 	ПКМ + ЛКМ: бросок (меч остаётся — иди забери)
 	'''
-
 BoomerangControlsTooltip:
 	'''
 	ЛКМ: удар в руке в упор

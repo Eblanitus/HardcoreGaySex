@@ -24,6 +24,8 @@ Projectiles: {
 	FrostFlameWisp.DisplayName: Frost Flame Wisp
 	AisbergBlast.DisplayName: Aisberg Blast
 	AisbergChunk.DisplayName: Aisberg Chunk
+	BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
+	BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
 }
 
 Stance: {
@@ -66,7 +68,6 @@ SwordControlsTooltip:
 	RMB (hold): stabs
 	RMB + LMB: throw (the sword stays — go pick it up)
 	'''
-
 BoomerangControlsTooltip:
 	'''
 	LMB: hit with it in hand, point blank
