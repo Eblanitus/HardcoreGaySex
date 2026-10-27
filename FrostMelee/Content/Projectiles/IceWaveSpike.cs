@@ -8,15 +8,17 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Projectiles
 {
-    // Ледяной пик волны броска: ванильные спрайты шипов Deerclops
+    // Ледяной пик броска: ванильные спрайты шипов Deerclops
     // (кадры Deerclops_Ice_Spike.gif, IceSpike0/1/2). Как в ванили:
     // каждый шип берёт один из трёх спрайтов и свой личный размер,
     // растёт из земли ease-out и тает нелинейно.
     //
     // Основание ставится ТОЧНО на верхнюю кромку твёрдого тайла
     // (снап в AI на первом тике), поэтому шипы не висят на блок выше.
-    // Урон и Slow наносит сам шип по видимому контуру спрайта,
-    // волна (IceWaveProjectile) только несёт и расставляет шипы.
+    // Урон и Slow наносит сам шип по видимому контуру спрайта.
+    // Сейчас спавнится одним усиленным кристаллом в точке втыкания
+    // клинка (SickleThrowProjectile.SpawnIceCrystal); прежние режимы
+    // мелких шипов волны оставлены цифрами DamageMult/LifeTicks.
     public class IceWaveSpike : ModProjectile
     {
         public override string Texture => "FrostMelee/Textures/Effects/IceSpike0";
@@ -25,9 +27,35 @@ namespace FrostMelee.Content.Projectiles
         private const int GrowTicks = 10;       // тиков на рост из земли
         private const int FadeTicks = 14;       // последние тики таяния
         private const float Tilt = 0.22f;       // наклон по ходу волны, рад
-        private const float DamageMult = 0.35f; // волна слабая (как раньше у IceWaveProjectile)
+        private const float DamageMult = 0.35f; // мелкие шипы прежней волны слабые по одному
         private const int SlowTicks = 60;       // 1 с замедления
         public const float SpawnKnockback = 6f; // шипы должны выталкивать врагов из роя
+
+        // Кристалл — один усиленный пик вместо полоски волны (спавн в
+        // SickleThrowProjectile.SpawnIceCrystal). Режим закодирован в ai[1]:
+        // 6..8 — обычный кристалл, 9..11 — кристалл за убийство броском
+        // (крупнее и больнее), стадия спрайта по-прежнему ai[1] % 3.
+        private const int CrystalModeBase = 6;
+        private const int CrystalKillBase = 9;
+        private const int CrystalLifeTicks = 150;      // 2.5 с вместо 52 тиков волны
+        private const int CrystalKillLifeTicks = 210;  // за убийство живёт дольше
+        private const float CrystalDamageMult = 0.6f;  // от полного урона броска
+        private const float CrystalKillDamageMult = 1f;
+        private const int CrystalKillSlowTicks = 120;  // замедление за убийство — 2 с
+
+        private int lifeTicks = LifeTicks; // у кристалла длиннее, выставляется на первом тике
+
+        private bool IsCrystal => (int)Projectile.ai[1] >= CrystalModeBase;
+        private bool IsKillCrystal => (int)Projectile.ai[1] >= CrystalKillBase;
+
+        private int Stage
+        {
+            get
+            {
+                int s = (int)Projectile.ai[1] % 3;
+                return s < 0 ? s + 3 : s;
+            }
+        }
 
         private static Asset<Texture2D>[] stages;
 
@@ -120,6 +148,14 @@ namespace FrostMelee.Content.Projectiles
             {
                 Projectile.localAI[0] = 1f;
 
+                // Кристалл живёт дольше шипов волны; время жизни перезапускаем
+                // на первом тике у всех одинаково (режим в синхронизированном ai[1])
+                if (IsCrystal)
+                {
+                    lifeTicks = IsKillCrystal ? CrystalKillLifeTicks : CrystalLifeTicks;
+                    Projectile.timeLeft = lifeTicks;
+                }
+
                 // Снап основания к поверхности: вниз до твёрдого тайла,
                 // основание шипа ставим ровно на его верхнюю кромку.
                 // Земли в пределах 6 тайлов нет — шип не рождается в пустоте
@@ -166,7 +202,7 @@ namespace FrostMelee.Content.Projectiles
             Projectile.velocity = Vector2.Zero;
         }
 
-        private int Age => LifeTicks - Projectile.timeLeft;
+        private int Age => lifeTicks - Projectile.timeLeft;
 
         private float Grow
         {
@@ -199,9 +235,7 @@ namespace FrostMelee.Content.Projectiles
             if (scale < 0.01f)
                 return false;
 
-            int stage = (int)Projectile.ai[1] % 3;
-            if (stage < 0)
-                stage += 3;
+            int stage = Stage;
             Vector2[] outline = StageOutline[stage];
             Point tex = StageTexSize[stage];
 
@@ -321,7 +355,14 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            modifiers.SourceDamage *= DamageMult;
+            // Шипы волны слабые по одному; кристалл один, поэтому ощутимо
+            // больнее, а за убийство — полным уроном броска
+            if (IsKillCrystal)
+                modifiers.SourceDamage *= CrystalKillDamageMult;
+            else if (IsCrystal)
+                modifiers.SourceDamage *= CrystalDamageMult;
+            else
+                modifiers.SourceDamage *= DamageMult;
             // Толкаем в сторону от шипа: рой иначе наносит слишком много мелких
             // ударов подряд, и ДПС раздувается на кадрах неуязвимости.
             modifiers.HitDirectionOverride = target.Center.X >= Projectile.Center.X ? 1 : -1;
@@ -329,7 +370,7 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            target.AddBuff(BuffID.Slow, SlowTicks);
+            target.AddBuff(BuffID.Slow, IsKillCrystal ? CrystalKillSlowTicks : SlowTicks);
         }
 
         public override bool PreDraw(ref Color lightColor)
@@ -345,7 +386,7 @@ namespace FrostMelee.Content.Projectiles
             // ai[2] = множитель дистанции (1 у меча, меньше к концу пробега),
             // знак = направление волны (для наклона).
             float scale = VisualScale;
-            Texture2D tex = st[(int)Projectile.ai[1] % 3].Value;
+            Texture2D tex = st[Stage].Value;
 
             // Масштаб 1:1 с текстурой: какой высоты png нарисуешь
             // и запушишь, такой высоты сосулька и стоит в мире.

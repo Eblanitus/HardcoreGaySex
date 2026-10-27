@@ -1,3 +1,4 @@
+using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -45,10 +46,54 @@ namespace FrostMelee.Content.Yoyo
         private const float CloneFollowSpeed = 12f; // скорость догоняющего двойника
         private const int DetachCooldown = 45;      // отрыв сосульки не чаще, чем раз в это число тиков
         private const int HitCooldownBase = 10;     // тиков между ударами по цели, как ванила
-        private const float FrostburnChance = 0.67f;
-        private const int FrostburnTicks = 150;
+        private const float FrostbiteChance = 0.67f; // как у ванильного Амарока
+        private const int FrostbiteTicks = 150;
 
-        private State CurrentState = State.Out;
+        // Player-owned projectiles follow tML's owner-authoritative projectile model.
+        // Observers extrapolate velocity only; they must never read their own mouse
+        // or the owner's unsynchronised ModPlayer input to change the simulation.
+        private bool IsAuthority => Projectile.owner == Main.myPlayer;
+        private int syncTimer;
+        private State currentState = State.Out;
+        private State CurrentState
+        {
+            get => currentState;
+            set
+            {
+                if (currentState == value)
+                    return;
+                currentState = value;
+                if (IsAuthority)
+                    Projectile.netUpdate = true;
+            }
+        }
+
+        public override void SendExtraAI(BinaryWriter writer)
+        {
+            writer.Write((byte)currentState);
+            writer.Write((byte)chunks);
+            writer.Write((ushort)Projectile.width);
+            writer.Write((byte)Projectile.localNPCHitCooldown);
+        }
+
+        public override void ReceiveExtraAI(BinaryReader reader)
+        {
+            byte state = reader.ReadByte();
+            int receivedChunks = reader.ReadByte();
+            int size = reader.ReadUInt16();
+            int hitCooldown = reader.ReadByte();
+            currentState = state <= (byte)State.Return ? (State)state : State.Return;
+            int oldChunks = chunks;
+            chunks = Utils.Clamp(receivedChunks, 0, MaxChunks);
+            if (chunks > oldChunks)
+                popTimer = PopTicks;
+            // Use the owner's actual size: do not independently resize near walls.
+            Vector2 center = Projectile.Center;
+            Projectile.width = Projectile.height = Utils.Clamp(size, BaseSize, BaseSize + MaxChunks * SizePerChunk);
+            Projectile.Center = center;
+            Projectile.localNPCHitCooldown = Utils.Clamp(hitCooldown, 1, HitCooldownBase);
+            Projectile.tileCollide = IsClone || currentState != State.Return;
+        }
         private bool started;
         private float itemSpeed;   // shootSpeed йо-йо в руках: от неё пляшут все скорости
         private int chunks;
@@ -113,6 +158,33 @@ namespace FrostMelee.Content.Yoyo
                 if (!IsClone)
                     SoundEngine.PlaySound(SoundID.Item1, Projectile.Center);
             }
+
+            if (!IsAuthority)
+            {
+                // A disconnected/dead owner cannot send the final kill packet.
+                if (Main.netMode == NetmodeID.Server && (!player.active || player.dead))
+                {
+                    Projectile.Kill();
+                    return;
+                }
+                // Keep replicas alive between SyncProjectile packets. Normal return
+                // and death are controlled by the owner, not guessed from local input.
+                Projectile.timeLeft = 2;
+                Projectile.rotation += 0.4f;
+                if (popTimer > 0)
+                    popTimer--;
+                visualChunks += (chunks - visualChunks) * IceGrowEase;
+                return;
+            }
+
+            // Six updates/second bound extrapolation drift even without a mode change.
+            if (++syncTimer >= 10)
+            {
+                syncTimer = 0;
+                Projectile.netUpdate = true;
+            }
+            if (detachCooldown > 0)
+                detachCooldown--;
 
             // Скорость из характеристик йо-йо в руках: множители ниже считаются от неё
             Item held = player.HeldItem;
@@ -367,7 +439,7 @@ namespace FrostMelee.Content.Yoyo
         // растёт всегда, пока жив. До полного набора
         private void GrowIce()
         {
-            if (Main.dedServ || chunks >= MaxChunks)
+            if (!IsAuthority || chunks >= MaxChunks)
                 return;
             bool inCombat = IsClone || CurrentState != State.Return;
             if (!inCombat)
@@ -376,6 +448,7 @@ namespace FrostMelee.Content.Yoyo
             {
                 growTimer = 0;
                 chunks++;
+                Projectile.netUpdate = true;
                 popTimer = PopTicks;
                 ApplySize();
                 Burst(Projectile.Center, DustID.SnowflakeIce, 6, 1.5f);
@@ -392,6 +465,7 @@ namespace FrostMelee.Content.Yoyo
             if (chunks <= 0 || detachCooldown > 0)
                 return;
             chunks--;
+            Projectile.netUpdate = true;
             ApplySize();
             detachCooldown = DetachCooldown;
             Vector2 dir = Main.rand.NextVector2Circular(1f, 1f);
@@ -450,12 +524,15 @@ namespace FrostMelee.Content.Yoyo
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            if (Main.rand.NextFloat() < FrostburnChance)
-                target.AddBuff(BuffID.Frostburn, FrostburnTicks);
+            // Only the owner mutates ice/state or creates damaging child projectiles.
+            if (!IsAuthority)
+                return;
+            Projectile.netUpdate = true;
+            if (Main.rand.NextFloat() < FrostbiteChance)
+                target.AddBuff(BuffID.Frostburn2, FrostbiteTicks);
             // Раз в DetachCooldown тиков, не чаще: циклы частых ударов круга
             // не спишут весь лёд за секунду
-            if (detachCooldown > 0)
-                detachCooldown--;
+            // Cooldown is measured in game ticks in PostAI, not in hit events.
             // Полный набор: тормоз + взрыв сосульками кругом, лёд обнуляется и растёт заново.
             // Двойник тоже взрывается полным, но без ритма сумки и отскока
             if (chunks >= MaxChunks)

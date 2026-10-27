@@ -158,11 +158,11 @@ namespace FrostMelee.Content.Projectiles
             var sp = Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>();
             if (sp.HoldsFlame(target))
             {
-                target.AddBuff(BuffID.Frostburn, Weapons.FrostFireSystem.BurnTicks);
+                target.AddBuff(Weapons.FrostFireSystem.BurnBuff, Weapons.FrostFireSystem.BurnTicks);
                 return;
             }
             sp.AddFlameHolder(target);
-            target.AddBuff(BuffID.Frostburn, Weapons.FrostFireSystem.BurnTicks);
+            target.AddBuff(Weapons.FrostFireSystem.BurnBuff, Weapons.FrostFireSystem.BurnTicks);
             Projectile.Kill();
         }
 
@@ -181,6 +181,10 @@ namespace FrostMelee.Content.Projectiles
             if (glow == null || glow.IsDisposed)
                 return false;
             Vector2 go = glow.Size() / 2f;
+            // Ядрёность из конфига — жар (яркость) и крупность огонька,
+            // а не прозрачность готовой картинки
+            float intensity = FrostMeleeConfigDefaults.FireHeatScale;
+            float fireSize = FrostMeleeConfigDefaults.FireSizeScale;
 
             // Хвост — цельная лента пламени по следу: огонёк тянется живым
             // языком, а не цепочкой отдельных пятен (как струя FrostFireJet)
@@ -198,11 +202,11 @@ namespace FrostMelee.Content.Projectiles
                         for (int i = 0; i < TrailLen; i++)
                         {
                             float f = i / (float)(TrailLen - 1);   // 0 — голова, 1 — хвост
-                            ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f);
+                            ribbonWidths[i] = MathHelper.Lerp(11f, 2f, f) * (pass == 0 ? 1.8f : 0.8f) * fireSize;
                             ribbonColors[i] = pass == 0
-                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * 0.5f
+                                ? Color.Lerp(new Color(40, 120, 245), Deep, f) * (0.4f * intensity)
                                 : Color.Lerp(Color.Lerp(Core, Flame, MathHelper.Clamp(f * 3f, 0f, 1f)), Deep,
-                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * 0.88f;
+                                    MathHelper.Clamp((f - 0.4f) / 0.6f, 0f, 1f)) * (0.68f * intensity);
                         }
                         FlameRibbon.Draw(device, trail, ribbonWidths, ribbonColors, TrailLen);
                     }
@@ -214,21 +218,21 @@ namespace FrostMelee.Content.Projectiles
                 }
             }
             float flick = 0.85f + 0.15f * (float)Math.Sin(Age * 0.9f + Phase);
-            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.95f), 0f,
-                go, 17f * flick / glow.Width, SpriteEffects.None, 0f);
-            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 1f), 0f,
-                go, 7f / glow.Width, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Flame, 0.75f * intensity), 0f,
+                go, 17f * flick * fireSize / glow.Width, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, 0.8f * intensity), 0f,
+                go, 7f * fireSize / glow.Width, SpriteEffects.None, 0f);
 
             // Звёздный блик-крестик: огонёк — живой ресурс (бьёт, уходит со
             // взмахом), и в одной палитре с декоративным пламенем, вспышкой
             // взрыва и забором тычком он терялся. Крест не похож ни на язык,
             // ни на пятно — огонёк узнаётся сразу. В полёте (бьёт) — ярче
             float glint = 0.55f + 0.45f * (float)Math.Sin(Age * 0.22f + Phase);
-            float strength = State == StateOrbit ? 0.6f : 0.9f;
+            float strength = State == StateOrbit ? 0.48f : 0.72f;
             float spin = Age * 0.04f + Phase;
             for (int k = 0; k < 2; k++)
-                Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, strength * glint),
-                    spin + k * MathHelper.PiOver2, go, new Vector2(30f / glow.Width, 2.4f / glow.Height),
+                Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition, null, Add(Core, strength * glint * intensity),
+                    spin + k * MathHelper.PiOver2, go, new Vector2(30f * fireSize / glow.Width, 2.4f * fireSize / glow.Height),
                     SpriteEffects.None, 0f);
             return false;
         }

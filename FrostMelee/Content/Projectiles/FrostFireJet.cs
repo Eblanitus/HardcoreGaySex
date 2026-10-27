@@ -12,6 +12,13 @@ namespace FrostMelee.Content.Projectiles
     {
         public override string Texture => "FrostMelee/Items/Frostbrand";
 
+        // Физика струи встречи: воздух понемногу возвращает её продольную
+        // скорость к собственной (4.5), а не к скорости игрока.
+        private const float BraceAirDrag = 0.07f;
+        private const float BraceSideFollow = 0.45f;
+        private const float BraceMinRelativeSpeed = 1.1f;
+        private const float BraceMaxRelativeSpeed = 8.2f;
+
         // Возраст струи в тиках — по нему FrostJetFx выстраивает все живые
         // струи владельца в одну общую ленту (localAI[0])
 
@@ -39,6 +46,42 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.localAI[1] = 1f;
                 if (Projectile.ai[0] > 0f)
                     Projectile.timeLeft = (int)Projectile.ai[0];
+            }
+
+            // Струя встречи (ai[1] == 0, ai[2] — её направление) живёт своей
+            // скоростью, а не приклеена к игроку. При рождении она получает
+            // скорость игрока, но воздух каждый тик возвращает продольную
+            // часть к собственной скорости струи. Поэтому при беге вперёд меч
+            // догоняет старые языки и прижимает их к себе, а при беге назад
+            // уходит от них — языки остаются развеянными впереди. Скорость
+            // игрока теперь нужна только как предел: меч не должен проехать
+            // сквозь струю, а струя — бесконечно оторваться от него.
+            // Боковое движение мягко следует за мечом, иначе поток целиком
+            // останется висеть сбоку от клинка при прыжке и падении.
+            // Струи веера взмаха (ai[1] == 1/2) сюда не входят.
+            if (Projectile.ai[1] == 0f)
+            {
+                Vector2 jetDir = Projectile.ai[2].ToRotationVector2();
+                Vector2 ownerVelocity = Main.player[Projectile.owner].velocity;
+                float ownerAlong = Vector2.Dot(ownerVelocity, jetDir);
+                Vector2 ownerSideVelocity = ownerVelocity - jetDir * ownerAlong;
+
+                float alongSpeed = Vector2.Dot(Projectile.velocity, jetDir);
+                Vector2 sideVelocity = Projectile.velocity - jetDir * alongSpeed;
+
+                alongSpeed = MathHelper.Lerp(alongSpeed,
+                    SickleBraceProjectile.FrostJetSpeed, BraceAirDrag);
+                alongSpeed = MathHelper.Clamp(alongSpeed,
+                    ownerAlong + BraceMinRelativeSpeed,
+                    ownerAlong + BraceMaxRelativeSpeed);
+                sideVelocity = Vector2.Lerp(sideVelocity, ownerSideVelocity, BraceSideFollow);
+
+                Vector2 physicalVelocity = jetDir * alongSpeed + sideVelocity;
+                if ((physicalVelocity - Projectile.velocity).LengthSquared() > 0.0001f)
+                {
+                    Projectile.velocity = physicalVelocity;
+                    Projectile.netUpdate = true;
+                }
             }
 
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
@@ -75,7 +118,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < Main.maxNPCs; i++)
                 {
                     NPC npc = Main.npc[i];
-                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                    if (!Weapons.FrostFireSystem.CanBurn(npc))
                         continue;
                     if (!npc.Hitbox.Intersects(hitbox))
                         continue;
@@ -110,8 +153,9 @@ namespace FrostMelee.Content.Projectiles
             float fade = Projectile.timeLeft < 5 ? Projectile.timeLeft / 5f : 1f;
             Vector2 origin = glow.Size() / 2f;
             Main.EntitySpriteDraw(glow, Projectile.Center - Main.screenPosition + dir * 1f, null,
-                new Color(150, 220, 255) * (0.35f * fade), dir.ToRotation(), origin,
-                new Vector2(9f / glow.Width, 5.5f / glow.Height), SpriteEffects.None, 0f);
+                new Color(150, 220, 255) * (0.28f * fade * FrostMeleeConfigDefaults.FireHeatScale), dir.ToRotation(), origin,
+                new Vector2(9f * FrostMeleeConfigDefaults.FireSizeScale / glow.Width,
+                    5.5f * FrostMeleeConfigDefaults.FireSizeScale / glow.Height), SpriteEffects.None, 0f);
             return false;
         }
     }

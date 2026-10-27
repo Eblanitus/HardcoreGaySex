@@ -135,6 +135,22 @@ namespace FrostMelee.Content.Projectiles
             bool flipped = Projectile.spriteDirection == -1;
             Projectile.rotation = Projectile.velocity.ToRotation() - geo.AngleFor(flipped);
 
+            // Огонь Фростбранда пускает сам снаряд (как встреча): линия клинка
+            // ровно та, что только что поставлена выше. Раньше огонь пускал
+            // SwordPlayer.PostUpdate — ДО обновления снарядов, по позиции
+            // прошлого тика: на быстром выпаде пламя сидело позади клинка
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand)
+            {
+                var sp = player.GetModPlayer<Weapons.SwordPlayer>();
+                FrostJetFx.EmitBlade(butt, butt + Projectile.velocity * geo.Length, Projectile.velocity,
+                    sp.FireIntensity * (1f - 0.8f * Retract01), 1f, FrostJetFx.HandSource(Projectile.owner));
+            }
+
+            // Айсберг: тычок раскалывает свои глыбы, которых коснулось лезвие
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
+                AisbergChunk.CrackTouched(Projectile,
+                    box => Colliding(Projectile.Hitbox, box) == true, false);
+
             // Все колющие мечи чистят остриё об воздух: наледь и искры (визуал, все клиенты)
             if (!Main.dedServ)
                 UpdateHone(player, geo);
@@ -204,6 +220,14 @@ namespace FrostMelee.Content.Projectiles
             if (Projectile.knockBack <= 0f)
                 modifiers.DisableKnockback();
 
+            // Айсберг: тычок тоже забирает Frostbite, но не в урон — в темп
+            // появления новых глыб (OnHitNPC ниже).
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2])) {
+                int burn = Content.Weapons.FrostFireSystem.TakeBurn(target);
+                if (burn > 0)
+                    takenBurn[target.whoAmI] = burn;
+            }
+
             // Фростбранд: тычок вытягивает горение из цели и превращает его в урон
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
                 int burn = Content.Weapons.FrostFireSystem.TakeBurn(target);
@@ -220,16 +244,28 @@ namespace FrostMelee.Content.Projectiles
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
             }
-            // Фростбранд: забрал горение — бонусный урон; не горел — обычное поджигание.
+            // Айсберг: забранный Frostbite ускоряет создание новых глыб
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) &&
+                takenBurn.Remove(target.whoAmI, out int aisbergBurn) &&
+                Projectile.owner == Main.myPlayer) {
+                Main.player[Projectile.owner].GetModPlayer<Weapons.AisbergPlayer>()
+                    .SpeedUpBlockCreation(aisbergBurn);
+            }
+            // Фростбранд: забрал горение — бонусный урон. Сам тычок НЕ поджигает
+            // и струи у него нет: не горел враг — его подожгут веер дуги или
+            // факел встречи. Подготовка тычка — дело других приёмов.
             // Умер от тычка с забранным горением — взрыв холодного огня.
             if ((int)Projectile.ai[2] == ItemID.Frostbrand) {
                 bool tookBurn = takenBurn.Remove(target.whoAmI, out int burnTaken);
                 // анимация: холодное пламя стекается с врага в клинок (FrostDrainFx)
                 if (tookBurn)
+                {
                     FrostDrainFx.Play(target, Main.player[Projectile.owner], burnTaken);
-                if (!tookBurn) {
-                    Content.Weapons.FrostFireSystem.Ignite(target);
-                } else if (target.life <= 0 && Projectile.owner == Main.myPlayer) {
+                    // Забранный огонь не растворяется: язык уходит в орбиту у
+                    // игрока и уйдёт со следующим взмахом (конечный запас)
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().OnFlameDrained(target);
+                }
+                if (tookBurn && target.life <= 0 && Projectile.owner == Main.myPlayer) {
                     Content.Weapons.FrostFireSystem.Explode(target, 120f, Projectile.damage / 2, Projectile.owner, false);
                 }
             }

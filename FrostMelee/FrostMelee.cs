@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
@@ -16,12 +18,41 @@ namespace FrostMelee
     /// </summary>
     public class FrostMelee : Mod
     {
+        internal const byte FrostSyncMessage = 1;
+
+        public override void HandlePacket(BinaryReader reader, int whoAmI)
+        {
+            // This protocol has one fixed-size message (type + player + float).
+            if (reader.BaseStream.Length - reader.BaseStream.Position != 6)
+                return;
+            byte message = reader.ReadByte();
+            if (message != FrostSyncMessage)
+            {
+                Logger.Warn($"Unknown FrostMelee packet: {message}");
+                return;
+            }
+            int playerId = reader.ReadByte();
+            float frost = reader.ReadSingle();
+            if (playerId >= Main.maxPlayers || !float.IsFinite(frost))
+                return;
+            // A client may publish only its own resource, never another player's.
+            if (Main.netMode == NetmodeID.Server && playerId != whoAmI)
+                return;
+            var player = Main.player[playerId];
+            if (!player.active)
+                return;
+            var state = player.GetModPlayer<Content.SicklePlayer>();
+            state.Frost = player.dead ? 0f : Math.Clamp(frost, 0f, 1f);
+            if (Main.netMode == NetmodeID.Server)
+                state.SendFrost(-1, whoAmI);
+        }
+
         // Запасные ванильные текстуры серпов — чтобы вернуть при выгрузке мода
         private static readonly Dictionary<int, Asset<Texture2D>> originalTextures = new();
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261018-wave-log-1";
+        public const string BuildTag = "20261028-flail-network-merged";
 
         public override void Load()
         {
@@ -91,6 +122,12 @@ namespace FrostMelee
             TryOverride(ItemID.IceBlade, "FrostMelee/Items/Ice_Blade");
             Content.Weapons.IceBladeVisual.RegisterClean(TextureAssets.Item[ItemID.IceBlade]);
             TryOverride(ItemID.Frostbrand, "FrostMelee/Items/Frostbrand");
+
+            // Карамелька: ванильный спрайт огромный (44x70, клинок 77 px —
+            // длиннее Фростбранда у дохардмодной конфеты). Своя копия уменьшена
+            // до длины Ice Blade (~52 px): размер в руке, дуга и зоны меряются
+            // по спрайту и уменьшаются все разом
+            TryOverride(ItemID.CandyCaneSword, "FrostMelee/Items/CandyCaneSword");
         }
 
         private void TryOverride(int itemId, string texturePath)

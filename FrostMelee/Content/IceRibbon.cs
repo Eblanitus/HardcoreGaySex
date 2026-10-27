@@ -203,9 +203,12 @@ namespace FrostMelee.Content
 
         // Лента по истории углов. Вызывать при ЗАКРЫТОМ spriteBatch (внутри End/Begin окна).
         // scrollBase — счётчик тиков для анимации штрихов; env — общая яркость 0..1.
-        // streaks = false — без бегущих штрихов: лента цельная, одним градиентом (дуга мечей)
+        // streaks = false — без бегущих штрихов: лента цельная, одним градиентом (дуга мечей);
+        // streakStrength — доля яркости штрихов относительно тела ленты (штрихи —
+        // акцент внутри тела, а не отдельные полосы вместо него).
         public static void Draw(GraphicsDevice device, float[] angles, int n, Vector2 center,
-            float[] rOut, float[] rIn, float scrollBase, float env, Color core, Color tail, Color edge, bool streaks = true)
+            float[] rOut, float[] rIn, float scrollBase, float env, Color core, Color tail, Color edge, bool streaks = true,
+            float streakStrength = 1f)
         {
             if (n < 2 || env <= 0.02f || !Ensure(device))
                 return;
@@ -217,7 +220,7 @@ namespace FrostMelee.Content
             device.RasterizerState = raster;
             RunPass(device, trailMask, SamplerState.LinearClamp, false, angles, n, center, rOut, rIn, scrollBase, env, core, tail, edge);
             if (streaks && StreakAlpha > 0f)
-                RunPass(device, streakMask, SamplerState.LinearWrap, true, angles, n, center, rOut, rIn, scrollBase, env, core, tail, edge);
+                RunPass(device, streakMask, SamplerState.LinearWrap, true, angles, n, center, rOut, rIn, scrollBase, env * streakStrength, core, tail, edge);
         }
 
         // Инеевые кристаллы-иглы на внешнем крае ленты (рисуются при ОТКРЫТОМ батче):

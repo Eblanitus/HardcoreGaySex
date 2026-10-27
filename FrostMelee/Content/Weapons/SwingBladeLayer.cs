@@ -23,8 +23,12 @@ namespace FrostMelee.Content.Weapons
         {
             Player p = drawInfo.drawPlayer;
             Projectile arc = p.GetModPlayer<SwordPlayer>().swingArc;
+            // itemAnimation > 0: после конца анимации игра возвращает руку в
+            // обычную позу (itemLocation ближе к телу) — клинок на такой кадр
+            // прыгал рукояткой вглубь игрока, пока дуга ещё доживала свой тик
             return arc != null && arc.active && arc.owner == p.whoAmI
-                && arc.type == ModContent.ProjectileType<SwordArcProjectile>();
+                && arc.type == ModContent.ProjectileType<SwordArcProjectile>()
+                && (p.whoAmI != Main.myPlayer || p.itemAnimation > 0);
         }
 
         protected override void Draw(ref PlayerDrawSet drawInfo)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using ReLogic.Content;
 using Terraria;
 using Terraria.Audio;
 using Terraria.GameContent;
@@ -139,6 +140,22 @@ namespace FrostMelee.Content.Projectiles
 
         private bool IsIce => (int)Projectile.ai[2] == ItemID.IceSickle;
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
+        private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
+
+        // Карамелька-приманка: неподвижный леденец (лёжа, в земле или во
+        // враге) тратит заряд сладости владельца (CandyCanePlayer) — тик
+        // приманки за тик заряда. Заряд кончился — «съеден»: не манит и серый
+        private int candyStillTicks; // только ритм сладкой пыли, тикает у всех
+        private Weapons.CandyCanePlayer CandyOwner =>
+            Main.player[Projectile.owner].GetModPlayer<Weapons.CandyCanePlayer>();
+        public bool CandyEaten => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            CandyOwner.SweetTicks <= 0;
+        public bool CandyLureActive => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            (State == StateLying || State == StateStuckTile || State == StateLodged) && !CandyEaten;
+
+        // Серый («съеденный») спрайт карамельки и его геометрия: один раз на всех
+        private static Asset<Texture2D> candyGrayAsset;
+        private static SickleSprite.Geometry? candyGrayGeo;
 
         public override void SetDefaults()
         {
@@ -210,6 +227,23 @@ namespace FrostMelee.Content.Projectiles
                 State = StateLying;
                 lyingInit = false;
                 Projectile.netUpdate = true;
+            }
+
+            // Неподвижный леденец пахнет сладко и манит врагов (рулит ими
+            // CandyCaneLureNPC), пока не кончится заряд сладости владельца:
+            // тик неподвижности = тик заряда, считает только владелец
+            if ((int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+                (State == StateLying || State == StateStuckTile || State == StateLodged))
+            {
+                candyStillTicks++;
+                if (Projectile.owner == Main.myPlayer && CandyOwner.SweetTicks > 0)
+                    CandyOwner.SweetTicks--;
+                if (!Main.dedServ && !CandyEaten && candyStillTicks % 18 == 0)
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(10f, 6f),
+                        DustID.Snow, new Vector2(0f, -0.6f), 0, new Color(255, 120, 140), 1f);
+                    d.noGravity = true;
+                }
             }
 
             TryPickup();
@@ -502,9 +536,14 @@ namespace FrostMelee.Content.Projectiles
             Projectile.friendly = false;
             Projectile.tileCollide = false;
             Projectile.netUpdate = true;
-            // Волна льда по поверхности от броска ледяного клинка (маленькая, т.к. не убийство)
+            // Кристалл льда из земли при втыкании ледяного клинка (обычный, т.к. не убийство)
             if ((int)Projectile.ai[2] == ItemID.IceBlade && Projectile.owner == Main.myPlayer) {
-                SpawnIceWave((int)Projectile.ai[2], false);
+                SpawnIceCrystal((int)Projectile.ai[2], false);
+            }
+            // Айсберг: крупные глыбы в момент втыкания, из точки контакта
+            if (IsAisberg && Projectile.owner == Main.myPlayer) {
+                AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                    Projectile.GetSource_FromThis(), contact, Projectile.damage, Projectile.knockBack);
             }
             return true;
         }
@@ -563,7 +602,7 @@ namespace FrostMelee.Content.Projectiles
         }
 
         // Застрявший Frostbrand разгорается: аура растёт до предела, поджигает соседей,
-        // а если клинок висит в враге — всё время обновляет ему Frostburn.
+        // а если клинок висит в враге — всё время обновляет ему Frostbite.
         private void UpdateLodgedFrostbrand(NPC lodged)
         {
             if (!IsFrostbrand)
@@ -584,7 +623,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < Main.maxNPCs; i++)
                 {
                     NPC npc = Main.npc[i];
-                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                    if (!Weapons.FrostFireSystem.CanBurn(npc))
                         continue;
                     if (Vector2.DistanceSquared(npc.Center, Projectile.Center) <= r2)
                         Weapons.FrostFireSystem.TryIgnite(npc, Main.player[Projectile.owner]);
@@ -635,17 +674,16 @@ namespace FrostMelee.Content.Projectiles
             CloseFrostTrail();
         }
 
-        private void SpawnIceWave(int itemType, bool isKill)
+        private void SpawnIceCrystal(int itemType, bool isKill)
         {
-            Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
-            // Ледяные свойства (волна, сосульки) — только Ice Blade:
-            // у Frostbrand их быть не должно
+            // Кристалл — только Ice Blade: у Frostbrand ледяных пик не бывает
             if (itemType != ItemID.IceBlade) return;
-            // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
+            // Один усиленный пик из земли в точке втыкания вместо полоски
+            // волны. Бросок убил — тот же кристалл, только крупнее и больнее
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
-            // Спавним волну на земле: ищем поверхность глубоко вниз.
-            // Враг высоко в воздухе и земли рядом нет — волны не будет:
+            // Кристалл наземный: ищем поверхность глубоко вниз.
+            // Враг высоко в воздухе и земли рядом нет — кристалла не будет:
             // наземная атака не должна висеть в пустоте
             Vector2 spawn = Projectile.Center;
             Point start = spawn.ToTileCoordinates();
@@ -653,14 +691,20 @@ namespace FrostMelee.Content.Projectiles
             for (int i = 0; i < 80; i++) {
                 int y = start.Y + i;
                 if (!WorldGen.InWorld(start.X, y, 2)) break;
-                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f - 8f; found = true; break; }
+                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f; found = true; break; }
             }
             if (!found) return;
-            // Урон шипов: треть от броска, сами шипы домножат на 0.35 (как раньше волна).
-            // Волна урона не наносит — она только несёт и расставляет шипы.
-            int waveDamage = Math.Max(1, Projectile.damage / 3);
+            // Урон — полный урон броска: множители обычного и убийственного
+            // кристалла внутри IceWaveSpike (0.6 и 1.0). Параметры пика:
+            // ai[0]=1 — личный размер в полую силу; ai[1]=6 обычный кристалл
+            // (спрайт 0, самый большой), 9 — за убийство; ai[2] — масштаб со
+            // знаком направления наклона
+            float packedStage = isKill ? 9f : 6f;
+            float sizeMul = (isKill ? 0.47f : 0.35f) * dir;
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
-                ModContent.ProjectileType<IceWaveProjectile>(), 0, 0f, Projectile.owner, isKill ? 1f : 0f, dir, waveDamage);
+                ModContent.ProjectileType<IceWaveSpike>(), Projectile.damage, IceWaveSpike.SpawnKnockback, Projectile.owner,
+                1f, packedStage, sizeMul);
+            SoundEngine.PlaySound(SoundID.Item27 with { Volume = isKill ? 0.8f : 0.6f, Pitch = isKill ? 0f : 0.3f }, spawn);
             if (isKill) {
                 // звук усиления
                 SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.7f }, spawn);
@@ -870,12 +914,19 @@ namespace FrostMelee.Content.Projectiles
                     if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
                         Weapons.FrostFireSystem.Explode(target, 200f, Projectile.damage * 7 / 10, Projectile.owner, true);
                 }
-                // Волна льда — когда меч втыкается остриём (а не чиркает боком):
+                // Кристалл льда — когда меч втыкается остриём (а не чиркает боком):
                 // то же условие, что и само втыкание ниже, иначе меч торчит
-                // во враге, а волны нет — «эффект не срабатывает»
+                // во враге, а кристалла нет — «эффект не срабатывает»
                 if (stickNpcHit && Projectile.owner == Main.myPlayer) {
-                    bool isKill = target.life <= 0;
-                    SpawnIceWave(thrownItem, isKill);
+                    if (IsAisberg) {
+                        Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
+                        AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                            Projectile.GetSource_FromThis(), tip, Projectile.damage, Projectile.knockBack);
+                    }
+                    else {
+                        bool isKill = target.life <= 0;
+                        SpawnIceCrystal(thrownItem, isKill);
+                    }
                 }
             }
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
@@ -1041,6 +1092,27 @@ namespace FrostMelee.Content.Projectiles
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
+
+            // Леденец сереет по мере потраченного заряда сладости: серый спрайт
+            // поверх той же позы (полный заряд — красный, пустой — серый).
+            // Серый спрайт в ванильном размере 44x70, поэтому геометрия своя,
+            // а масштаб подогнан под длину нынешнего клинка
+            if (itemType == ItemID.CandyCaneSword &&
+                CandyOwner.SweetTicks < Weapons.CandyCaneLureNPC.MaxSweetTicks)
+            {
+                candyGrayAsset ??= ModContent.Request<Texture2D>(
+                    "FrostMelee/Items/Candy Cane Sword gray", AssetRequestMode.ImmediateLoad);
+                Texture2D grayTex = candyGrayAsset.Value;
+                if (grayTex != null && !grayTex.IsDisposed)
+                {
+                    candyGrayGeo ??= SickleSprite.GetCandyGrayGeometry();
+                    SickleSprite.Geometry gGeo = candyGrayGeo.Value;
+                    float gray = 1f - CandyOwner.SweetFrac;
+                    float gScale = gGeo.Length > 1f ? scale * geo.Length / gGeo.Length : scale;
+                    Main.EntitySpriteDraw(grayTex, butt - Main.screenPosition, null, lightColor * gray,
+                        heading - gGeo.AngleFor(false), gGeo.ButtFor(false), gScale, SpriteEffects.None, 0f);
+                }
+            }
             return false;
         }
     }

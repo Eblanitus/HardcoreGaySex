@@ -1,3 +1,15 @@
+Items: {
+	Aisberg: {
+		DisplayName: Айсберг
+		Tooltip: Ледяные глыбы при расколе взрываются и накладывают Фростбайт
+	}
+
+	GlacialFlail: {
+		DisplayName: Ледниковый цеп
+		Tooltip: Два цепа в одном: крутка с броском и прямой выстрел на цепи
+	}
+}
+
 Projectiles: {
 	SickleArcProjectile.DisplayName: Дуга серпа
 	SickleStabProjectile.DisplayName: Выпад серпом
@@ -14,6 +26,12 @@ Projectiles: {
 	// FrostFireBlast.DisplayName: Frost Fire Blast
 	// FrostFireJet.DisplayName: Frost Fire Jet
 	// FrostDrainFx.DisplayName: Frost Drain Fx
+	// FrostFlameWisp.DisplayName: Frost Flame Wisp
+	// AisbergBlast.DisplayName: Aisberg Blast
+	// AisbergChunk.DisplayName: Aisberg Chunk
+	// BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
+	// BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
+	GlacialFlailProjectile.DisplayName: Ледниковый цеп
 }
 
 Stance: {
@@ -26,6 +44,7 @@ Stance: {
 
 ThrownTooltip: Брошено — подойди к серпу, чтобы подобрать
 ThrownTooltipSword: Брошено — подойди к мечу, чтобы подобрать
+ThrownTooltipBoomerang: Брошено — подойди к бумерангу, чтобы подобрать
 FrozenSpearName: Замороженное копьё
 YoyoControlsTooltip:
 	'''
@@ -55,6 +74,20 @@ SwordControlsTooltip:
 	ПКМ (зажать): тычки остриём
 	ПКМ + ЛКМ: бросок (меч остаётся — иди забери)
 	'''
+BoomerangControlsTooltip:
+	'''
+	ЛКМ (держать): лёгкие броски без конца — слабенькие, тянут холодный вихрь и сами возвращаются
+	ПКМ: размах — бьёт в упор и раскручивает следующий бросок
+	ПКМ (зажать): зарядка с прицелом, отпустить — тяжёлый бросок (скользит шайбой, в воде не тонет, идти забирать)
+	Сквозь стены не летит ничего
+	'''
+GlacialFlailControlsTooltip:
+	'''
+	ЛКМ (держать): глыба крутится вокруг тебя и разгоняется — урон и отброс растут
+	Отпустить ЛКМ: бросок по дуге на цепи; зажать ЛКМ в полёте — уронить глыбу, отпустить — вернуть
+	ПКМ: прямой выстрел глыбой без гравитации; из крутки сохраняет часть разгона и возвращается в крутку
+	Сквозь стены не бьёт
+	'''
 
 Configs: {
 	FrostMeleeConfig: {
@@ -68,6 +101,16 @@ Configs: {
 		ShowControlTooltips: {
 			// Label: Подсказки управления в описании
 			// Tooltip: Отключает списки приёмов в тултипах оружия.
+		}
+
+		FrostFireIntensity: {
+			// Label: Ядрёность ледяного огня (%)
+			// Tooltip: Сколько самого синего пламени Frostbrand и насколько оно горячее. По умолчанию 50: основное пламя уже есть на самом мече, а живой огонь вокруг него должен быть еле заметным.
+		}
+
+		FrostBraceJetLengthPercent: {
+			// Label: Длина струи встречи (%)
+			// Tooltip: Временная настройка для подбора длины струи Frostbrand во встрече. 100 — прежняя длина, сейчас стоит 60 — примерно на 40% короче.
 		}
 	}
 }

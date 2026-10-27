@@ -33,6 +33,8 @@ namespace FrostMelee.Content.Yoyo
 
         public override bool Shoot(Item item, Player player, EntitySource_ItemUse_WithAmmo source, Vector2 position, Vector2 velocity, int type, int damage, float knockback)
         {
+            if (player.whoAmI != Main.myPlayer)
+                return false;
             int ownType = ModContent.ProjectileType<AmarokYoyoProjectile>();
             if (player.ownedProjectileCounts[ownType] > 0)
                 return false;

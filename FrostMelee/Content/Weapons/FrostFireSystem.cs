@@ -24,6 +24,10 @@ namespace FrostMelee.Content.Weapons
     public class FrostFireSystem : ModSystem
     {
         public const int BurnTicks = 180;         // 3 с горения
+        // Фростбранд — хардмодный, поэтому его горение — Frostbite
+        // (BuffID.Frostburn2), а не дохардмодный Frostburn. Весь учёт
+        // запаса, «горит ли» и забор огня тычком смотрят именно сюда.
+        public const int BurnBuff = BuffID.Frostburn2;
 
         private class BurstVisual
         {
@@ -46,8 +50,18 @@ namespace FrostMelee.Content.Weapons
             bursts.Clear();
         }
 
-        // Горит ли цель
-        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BuffID.Frostburn) >= 0;
+        // Манекен в ванили помечен immortal: здоровье у него не падает, но
+        // удары и дебаффы он как раз должен показывать. Поэтому для него
+        // делаем единственное исключение из запрета на immortal; остальных
+        // бессмертных не трогаем.
+        public static bool IsTargetDummy(NPC npc) => npc != null && npc.type == NPCID.TargetDummy;
+
+        public static bool CanBurn(NPC npc) =>
+            npc != null && npc.active && !npc.friendly && !npc.dontTakeDamage
+            && (!npc.immortal || IsTargetDummy(npc));
+
+        // Горит ли цель холодным огнём Фростбранда (Frostbite)
+        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BurnBuff) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) => IsBurning(npc);
@@ -55,14 +69,14 @@ namespace FrostMelee.Content.Weapons
         // Сколько тиков горения осталось (0 — не горит)
         public static int BurnRemaining(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             return index < 0 ? 0 : npc.buffTime[index];
         }
 
         // Тычок забирает горение с цели: снимает бафф и возвращает остаток тиков
         public static int TakeBurn(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             if (index < 0)
                 return 0;
             int ticks = npc.buffTime[index];
@@ -73,10 +87,10 @@ namespace FrostMelee.Content.Weapons
         // Сырой поджог без учёта запаса (внутренний и запасной путь)
         public static void Ignite(NPC npc)
         {
-            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+            if (!CanBurn(npc))
                 return;
 
-            npc.AddBuff(BuffID.Frostburn, BurnTicks);
+            npc.AddBuff(BurnBuff, BurnTicks);
         }
 
         // Поджог с учётом конечного запаса владельца: новый враг загорается,
@@ -85,7 +99,7 @@ namespace FrostMelee.Content.Weapons
         // Возвращает false — запаса нет, враг НЕ загорелся
         public static bool TryIgnite(NPC npc, Player owner)
         {
-            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+            if (!CanBurn(npc))
                 return false;
             if (owner == null || !owner.active)
             {
@@ -97,18 +111,18 @@ namespace FrostMelee.Content.Weapons
             {
                 // Сервер и чужие клиенты учёт не ведут (как полировка в MP):
                 // поджог не блокируем, запас считает клиент владельца
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             if (sp.HoldsFlame(npc))
             {
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             if (sp.FreeFlames > 0 || sp.TryConsumeOrbitingFlame())
             {
                 sp.AddFlameHolder(npc);
-                npc.AddBuff(BuffID.Frostburn, BurnTicks);
+                npc.AddBuff(BurnBuff, BurnTicks);
                 return true;
             }
             return false;
@@ -182,8 +196,10 @@ namespace FrostMelee.Content.Weapons
                 // половины — поэтому масштаб с запасом, чтобы видимый край
                 // доходил до радиуса урона
                 float scale = b.Radius * 2f * 1.55f * (0.45f + 0.55f * open) / glow.Width;
-                float a = b.Big ? 0.75f : 0.55f;
-                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(40, 120, 255) * (fade * a * 0.55f),
+                // Жар вспышки — по ядрёности из конфига; размер пятна не
+                // трогаем: оно показывает зону урона
+                float a = (b.Big ? 0.6f : 0.44f) * FrostMeleeConfigDefaults.FireHeatScale;
+                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(40, 120, 255) * (fade * a * 0.45f),
                     0f, center, scale, SpriteEffects.None, 0f);
                 Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(150, 220, 255) * (fade * a),
                     0f, center, scale * 0.4f, SpriteEffects.None, 0f);
