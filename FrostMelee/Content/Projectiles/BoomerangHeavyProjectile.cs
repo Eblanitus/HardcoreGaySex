@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.Audio;
@@ -34,7 +33,11 @@ public class BoomerangHeavyProjectile : ModProjectile
 		Projectile.height = 28;
 		Projectile.friendly = true;
 		Projectile.DamageType = DamageClass.Melee;
-		Projectile.penetrate = 1; // втыкается в первого же
+		// penetrate = -1: при penetrate=1 движок убивает снаряд сразу после OnHitNPC
+		// и втыкание не успевает сработать. Один хит обеспечивает CanHitNPC + friendly=false.
+		Projectile.penetrate = -1;
+		Projectile.usesLocalNPCImmunity = true;
+		Projectile.localNPCHitCooldown = -1;
 		Projectile.tileCollide = true;
 		Projectile.ignoreWater = true;
 		Projectile.timeLeft = 600; // предохранитель полёта; воткнутый живёт до подбора
@@ -69,7 +72,6 @@ public class BoomerangHeavyProjectile : ModProjectile
 					LodgedNpc = -1f;
 					lodgeInit = false;
 					State = StateFalling;
-					Projectile.hide = false;
 					Projectile.tileCollide = true;
 					Projectile.velocity = Vector2.Zero;
 					Projectile.netUpdate = true;
@@ -92,6 +94,9 @@ public class BoomerangHeavyProjectile : ModProjectile
 		if (state == StateFalling)
 			Projectile.timeLeft = 2; // долетит до земли и воткнётся
 	}
+
+	// Бьёт только в полёте броска — воткнутый/падающий безвреден.
+	public override bool? CanHitNPC(NPC target) => (int)State == StateFlying ? null : false;
 
 	public override bool OnTileCollide(Vector2 oldVelocity)
 	{
@@ -116,13 +121,7 @@ public class BoomerangHeavyProjectile : ModProjectile
 		Projectile.velocity = Vector2.Zero;
 		Projectile.friendly = false;
 		Projectile.tileCollide = false;
-		Projectile.hide = npcIndex >= 0f; // во враге — под его текстурой, как бросок меча
+		// Рисуется поверх врага — должно быть видно, что воткнулся.
 		Projectile.netUpdate = true;
-	}
-
-	public override void DrawBehind(int index, List<int> behindNPCsAndTiles, List<int> behindNPCs, List<int> behindProjectiles, List<int> overPlayers, List<int> overWiresUI)
-	{
-		if ((int)State == StateStuck && LodgedNpc >= 0f)
-			behindNPCs.Add(index);
 	}
 }

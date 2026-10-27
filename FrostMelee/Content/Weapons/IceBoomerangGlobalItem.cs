@@ -18,6 +18,7 @@ public class IceBoomerangGlobalItem : GlobalItem
 	{
 		item.useStyle = ItemUseStyleID.Swing;
 		item.noMelee = false; // удар в руке бьёт по-настоящему
+		item.noUseGraphic = false; // у ванильного бумеранга графика в руке скрыта — возвращаем
 		item.shoot = ProjectileID.None; // броски — только наши, по ПКМ
 		item.autoReuse = true;
 	}
