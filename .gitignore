@@ -1,0 +1,14 @@
+# Local build outputs (already tracked files are not removed automatically)
+**/bin/
+**/obj/
+.vs/
+.vscode/
+
+# Working backups and packaged builds
+*.bak
+*.tmod
+*.tar.gz
+
+# Local runtime output
+*.log
+__pycache__/
