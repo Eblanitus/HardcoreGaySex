@@ -9,12 +9,14 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Projectiles;
 
-// Глыба ледникового цепа. Свой движок вместо ванильного aiStyle 15:
-// ЛКМ зажата — глыба крутится вокруг игрока и набирает инерцию (радиус,
-// скорость, урон и отброс растут), с разгона 65% удары дают Frostbite.
-// Отпустил — глыба летит к курсору на цепи, но бьёт слабее: дальний урон
-// тут не главный. Клик в полёте — сразу дёрнуть обратно. Сквозь стены
-// не бьёт: ownerHitCheck всегда включён, хитбокс — только сама глыба.
+// Глыба ледникового цепа — гибрид обеих подкатегорий цепов в одном движке.
+// Thrown-половина (ЛКМ): крутка вокруг игрока с набором инерции, отпустил —
+// баллистический бросок с пробитием, зажал в полёте — глыба падает и лежит
+// на земле, пока держишь. Launched-половина (ПКМ): прямой выстрел без
+// гравитации, после первого врага/стены сразу назад; из крутки выстрел
+// сохраняет часть разгона и после поимки возвращается в крутку.
+// Крутка вплотную — главный урон (с разгона 65% ещё и Frostbite), всё
+// дальнее слабее. Сквозь стены не бьёт, хитбокс — только сама глыба.
 public class GlacialFlailProjectile : ModProjectile
 {
 	public const int RampTicks = 150;             // 2.5 с до полной раскрутки
@@ -38,15 +40,36 @@ public class GlacialFlailProjectile : ModProjectile
 	public const float FrostbiteRamp = 0.65f;     // с этого разгона крутка вешает Frostbite
 	public const int FrostbiteTicks = 180;
 
+	// Launched-половина (ПКМ): прямой выстрел без гравитации
+	public const float AiLaunchOut = 3f;          // ai[0] при спавне выстрелом (порядок enum State!)
+	public const float LaunchSpeedMin = 17f;      // выстрел без разгона
+	public const float LaunchSpeedMax = 22f;      // выстрел с полной крутки
+	public const float LaunchRange = 260f;        // длина цепи выстрела
+	public const float LaunchReturnSpeed = 24f;   // назад быстрее, чем туда
+	public const float LaunchDamageBase = 0.8f;   // урон выстрела без разгона
+	public const float LaunchDamageRampBonus = 0.35f; // добавка от полной крутки
+	public const float SavedSpinKeep = 0.6f;      // сколько разгона остаётся после выстрела из крутки
+
+	// Упавшая глыба thrown-половины: лежит, пока держат ЛКМ
+	public const float DropGravity = 0.8f;
+	public const float MaxDroppedRange = 370f;    // дальше цепь дёргает глыбу домой
+	public const float DropDamageMult = 0.5f;
+
+	public static float LaunchSpeed(float ramp) => MathHelper.Lerp(LaunchSpeedMin, LaunchSpeedMax, MathHelper.Clamp(ramp, 0f, 1f));
+
 	private const int SpinHitCooldown = 16;
 	private const int ThrowHitCooldown = 10;
 	private const int SpinArmTicks = 8; // первые тики глыба ещё выходит на круг и не бьёт
 
+	// Порядок важен: GlacialFlailPlayer спавнит выстрел числом AiLaunchOut
 	private enum State
 	{
-		Spin,
-		Throw,
-		Return
+		Spin,        // 0 thrown: крутка
+		Throw,       // 1 thrown: баллистический полёт
+		Return,      // 2 thrown: возврат домой
+		LaunchOut,   // 3 launched: прямой выстрел
+		LaunchReturn,// 4 launched: быстрый возврат выстрела
+		Drop         // 5 thrown: глыба лежит на земле
 	}
 
 	private State CurrentState
@@ -62,7 +85,8 @@ public class GlacialFlailProjectile : ModProjectile
 
 	private bool started;
 	private bool fullSpinPing;
-	private float releaseRamp;
+	private float releaseRamp;   // разгон крутки в момент броска/выстрела
+	private int savedSpinTicks;  // тики крутки перед выстрелом: часть вернётся при поимке
 	private int tileSoundCooldown;
 
 	public override void SetStaticDefaults()
@@ -81,6 +105,7 @@ public class GlacialFlailProjectile : ModProjectile
 		Projectile.ignoreWater = true;
 		Projectile.usesLocalNPCImmunity = true;
 		Projectile.localNPCHitCooldown = SpinHitCooldown;
+		Projectile.ownerHitCheck = true; // сквозь стены не бьёт с первого же тика
 		Projectile.aiStyle = -1; // полёт полностью наш, ванильный цеп не зовём
 		Projectile.netImportant = true;
 		Projectile.timeLeft = 2;
@@ -107,7 +132,15 @@ public class GlacialFlailProjectile : ModProjectile
 			SpinDirection = Projectile.velocity.X < 0f ? -1f : 1f;
 			if (Projectile.velocity.X == 0f)
 				SpinDirection = player.direction >= 0 ? 1f : -1f;
-			SoundEngine.PlaySound(SoundID.Item1 with { Volume = 0.45f, Pitch = -0.25f }, Projectile.Center);
+			if (CurrentState == State.LaunchOut)
+			{
+				// Спавн сразу выстрелом по ПКМ: скорость строго по прямой
+				Vector2 dir = Projectile.velocity.SafeNormalize(new Vector2(player.direction, 0f));
+				Projectile.velocity = player.velocity + dir * LaunchSpeed(0f);
+				SoundEngine.PlaySound(SoundID.Item1 with { Volume = 0.6f, Pitch = 0.1f }, Projectile.Center);
+			}
+			else
+				SoundEngine.PlaySound(SoundID.Item1 with { Volume = 0.45f, Pitch = -0.25f }, Projectile.Center);
 		}
 
 		if (tileSoundCooldown > 0)
@@ -135,8 +168,9 @@ public class GlacialFlailProjectile : ModProjectile
 				Projectile.velocity.Y += ThrowGravity;
 				if (Projectile.velocity.Y > 16f)
 					Projectile.velocity.Y = 16f;
-				if ((player.controlUseItem && StateTimer > 3f) ||
-					StateTimer > MaxThrowTicks || Projectile.Distance(anchor) > MaxChainLength)
+				if (player.controlUseItem && StateTimer > 3f)
+					BeginDrop(); // зажал ЛКМ в полёте — глыба падает и лежит
+				else if (StateTimer > MaxThrowTicks || Projectile.Distance(anchor) > MaxChainLength)
 					BeginReturn();
 				player.ChangeDir(Projectile.Center.X >= player.Center.X ? 1 : -1);
 				break;
@@ -144,6 +178,37 @@ public class GlacialFlailProjectile : ModProjectile
 			case State.Return:
 				if (!ReturnAI(player, anchor))
 					return; // поймали глыбу
+				break;
+
+			case State.LaunchOut:
+				// Прямая линия без гравитации; скорость задана при выстреле
+				Projectile.tileCollide = true;
+				Projectile.localNPCHitCooldown = ThrowHitCooldown;
+				StateTimer++;
+				if (Projectile.Distance(anchor) > LaunchRange)
+					BeginLaunchReturn();
+				player.ChangeDir(Projectile.Center.X >= player.Center.X ? 1 : -1);
+				break;
+
+			case State.LaunchReturn:
+				if (!LaunchReturnAI(player, anchor))
+					return; // поймана: ушла в крутку или исчезла
+				break;
+
+			case State.Drop:
+				Projectile.tileCollide = true;
+				Projectile.localNPCHitCooldown = ThrowHitCooldown;
+				StateTimer++;
+				if (!player.controlUseItem || Projectile.Distance(anchor) > MaxDroppedRange)
+					BeginReturn();
+				else
+				{
+					Projectile.velocity.Y += DropGravity;
+					if (Projectile.velocity.Y > 18f)
+						Projectile.velocity.Y = 18f;
+					Projectile.velocity.X *= 0.95f;
+					player.ChangeDir(Projectile.Center.X >= player.Center.X ? 1 : -1);
+				}
 				break;
 		}
 
@@ -174,20 +239,25 @@ public class GlacialFlailProjectile : ModProjectile
 		Projectile.localNPCHitCooldown = SpinHitCooldown;
 		StateTimer++;
 
-		// Отпустил ЛКМ — бросок к курсору с набранной инерцией
+		// Отпустил ЛКМ — баллистический бросок; ПКМ на крутке — прямой выстрел
 		if (Projectile.owner == Main.myPlayer)
 		{
 			Vector2 aim = anchor.DirectionTo(Main.MouseWorld).SafeNormalize(new Vector2(player.direction, 0f));
 			player.ChangeDir(aim.X >= 0f ? 1 : -1);
 			if (!player.channel)
 			{
-				Launch(player, aim);
+				LaunchThrown(player, aim);
+				return;
+			}
+			if (player.GetModPlayer<Weapons.GlacialFlailPlayer>().LaunchHeld)
+			{
+				BeginLaunched(player, aim);
 				return;
 			}
 		}
 		else if (!player.channel)
 		{
-			Launch(player, Projectile.velocity.SafeNormalize(new Vector2(player.direction, 0f)));
+			LaunchThrown(player, Projectile.velocity.SafeNormalize(new Vector2(player.direction, 0f)));
 			return;
 		}
 
@@ -237,7 +307,7 @@ public class GlacialFlailProjectile : ModProjectile
 		}
 	}
 
-	private void Launch(Player player, Vector2 aim)
+	private void LaunchThrown(Player player, Vector2 aim)
 	{
 		releaseRamp = SpinRamp;
 		CurrentState = State.Throw;
@@ -247,6 +317,41 @@ public class GlacialFlailProjectile : ModProjectile
 		Projectile.localNPCHitCooldown = ThrowHitCooldown;
 		Projectile.netUpdate = true;
 		SoundEngine.PlaySound(SoundID.Item1 with { Volume = 0.7f, Pitch = -0.1f }, Projectile.Center);
+	}
+
+	// Выстрел launched-половины из крутки: разгон запоминаем — после поимки
+	// крутка продолжится не с нуля
+	private void BeginLaunched(Player player, Vector2 aim)
+	{
+		savedSpinTicks = (int)StateTimer;
+		releaseRamp = SpinRamp;
+		CurrentState = State.LaunchOut;
+		StateTimer = 0f;
+		Projectile.velocity = player.velocity + aim * LaunchSpeed(releaseRamp);
+		Projectile.ResetLocalNPCHitImmunity();
+		Projectile.localNPCHitCooldown = ThrowHitCooldown;
+		Projectile.netUpdate = true;
+		SoundEngine.PlaySound(SoundID.Item1 with { Volume = 0.65f, Pitch = 0.2f }, Projectile.Center);
+	}
+
+	private void BeginLaunchReturn()
+	{
+		if (CurrentState != State.LaunchOut)
+			return;
+		CurrentState = State.LaunchReturn;
+		StateTimer = 0f;
+		Projectile.tileCollide = false;
+		Projectile.netUpdate = true;
+	}
+
+	// Глыба падает и лежит, пока держат ЛКМ (thrown-половина)
+	private void BeginDrop()
+	{
+		CurrentState = State.Drop;
+		StateTimer = 0f;
+		Projectile.velocity *= 0.2f;
+		Projectile.tileCollide = true;
+		Projectile.netUpdate = true;
 	}
 
 	private void BeginReturn()
@@ -266,28 +371,67 @@ public class GlacialFlailProjectile : ModProjectile
 		Projectile.localNPCHitCooldown = ThrowHitCooldown;
 		StateTimer++;
 
-		Vector2 toPlayer = anchor - Projectile.Center;
-		float dist = toPlayer.Length();
-		if (dist <= 26f)
+		// И на возврате зажатая ЛКМ роняет глыбу, как у ванильных цепов
+		// (но не дальше длины цепи упавшей глыбы, иначе туда-сюда по кругу)
+		if (player.controlUseItem && StateTimer > 3f && Projectile.Distance(anchor) <= MaxDroppedRange)
+		{
+			BeginDrop();
+			return true;
+		}
+
+		if (!FlyHome(player, anchor, ReturnSpeed, ReturnAcceleration))
 		{
 			if (Projectile.owner == Main.myPlayer)
 				SoundEngine.PlaySound(SoundID.Grab, player.Center);
 			Projectile.Kill();
 			return false;
 		}
+		return true;
+	}
 
-		Vector2 desired = player.velocity + toPlayer / dist * ReturnSpeed;
-		Projectile.velocity = Projectile.velocity.MoveTowards(desired, ReturnAcceleration);
+	// false — выстрел пойман: ЛКМ ещё зажата — обратно в крутку с частью
+	// разгона, иначе глыба исчезает (следующий выстрел выпустит GlacialFlailPlayer)
+	private bool LaunchReturnAI(Player player, Vector2 anchor)
+	{
+		Projectile.tileCollide = false;
+		Projectile.localNPCHitCooldown = ThrowHitCooldown;
+		StateTimer++;
+
+		if (!FlyHome(player, anchor, LaunchReturnSpeed, 100f))
+		{
+			if (Projectile.owner == Main.myPlayer)
+				SoundEngine.PlaySound(SoundID.Grab, player.Center);
+			if (player.channel)
+			{
+				CurrentState = State.Spin;
+				StateTimer = savedSpinTicks * SavedSpinKeep;
+				fullSpinPing = SpinRamp >= 1f;
+				savedSpinTicks = 0;
+				Projectile.tileCollide = true;
+				Projectile.netUpdate = true;
+			}
+			else
+				Projectile.Kill();
+			return false;
+		}
+		return true;
+	}
+
+	// Общий полёт домой. false — долетела до рук (сама никого не убивает)
+	private bool FlyHome(Player player, Vector2 anchor, float speed, float acceleration)
+	{
+		Vector2 toPlayer = anchor - Projectile.Center;
+		float dist = toPlayer.Length();
+		if (dist <= 26f)
+			return false;
+
+		Vector2 desired = player.velocity + toPlayer / dist * speed;
+		Projectile.velocity = Projectile.velocity.MoveTowards(desired, acceleration);
 
 		// Пролетела мимо рук насквозь за один тик — всё равно поймана
 		Vector2 nextFromAnchor = anchor.DirectionFrom(Projectile.Center + Projectile.velocity).SafeNormalize(Vector2.Zero);
 		if (Vector2.Dot(toPlayer / dist, nextFromAnchor) < 0f)
-		{
-			if (Projectile.owner == Main.myPlayer)
-				SoundEngine.PlaySound(SoundID.Grab, player.Center);
-			Projectile.Kill();
 			return false;
-		}
 
 		player.ChangeDir(Projectile.Center.X >= player.Center.X ? 1 : -1);
 		return true;
@@ -335,6 +479,17 @@ public class GlacialFlailProjectile : ModProjectile
 			modifiers.SourceDamage *= MathHelper.Lerp(SpinDamageMin, SpinDamageMax, ramp);
 			modifiers.Knockback *= MathHelper.Lerp(0.65f, 1.35f, ramp);
 		}
+		else if (CurrentState == State.LaunchOut || CurrentState == State.LaunchReturn)
+		{
+			// Выстрел: база выше броска, с крутки ещё и разгон сверху
+			modifiers.SourceDamage *= LaunchDamageBase + LaunchDamageRampBonus * releaseRamp;
+			modifiers.Knockback *= 0.8f + 0.3f * releaseRamp;
+		}
+		else if (CurrentState == State.Drop)
+		{
+			modifiers.SourceDamage *= DropDamageMult;
+			modifiers.Knockback *= 0.5f;
+		}
 		else
 		{
 			modifiers.SourceDamage *= ThrowDamageMult;
@@ -346,9 +501,13 @@ public class GlacialFlailProjectile : ModProjectile
 
 	public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
 	{
-		// Frostbite — только с разогнанной крутки вплотную, не с броска
-		if (CurrentState == State.Spin && SpinRamp >= FrostbiteRamp)
+		// Frostbite — только с разогнанной крутки и выстрела из неё, не с броска
+		if ((CurrentState == State.Spin && SpinRamp >= FrostbiteRamp) ||
+			(CurrentState == State.LaunchOut && releaseRamp >= FrostbiteRamp))
 			target.AddBuff(BuffID.Frostburn2, FrostbiteTicks);
+		// Выстрел не пробивает: первый враг разворачивает глыбу домой
+		if (CurrentState == State.LaunchOut)
+			BeginLaunchReturn();
 		if (Main.dedServ)
 			return;
 		for (int i = 0; i < 5; i++)
@@ -379,6 +538,21 @@ public class GlacialFlailProjectile : ModProjectile
 		{
 			// У стены скользит: гасим только компоненту в стену, рулёжка
 			// в следующем тике увезёт вдоль неё (как йо-йо Амарока)
+			if (hitX)
+				Projectile.velocity.X = 0f;
+			if (hitY)
+				Projectile.velocity.Y = 0f;
+			impact = Math.Abs(oldVelocity.X) > 5f || Math.Abs(oldVelocity.Y) > 5f;
+		}
+		else if (CurrentState == State.LaunchOut)
+		{
+			// Стена разворачивает выстрел домой, как первый враг
+			impact = Math.Abs(oldVelocity.X) > 4f || Math.Abs(oldVelocity.Y) > 4f;
+			BeginLaunchReturn();
+		}
+		else if (CurrentState == State.Drop)
+		{
+			// Лежащая глыба не отскакивает: глухо села и лежит
 			if (hitX)
 				Projectile.velocity.X = 0f;
 			if (hitY)

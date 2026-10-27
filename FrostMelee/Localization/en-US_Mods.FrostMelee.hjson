@@ -5,7 +5,7 @@ Items: {
 	}
 	GlacialFlail: {
 		DisplayName: Glacial Flail
-		Tooltip: A fully spun-up boulder hits harder and inflicts Frostbite
+		Tooltip: Two flails in one: a spun throw and a straight launched shot
 	}
 }
 
@@ -83,8 +83,8 @@ BoomerangControlsTooltip:
 GlacialFlailControlsTooltip:
 	'''
 	LMB (hold): the boulder spins around you and gains momentum — damage and knockback grow
-	Release LMB: the boulder flies to your cursor on its chain, but hits weaker
-	LMB while it flies: yank the boulder back
+	Release LMB: an arcing throw on the chain; hold LMB in flight to drop the boulder, release to reel it back
+	RMB: a straight launched shot with no gravity; from a spin it keeps some momentum and returns to spinning
 	It does not hit through walls
 	'''
 
