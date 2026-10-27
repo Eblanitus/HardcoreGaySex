@@ -94,6 +94,7 @@ namespace FrostMelee.Content.Projectiles
         {
             public Dust Particle;
             public VanillaBurnTag Tag;
+            public bool HardmodeBurn; // Frostbite (Frostburn2), а не обычный Frostburn
         }
 
         private static readonly List<VanillaBurnDustRef> vanillaBurnDust = new();
@@ -507,11 +508,26 @@ namespace FrostMelee.Content.Projectiles
         // а поверх каждой такой частицы рисуется наше пламя
         // (DrawVanillaBurnDustFlames). Это только картинка: учёт запаса
         // Frostbrand и урон самого Frostburn здесь не трогаются.
-        // Frostburn2 — та же ванильная пыль, обрабатываем и его
+        // Frostburn2 — та же ванильная пыль, обрабатываем и его, но визуально
+        // различаем: хардмодный Frostbite горит как сейчас, а обычный
+        // дохардмодный Frostburn — заметно слабее (только наше пламя поверх;
+        // сама ванильная пыль и урон эффектов не трогаются)
+        private const float WeakBurnHeatMultiplier = 0.32f;
+        private const float WeakBurnSizeMultiplier = 0.55f;
+
         private static bool HasFrostburn(NPC npc)
             => npc.canDisplayBuffs
                 && (npc.FindBuffIndex(BuffID.Frostburn) >= 0
                     || npc.FindBuffIndex(BuffID.Frostburn2) >= 0);
+
+        private static bool HasFrostbite(NPC npc)
+            => npc.canDisplayBuffs && npc.FindBuffIndex(BuffID.Frostburn2) >= 0;
+
+        private static float BurnTierHeat(VanillaBurnDustRef r)
+            => r.HardmodeBurn ? 1f : WeakBurnHeatMultiplier;
+
+        private static float BurnTierSize(VanillaBurnDustRef r)
+            => r.HardmodeBurn ? 1f : WeakBurnSizeMultiplier;
 
         // Ванильный визуал Frostburn рождается в NPC.UpdateNPC_BuffApplyVFX:
         // пыль IceTorch по всему телу и свет. Ничего не подавляем и флаги
@@ -616,7 +632,12 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 if (!view.Contains(dust.position.ToPoint()))
                     continue;
-                vanillaBurnDust.Add(new VanillaBurnDustRef { Particle = dust, Tag = tag });
+                vanillaBurnDust.Add(new VanillaBurnDustRef
+                {
+                    Particle = dust,
+                    Tag = tag,
+                    HardmodeBurn = HasFrostbite(npc)
+                });
                 npcHasTaggedVanillaBurnDust[tag.NpcIndex] = true;
             }
 
@@ -672,6 +693,7 @@ namespace FrostMelee.Content.Projectiles
                     vanillaBurnDust.Add(new VanillaBurnDustRef
                     {
                         Particle = dust,
+                        HardmodeBurn = HasFrostbite(owner),
                         Tag = new VanillaBurnTag
                         {
                             NpcIndex = best,
@@ -1048,8 +1070,10 @@ namespace FrostMelee.Content.Projectiles
                         if (dist < 3f || dist > LinkDist)
                             continue;
                         float bStrength = VanillaBurnStrength(b);
+                        float tierHeat = System.Math.Min(BurnTierHeat(a), BurnTierHeat(b));
+                        float tierSize = System.Math.Min(BurnTierSize(a), BurnTierSize(b));
                         float fade = System.Math.Min(aStrength, bStrength)
-                            * (float)System.Math.Pow(1f - dist / LinkDist, 0.7f) * heatScale;
+                            * (float)System.Math.Pow(1f - dist / LinkDist, 0.7f) * heatScale * tierHeat;
                         if (fade < 0.035f)
                             continue;
                         // Толщину перемычки берём не только по нынешнему
@@ -1058,7 +1082,7 @@ namespace FrostMelee.Content.Projectiles
                         // читаться телом огня, а не ниткой
                         float aScale = MathHelper.Max(a.Particle.scale, a.Tag.BirthScale * 0.62f);
                         float bScale = MathHelper.Max(b.Particle.scale, b.Tag.BirthScale * 0.62f);
-                        float wdt = (aScale + bScale) * 8.2f * sizeScale
+                        float wdt = (aScale + bScale) * 8.2f * sizeScale * tierSize
                             * (1.08f - dist / LinkDist * 0.42f);
                         ribbonPoints[0] = b.Particle.position;
                         ribbonPoints[1] = (a.Particle.position + b.Particle.position) * 0.5f + new Vector2(0f, -2f);
@@ -1096,15 +1120,16 @@ namespace FrostMelee.Content.Projectiles
                 // Длина и ширина не падают вровень с размером частицы:
                 // пока ванильная частица видна, из неё виден и язычок
                 float effScale = MathHelper.Max(dust.scale, r.Tag.BirthScale * 0.62f);
-                float len = (14f + effScale * 18f) * sizeScale * flick;
+                float tierSize = BurnTierSize(r);
+                float len = (14f + effScale * 18f) * sizeScale * tierSize * flick;
                 float age = Main.GameUpdateCount - r.Tag.SpawnTick;
                 float wob = (float)System.Math.Sin(time * 0.55f + r.Tag.Phase + age * 0.12f) * 2.4f;
                 ribbonPoints[0] = dust.position - up * 2f;
                 ribbonPoints[1] = dust.position + up * len * 0.34f + perp * wob * 0.35f;
                 ribbonPoints[2] = dust.position + up * len * 0.68f + perp * wob * 0.8f;
                 ribbonPoints[3] = dust.position + up * len + perp * wob * 1.25f;
-                float wdt = (4f + effScale * 6f) * sizeScale;
-                float env = strength * heatScale;
+                float wdt = (4f + effScale * 6f) * sizeScale * tierSize;
+                float env = strength * heatScale * BurnTierHeat(r);
                 for (int pass = 0; pass < 2; pass++)
                 {
                     float wMul = pass == 0 ? 1.55f : 0.78f;
