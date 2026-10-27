@@ -17,11 +17,11 @@ public class BoomerangHeavyProjectile : ModProjectile
 	public const float MaxFallSpeed = 14f;
 	public const float BaseSpeed = 10f;
 	public const float ChargeSpeedBonus = 7f;
-	public const float BounceLoss = 0.55f;    // остаток скорости после отскока от тайла
-	public const float GroundFriction = 0.7f; // трение о землю при отскоке от пола
+	public const float BounceLoss = 0.78f;    // остаток скорости после отскока от тайла
+	public const float GroundFriction = 0.88f; // трение о землю при отскоке от пола
 	public const float RestSpeed = 1.6f;      // медленнее = лёг и лежит
-	public const float EnemyBounceBack = 0.25f; // отскок назад от врага
-	public const float EnemyPopUp = -2f;        // и чуть вверх перед падением
+	public const float EnemyBounceBack = 0.65f; // отскок назад от врага
+	public const float EnemyPopUp = -5f;        // и вверх перед падением
 	public const float PickupRadius = 36f;
 	public const int FrostburnTicks = 240;
 
@@ -45,7 +45,7 @@ public class BoomerangHeavyProjectile : ModProjectile
 		Projectile.localNPCHitCooldown = -1;
 		Projectile.tileCollide = true;
 		Projectile.ignoreWater = true;
-		Projectile.timeLeft = 600; // предохранитель полёта; лежащий живёт до подбора
+		Projectile.timeLeft = 1800; // предохранитель полёта (прыгает долго); лежащий живёт до подбора
 		Projectile.aiStyle = -1;
 	}
 
@@ -121,7 +121,7 @@ public class BoomerangHeavyProjectile : ModProjectile
 
 	// Прицел: тот же полёт пошагово — гравитация, отскоки от тайлов, отскок от первого
 	// врага на пути и падение до места остановки. Константы общие с настоящим снарядом.
-	public static List<Vector2> TraceAim(Vector2 pos, Vector2 vel, int maxSteps = 480)
+	public static List<Vector2> TraceAim(Vector2 pos, Vector2 vel, int maxSteps = 900)
 	{
 		var points = new List<Vector2> { pos };
 		bool armed = true;
