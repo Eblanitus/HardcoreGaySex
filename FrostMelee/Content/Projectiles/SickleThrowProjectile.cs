@@ -700,7 +700,7 @@ namespace FrostMelee.Content.Projectiles
             // (спрайт 0, самый большой), 9 — за убийство; ai[2] — масштаб со
             // знаком направления наклона
             float packedStage = isKill ? 9f : 6f;
-            float sizeMul = (isKill ? 1.35f : 1f) * dir;
+            float sizeMul = (isKill ? 0.47f : 0.35f) * dir;
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
                 ModContent.ProjectileType<IceWaveSpike>(), Projectile.damage, IceWaveSpike.SpawnKnockback, Projectile.owner,
                 1f, packedStage, sizeMul);
