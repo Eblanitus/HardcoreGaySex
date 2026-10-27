@@ -16,7 +16,7 @@ public class IceBoomerangGlobalItem : GlobalItem
 
 	public override void SetDefaults(Item item)
 	{
-		item.damage = (int)MathF.Round(item.damage * 1.3f); // +30% базового урона везде: 17 -> 22
+		item.damage = 22; // ванильный 17 + 30% ≈ 22 (база для удара и обоих бросков)
 		item.useStyle = ItemUseStyleID.Swing;
 		item.noMelee = false; // удар в руке бьёт по-настоящему
 		item.noUseGraphic = false; // у ванильного бумеранга графика в руке скрыта — возвращаем
