@@ -71,7 +71,7 @@ BoomerangControlsTooltip:
 	'''
 	LMB: hit with it in hand, point blank
 	RMB (tap): light throw — weak, comes back on its own
-	RMB (hold): charge with an aim line, release — heavy throw (sticks in, go pick it up)
+	RMB (hold): charge with an aim line, release — heavy throw (bounces off and drops, go pick it up)
 	Nothing flies through walls
 	'''
 

@@ -8,7 +8,7 @@ namespace FrostMelee.Content.Projectiles;
 
 // Лёгкий бросок бумеранга (ПКМ-тап): слабый, проходит врагов насквозь и сам возвращается.
 // Сквозь стены НЕ летит ни на вылете, ни на возврате (tileCollide весь полёт) —
-// удар о тайл сразу разворачивает домой. Это единственный «безопасный» удар,
+// от поверхностей отскакивает. Это единственный «безопасный» удар,
 // поэтому урон ниже базового (доктрина: бесплатный дальний урон слаб).
 public class BoomerangLightProjectile : ModProjectile
 {
@@ -16,6 +16,8 @@ public class BoomerangLightProjectile : ModProjectile
 	public const float ReturnSpeed = 15f;
 	public const float OutDrag = 0.955f; // тормоз на вылете — дальность ~12 тайлов
 	public const int OutMaxTicks = 26;
+	public const float BounceLoss = 0.85f; // отскок от тайлов почти без потери скорости
+	public const int ReturnMaxTicks = 300; // предохранитель: не долетел домой — исчез
 	public const float CatchRadius = 28f;
 	public const int FrostburnTicks = 180;
 
@@ -57,6 +59,11 @@ public class BoomerangLightProjectile : ModProjectile
 			}
 		}
 		else {
+			Projectile.localAI[1]++;
+			if (Projectile.localAI[1] > ReturnMaxTicks) {
+				Projectile.Kill();
+				return;
+			}
 			Vector2 desired = (owner.Center - Projectile.Center).SafeNormalize(Vector2.Zero) * ReturnSpeed;
 			Projectile.velocity = Vector2.Lerp(Projectile.velocity, desired, 0.28f);
 			if (Vector2.Distance(Projectile.Center, owner.Center) < CatchRadius) {
@@ -74,11 +81,11 @@ public class BoomerangLightProjectile : ModProjectile
 
 	public override bool OnTileCollide(Vector2 oldVelocity)
 	{
-		// Стена = сразу домой, сквозь стены ничего не летит.
-		if (Returning == 0f) {
-			Returning = 1f;
-			Projectile.netUpdate = true;
-		}
+		// Бумеранг всегда отскакивает от поверхностей; сквозь стены не летит.
+		if (Projectile.velocity.X != oldVelocity.X)
+			Projectile.velocity.X = -oldVelocity.X * BounceLoss;
+		if (Projectile.velocity.Y != oldVelocity.Y)
+			Projectile.velocity.Y = -oldVelocity.Y * BounceLoss;
 		SoundEngine.PlaySound(SoundID.Dig, Projectile.Center);
 		return false;
 	}
