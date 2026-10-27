@@ -32,6 +32,12 @@ public class BoomerangPlayer : ModPlayer
 	public const float ChargeWindupBack = 2.4f; // угол руки назад-вверх от линии броска (рад)
 	public const float ChargeGripInset = 4f;    // сколько спрайта позади кисти
 
+	// Анимация броска: замах лёгкого (бумеранг в руке) → вылет → доработка руки.
+	// Замах + доработка = темп лёгких бросков, ритм потока не меняется.
+	// Дорабатывает рука и после тяжёлого броска (из позы зарядки).
+	public const int LightWindupTicks = 5;
+	public const int ThrowFollowTicks = 13;
+
 	public bool Charging;
 	public float Charge;
 	// Позу зарядки рисует BoomerangChargePoseLayer от кисти (PoseHandOffset, PoseItemDir)
@@ -45,6 +51,9 @@ public class BoomerangPlayer : ModPlayer
 
 	private int rmbHoldTicks;
 	private int lightCooldown;
+	private int lightWindupTicks; // >0 — замах лёгкого, вылет при нуле
+	private int throwFollowTicks; // >0 — рука дорабатывает после вылета (лёгкий и тяжёлый)
+	private Vector2 throwAimDir = Vector2.UnitX; // направление уже улетевшего броска
 	private int swingRequestAge;
 	private bool spinGrantedForSwing;
 	private bool spinChargeActive;
@@ -90,6 +99,8 @@ public class BoomerangPlayer : ModPlayer
 			SpinTicks = 0;
 			spinGrantedForSwing = false;
 			lightCooldown = 0;
+			lightWindupTicks = 0;
+			throwFollowTicks = 0;
 		}
 
 		if (!IsBoomerang(held) || Player.dead) {
@@ -97,6 +108,8 @@ public class BoomerangPlayer : ModPlayer
 			SwingRequested = false;
 			SpinTicks = 0;
 			spinGrantedForSwing = false;
+			lightWindupTicks = 0;
+			throwFollowTicks = 0;
 			return;
 		}
 
@@ -125,6 +138,18 @@ public class BoomerangPlayer : ModPlayer
 		bool lmb = Main.mouseLeft && !uiBlocked;
 		bool swinging = Player.itemAnimation > 0;
 
+		// Анимация броска идёт своим ходом: доработка руки не зависит от кнопок
+		// (и дорабатывает, пока тяжёлый в полёте — HeavyOut ниже), замах лёгкого
+		// при нуле выпускает снаряд. Взмах, зарядка и UI замах отменяют.
+		if (throwFollowTicks > 0)
+			throwFollowTicks--;
+		if (lightWindupTicks > 0) {
+			if (swinging || Charging || uiBlocked)
+				lightWindupTicks = 0;
+			else if (--lightWindupTicks <= 0)
+				LightThrow(held);
+		}
+
 		if (uiBlocked || HeavyOut()) {
 			ResetCharge();
 			lightCooldown = 0;
@@ -132,12 +157,13 @@ public class BoomerangPlayer : ModPlayer
 		}
 
 		// ЛКМ держать — лёгкие броски без конца, но одновременно живёт только один:
-		// следующий уходит сразу, как только предыдущий пойман.
+		// следующий уходит сразу, как только предыдущий пойман. Клик начинает
+		// замах — снаряд вылетает через LightWindupTicks (таймер выше).
 		if (lmb && !Charging && !swinging) {
 			if (lightCooldown > 0)
 				lightCooldown--;
-			if (lightCooldown <= 0 && !LightOut()) {
-				LightThrow(held);
+			if (lightCooldown <= 0 && lightWindupTicks <= 0 && !LightOut()) {
+				lightWindupTicks = LightWindupTicks;
 				lightCooldown = LightThrowIntervalTicks;
 			}
 		}
@@ -210,6 +236,8 @@ public class BoomerangPlayer : ModPlayer
 			ApplyChargePose();
 			return;
 		}
+		if (ApplyThrowPose())
+			return;
 		// Ваниль каждый тик ставит свой линейный itemRotation — перебиваем его
 		// разгонной кривой размаха перед отрисовкой, как SwordPlayer для мечей.
 		if (Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
@@ -239,6 +267,64 @@ public class BoomerangPlayer : ModPlayer
 		PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
 	}
 
+	// Анимация броска: замах лёгкого (бумеранг в руке — рисует тот же слой,
+	// что и зарядку) → рука выбрасывается по линии броска и возвращается
+	// вниз, как доработка у мечей. После тяжёлого — та же доработка из позы
+	// зарядки, без замаха. В доработке рука уже пустая: предмет летит снарядом.
+	private bool ApplyThrowPose()
+	{
+		bool windup = lightWindupTicks > 0;
+		if (!windup && throwFollowTicks <= 0)
+			return false;
+		if (!windup && Player.itemAnimation > 0) {
+			throwFollowTicks = 0; // начался размах — рука его, не доработки
+			return false;
+		}
+
+		Vector2 aim;
+		float armWorld;
+		Player.CompositeArmStretchAmount stretch;
+		if (windup) {
+			aim = AimDirection();
+			float p = MathHelper.Clamp(1f - (lightWindupTicks - 1f) / LightWindupTicks, 0f, 1f);
+			int dirSign = aim.X >= 0 ? 1 : -1;
+			float back = aim.ToRotation() - dirSign * ChargeWindupBack;
+			armWorld = LerpAngle(MathHelper.PiOver2, back, p);
+			stretch = p < 0.5f
+				? Player.CompositeArmStretchAmount.None
+				: Player.CompositeArmStretchAmount.Quarter;
+		}
+		else {
+			aim = throwAimDir;
+			float t = 1f - throwFollowTicks / (float)ThrowFollowTicks;
+			float back = aim.ToRotation() - (aim.X >= 0 ? 1 : -1) * ChargeWindupBack;
+			if (t < 0.3f) {         // выброс: от замаха к линии броска
+				armWorld = LerpAngle(back, aim.ToRotation(), t / 0.3f);
+				stretch = Player.CompositeArmStretchAmount.ThreeQuarters;
+			}
+			else if (t < 0.55f) {   // рука замерла вытянутой
+				armWorld = aim.ToRotation();
+				stretch = Player.CompositeArmStretchAmount.Full;
+			}
+			else {                  // возврат вниз
+				armWorld = LerpAngle(aim.ToRotation(), MathHelper.PiOver2, (t - 0.55f) / 0.45f);
+				stretch = Player.CompositeArmStretchAmount.ThreeQuarters;
+			}
+		}
+
+		Player.ChangeDir(aim.X >= 0 ? 1 : -1);
+		float armRot = armWorld - MathHelper.PiOver2;
+		Player.SetCompositeArmFront(true, stretch, armRot);
+		SickleStabProjectile.HideBackArm(Player, armWorld.ToRotationVector2());
+
+		if (windup) {
+			PoseItemVisible = true;
+			PoseItemDir = aim;
+			PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
+		}
+		return true;
+	}
+
 	private static float LerpAngle(float a, float b, float t) =>
 		a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);
 
@@ -264,6 +350,8 @@ public class BoomerangPlayer : ModPlayer
 		Projectile.NewProjectile(Player.GetSource_ItemUse(held), ThrowOrigin(dir), dir * speed,
 			ModContent.ProjectileType<BoomerangLightProjectile>(), damage, Player.GetWeaponKnockback(held), Player.whoAmI);
 		SoundEngine.PlaySound(SoundID.Item1, Player.Center);
+		throwAimDir = dir;
+		throwFollowTicks = ThrowFollowTicks;
 	}
 
 	private void HeavyThrow(Item held, float charge)
@@ -273,6 +361,8 @@ public class BoomerangPlayer : ModPlayer
 		Projectile.NewProjectile(Player.GetSource_ItemUse(held), ThrowOrigin(dir), dir * BoomerangHeavyProjectile.LaunchSpeed(charge),
 			ModContent.ProjectileType<BoomerangHeavyProjectile>(), damage, Player.GetWeaponKnockback(held) * 1.3f, Player.whoAmI);
 		SoundEngine.PlaySound(SoundID.Item1, Player.Center);
+		throwAimDir = dir;
+		throwFollowTicks = ThrowFollowTicks;
 	}
 
 	// Прицел тяжёлого броска: точки пыли по полной симулированной траектории —
