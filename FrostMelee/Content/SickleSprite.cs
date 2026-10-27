@@ -132,6 +132,9 @@ namespace FrostMelee.Content
         // Замороженный спрайт: древко цельное и толстое (8-11 px), голова от ~19 px. Порог 9 принял бы за голову уже
         // середину древка (зона начиналась на полпути и бралась вся передняя половина), поэтому для него выше
         private const float ZoneHeadThicknessFrozen = 16f;
+        // Карамелька: ванильный клинок тонкий (8-9 px), порог 9 ловился только
+        // на утолщениях полос за серединой — треть клинка не била. Ей порог ниже
+        private const float ZoneHeadThicknessCandy = 7f;
         private const float MaxSectorSpan = 2.6f;  // шире (~150°) режем пополам: клин должен быть выпуклым
 
         // Один кусок лезвия: кольцо R0..R1 от середины оси и угол A0..A1 от оси
@@ -172,7 +175,9 @@ namespace FrostMelee.Content
             Texture2D texture = asset.Value;
             if (texture == null || texture.IsDisposed)
                 return null;
-            BladeZone zone = BuildZone(texture, geometry, ZoneHeadThickness);
+            float thickness = itemType == ItemID.CandyCaneSword
+                ? ZoneHeadThicknessCandy : ZoneHeadThickness;
+            BladeZone zone = BuildZone(texture, geometry, thickness);
             zoneCache[itemType] = zone;
             return zone;
         }
