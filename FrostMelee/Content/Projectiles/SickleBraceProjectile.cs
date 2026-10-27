@@ -35,7 +35,7 @@ namespace FrostMelee.Content.Projectiles
         private static readonly Color IceTail = new Color(120, 210, 255);
         private static readonly Color IceEdge = new Color(40, 110, 230);
 
-        // === Только ледяное копьё: иней, Frostburn, раскол льда на полном разгоне ===
+        // === Только ледяное копьё: иней, Frostbite, раскол льда на полном разгоне ===
         private const int RimeCrystals = 14;          // кристалликов на лезвии при полном инее
         private const float RimeBladeFrac = 0.6f;    // доля длины копья от острия назад, покрытая инеем
         private const float RimeEdgeWidth = 8f;
@@ -71,6 +71,7 @@ namespace FrostMelee.Content.Projectiles
         private bool shatterFlashActive;
 
         private float braceSpeed01;                  // сглаженный нормированный разгон
+        private int braceAge;                        // тиков с начала встречи (для плавных проявлений)
 
         // Страховочная текстура (своя отрисовка всё равно по ai[2])
         public override string Texture => "FrostMelee/Items/IceSpear";
@@ -98,6 +99,7 @@ namespace FrostMelee.Content.Projectiles
         {
             Player player = Main.player[Projectile.owner];
             Projectile.timeLeft = 2;
+            braceAge++;
 
             // heldProj каждый тик (снаряд с hide=true иначе не рисуется НИГДЕ)
             player.heldProj = Projectile.whoAmI;
@@ -141,31 +143,6 @@ namespace FrostMelee.Content.Projectiles
             Vector2 dir = SpearDir;
             float armRot = Projectile.ai[1] - MathHelper.PiOver2;
 
-            // Выдвиг: первые DeployTicks серп выдвигается вперёд, дальше висит
-            // Фростбранд: узкая струя холодного пламени из лезвия, пока
-            // встреча выставлена и меч в руке. Держишь — жжёт, отпустил — гаснет.
-            if ((int)Projectile.ai[2] == ItemID.Frostbrand
-                && Projectile.owner == Main.myPlayer
-                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
-            {
-                // Чем дольше держишь встречу, тем дальше от острия тянется струя (до предела)
-                if (Projectile.localAI[1] < FrostJetGrowTicks)
-                    Projectile.localAI[1]++;
-                float grow = Projectile.localAI[1] / FrostJetGrowTicks;
-                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow);
-                int ticks = Math.Max(12, (int)Math.Ceiling(reach / FrostJetSpeed));
-
-                float half = SickleSprite.Get((int)Projectile.ai[2]).Length * 0.5f;
-                Vector2 jetBase = Projectile.Center - SpearDir * half;
-                Vector2 jetTip = Projectile.Center + SpearDir * half;
-                FrostJetFx.EmitBlade(jetBase, jetTip, SpearDir);
-                if (Main.GameUpdateCount % 4 == 0)
-                {
-                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, SpearDir * FrostJetSpeed,
-                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks);
-                }
-            }
-
             if (Projectile.localAI[0] < DeployTicks)
                 Projectile.localAI[0]++;
             float t = Projectile.localAI[0] / DeployTicks;
@@ -192,9 +169,55 @@ namespace FrostMelee.Content.Projectiles
             Vector2 butt = hand - dir * (geo.Length * (GripBehind + DeployPullBack * (1f - deploy)));
             Projectile.Center = butt + dir * (geo.Length * 0.5f);
 
+            // Фростбранд: огонь на клинке и струю выпускаем ТОЛЬКО теперь,
+            // когда меч уже стоит в позе этого тика. Раньше это делалось до
+            // постановки Center — по месту прошлого тика, и пока меч
+            // выдвигался вперёд, огонь сидел не на самой текстуре меча.
+            // Теперь отрезок огня butt → tip — ровно приклад и остриё того
+            // спрайта, который рисуется, и пламя едет вместе с выдвигом
+            if ((int)Projectile.ai[2] == ItemID.Frostbrand
+                && Projectile.owner == Main.myPlayer
+                && Main.player[Projectile.owner].HeldItem.type == ItemID.Frostbrand)
+            {
+                // Чем дольше держишь встречу, тем дальше от острия тянется струя (до предела)
+                if (Projectile.localAI[1] < FrostJetGrowTicks)
+                    Projectile.localAI[1]++;
+                float grow = Projectile.localAI[1] / FrostJetGrowTicks;
+                // Временный регулятор из настроек: 100% — длина flame-25,
+                // по умолчанию стоит 60% (ещё примерно на 40% короче).
+                float reach = MathHelper.Lerp(FrostJetMinReach, FrostJetMaxReach, grow)
+                    * FrostMeleeConfigDefaults.BraceJetLengthScale;
+                // Минимум 4: струи рождаются раз в 4 тика, иначе на самой
+                // короткой настройке поток распадётся на отдельные точки.
+                // Прежний минимум 12 не давал сделать струю короче 54 px.
+                int ticks = Math.Max(4, (int)Math.Ceiling(reach / FrostJetSpeed));
+
+                Vector2 jetBase = butt;
+                Vector2 jetTip = butt + dir * geo.Length;
+                FrostJetFx.EmitBlade(jetBase, jetTip, dir,
+                    Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity,
+                    1f, FrostJetFx.HandSource(Projectile.owner), carryWithBlade: true);
+                if (Main.GameUpdateCount % 4 == 0)
+                {
+                    // Струя рождается со скоростью игрока, чтобы медленные
+                    // (4.5) языки на крыльях не отставали в момент появления.
+                    // Дальше FrostFireJet даёт воздуху тормозить её до своей
+                    // скорости: меч при беге вперёд догоняет старые языки, а
+                    // при беге назад уходит от них. ai[2] — направление струи.
+                    Projectile.NewProjectile(Projectile.GetSource_FromThis(), jetTip, dir * FrostJetSpeed + player.velocity,
+                        ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Projectile.owner, ticks, 0f, dir.ToRotation());
+                }
+            }
+
             // Поворот: вектор «приклад → острие» спрайта вдоль серпа. SET, не +=.
             Projectile.spriteDirection = dir.X >= 0 ? 1 : -1;
             Projectile.rotation = Projectile.ai[1] - geo.AngleFor(Projectile.spriteDirection == -1);
+
+            // Айсберг: выставленный клинок разбивает свои глыбы. Раскол
+            // встречей дополнительно замораживает поверхность вокруг.
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
+                AisbergChunk.CrackTouched(Projectile,
+                    box => Colliding(Projectile.Hitbox, box) == true, true);
 
             UpdateBraceFx(player, dir, geo);
 
@@ -213,8 +236,8 @@ namespace FrostMelee.Content.Projectiles
         // Струя встречи: длина растёт от острия, пока держишь, и упирается в предел
         private const int FrostJetGrowTicks = 90;
         private const float FrostJetMinReach = 24f;
-        private const float FrostJetMaxReach = 96f;
-        private const float FrostJetSpeed = 4.5f;
+        private const float FrostJetMaxReach = 72f;
+        internal const float FrostJetSpeed = 4.5f;
         private const float ArmDrop = 0.35f;     // кисть у пояса, как у Lance
         private const float UpAngle = 0.75f;     // выше — вторая рука у тела
         private const float GripBehind = 0.06f;  // хват у самого приклада
@@ -420,16 +443,55 @@ namespace FrostMelee.Content.Projectiles
             FrozenSpear.Draw(drawPos, geo, Projectile.rotation, flipped, lightColor, IcicleBaseScale, FrozenMix());
         }
 
+        // Длинный Фростбранд (Items/frostbrand_long.png, рисунок владельца):
+        // пока встреча выставлена, спрайт потихоньку проявляется ПОВЕРХ обычного
+        // клинка. Приклад и ось у длинного спрайта свои (замер по его пикселям),
+        // но точка приклада та же, что у обычного, — клинок как бы вырастает
+        // из рукояти. Эффекты встречи (иней, струя) при этом не трогаем.
+        // Файла может не быть (RequestIfExists) — тогда ничего не рисуем,
+        // сборка не ломается.
+        private const string LongFrostbrandPath = "FrostMelee/Items/frostbrand_long";
+        private const int LongFadeTicks = 120;   // за сколько тиков проявляется полностью (2 секунды)
+        private const float LongMaxAlpha = 0.55f; // удлинение полупрозрачное всегда (решение владельца)
+
+        private static Texture2D longGeoTexture;
+        private static SickleSprite.Geometry? longGeoCache;
+
+        private void DrawLongFrostbrand(Vector2 drawPos, bool flipped, Color lightColor, SpriteEffects effects)
+        {
+            if (Main.dedServ)
+                return;
+            float fade = MathHelper.Clamp(braceAge / (float)LongFadeTicks, 0f, 1f);
+            fade = fade * fade * (3f - 2f * fade) * LongMaxAlpha;   // мягкие начало и конец проявления; потолок — полупрозрачность
+            if (fade <= 0.01f)
+                return;
+            if (!ModContent.RequestIfExists<Texture2D>(LongFrostbrandPath, out Asset<Texture2D> asset, AssetRequestMode.ImmediateLoad))
+                return;
+            Texture2D tex = asset.Value;
+            if (tex == null || tex.IsDisposed)
+                return;
+            // Геометрию длинного спрайта меряем один раз (и заново, если текстура сменилась)
+            if (longGeoCache == null || longGeoTexture != tex)
+            {
+                longGeoCache = SickleSprite.GetSwordGeometry(tex);
+                longGeoTexture = tex;
+            }
+            SickleSprite.Geometry longGeo = longGeoCache.Value;
+            // Тот же приём, что в AI для обычного спрайта: ось спрайта кладём на
+            // направление встречи (ai[1]), приклад — в drawPos.
+            float rotation = Projectile.ai[1] - longGeo.AngleFor(flipped);
+            Main.EntitySpriteDraw(tex, drawPos - Main.screenPosition, null,
+                lightColor * (1f - FrozenMix()) * fade, rotation, longGeo.ButtFor(flipped), 1f, effects, 0f);
+        }
+
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             int braceItem = (int)Projectile.ai[2];
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
-            // Фростбранд: встреча тоже поджигает
-            if (braceItem == ItemID.Frostbrand) {
-                Weapons.FrostFireSystem.Ignite(target);
-            }
+            // Frostbrand: выставленный клинок сам НЕ поджигает — поджигает его
+            // струя (FrostFireJet из острия в AI), враг должен задеть пламя
             if (Projectile.owner == Main.myPlayer)
                 Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().AddFrost(SicklePlayer.FrostPerBraceHit);
 
@@ -468,6 +530,9 @@ namespace FrostMelee.Content.Projectiles
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
+            // Фростбранд: поверх обычного клинка потихоньку проявляется длинный
+            if (itemType == ItemID.Frostbrand)
+                DrawLongFrostbrand(drawPos, flipped, lightColor, effects);
             return false;
         }
     }

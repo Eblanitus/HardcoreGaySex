@@ -83,6 +83,17 @@ namespace FrostMelee.Content
             return geometry;
         }
 
+        // Геометрия произвольного спрайта меча (не инвентарного предмета):
+        // тот же замер «по-мечовому», что Get делает для мечей. Нужна, когда
+        // поверх обычного спрайта рисуется другой рисунок того же клинка
+        // (длинный Фростбранд во встрече) — у него свой приклад и своя ось.
+        public static Geometry GetSwordGeometry(Texture2D texture)
+        {
+            if (Main.dedServ || texture == null || texture.IsDisposed)
+                return Fallback;
+            return MeasureSword(texture);
+        }
+
         // =====================================================================
         // ЗОНА УДАРА: лезвие серпа по пикселям спрайта
         // =====================================================================
@@ -106,6 +117,9 @@ namespace FrostMelee.Content
         // Замороженный спрайт: древко цельное и толстое (8-11 px), голова от ~19 px. Порог 9 принял бы за голову уже
         // середину древка (зона начиналась на полпути и бралась вся передняя половина), поэтому для него выше
         private const float ZoneHeadThicknessFrozen = 16f;
+        // Карамелька: клинок её уменьшенного спрайта тонкий (~5-6 px), порог 9
+        // не ловился вовсе — бил бы весь меч с рукоятью. Ей порог свой, 5
+        private const float ZoneHeadThicknessCandy = 5f;
         private const float MaxSectorSpan = 2.6f;  // шире (~150°) режем пополам: клин должен быть выпуклым
 
         // Один кусок лезвия: кольцо R0..R1 от середины оси и угол A0..A1 от оси
@@ -140,7 +154,9 @@ namespace FrostMelee.Content
             WeaponCollisionMasks.Mask mask = WeaponCollisionMasks.Get(itemType);
             if (mask == null)
                 return null;
-            BladeZone zone = BuildZone(mask, Get(itemType), ZoneHeadThickness);
+            float thickness = itemType == ItemID.CandyCaneSword
+                ? ZoneHeadThicknessCandy : ZoneHeadThickness;
+            BladeZone zone = BuildZone(mask, Get(itemType), thickness);
             zoneCache[itemType] = zone;
             return zone;
         }

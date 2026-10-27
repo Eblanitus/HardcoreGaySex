@@ -11,8 +11,10 @@ namespace FrostMelee.Content.Weapons
 {
     // Холодное пламя Фростбранда (FROSTBRAND_ИТОГ.md).
     //
-    // Общее правило — Горение: любой удар любым приёмом накладывает
-    // Frostburn. Никаких стаков и отдельного «полного возгорания» нет.
+    // Поджигает только струя (клинок — никогда), и запас огня КОНЕЧЕН:
+    // у меча SwordPlayer.MaxFlames языков, каждый горящий враг держит один.
+    // Умер горящим — язык возвращается к игроку живым огоньком
+    // (FrostFlameWisp) и бьёт врагов по пути. Учёт запаса — TryIgnite.
     //
     // Смерть горящего врага от тычка или броска — взрыв холодного огня,
     // поджигающий и задевающий соседей (радиус и силу задаёт приём).
@@ -22,6 +24,10 @@ namespace FrostMelee.Content.Weapons
     public class FrostFireSystem : ModSystem
     {
         public const int BurnTicks = 180;         // 3 с горения
+        // Фростбранд — хардмодный, поэтому его горение — Frostbite
+        // (BuffID.Frostburn2), а не дохардмодный Frostburn. Весь учёт
+        // запаса, «горит ли» и забор огня тычком смотрят именно сюда.
+        public const int BurnBuff = BuffID.Frostburn2;
 
         private class BurstVisual
         {
@@ -44,8 +50,18 @@ namespace FrostMelee.Content.Weapons
             bursts.Clear();
         }
 
-        // Горит ли цель
-        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BuffID.Frostburn) >= 0;
+        // Манекен в ванили помечен immortal: здоровье у него не падает, но
+        // удары и дебаффы он как раз должен показывать. Поэтому для него
+        // делаем единственное исключение из запрета на immortal; остальных
+        // бессмертных не трогаем.
+        public static bool IsTargetDummy(NPC npc) => npc != null && npc.type == NPCID.TargetDummy;
+
+        public static bool CanBurn(NPC npc) =>
+            npc != null && npc.active && !npc.friendly && !npc.dontTakeDamage
+            && (!npc.immortal || IsTargetDummy(npc));
+
+        // Горит ли цель холодным огнём Фростбранда (Frostbite)
+        public static bool IsBurning(NPC npc) => npc.FindBuffIndex(BurnBuff) >= 0;
 
         // Горел ли враг к моменту смерти (для взрывов тычка и броска)
         public static bool WasBurning(NPC npc) => IsBurning(npc);
@@ -53,14 +69,14 @@ namespace FrostMelee.Content.Weapons
         // Сколько тиков горения осталось (0 — не горит)
         public static int BurnRemaining(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             return index < 0 ? 0 : npc.buffTime[index];
         }
 
         // Тычок забирает горение с цели: снимает бафф и возвращает остаток тиков
         public static int TakeBurn(NPC npc)
         {
-            int index = npc.FindBuffIndex(BuffID.Frostburn);
+            int index = npc.FindBuffIndex(BurnBuff);
             if (index < 0)
                 return 0;
             int ticks = npc.buffTime[index];
@@ -68,13 +84,48 @@ namespace FrostMelee.Content.Weapons
             return ticks;
         }
 
-        // Любой удар Фростбранда просто накладывает Frostburn
+        // Сырой поджог без учёта запаса (внутренний и запасной путь)
         public static void Ignite(NPC npc)
         {
-            if (npc == null || !npc.active || npc.friendly || npc.immortal || npc.dontTakeDamage)
+            if (!CanBurn(npc))
                 return;
 
-            npc.AddBuff(BuffID.Frostburn, BurnTicks);
+            npc.AddBuff(BurnBuff, BurnTicks);
+        }
+
+        // Поджог с учётом конечного запаса владельца: новый враг загорается,
+        // только если есть свободный язык (в мече или висящий у игрока
+        // огоньком); уже держащего свой язык обновляем бесплатно.
+        // Возвращает false — запаса нет, враг НЕ загорелся
+        public static bool TryIgnite(NPC npc, Player owner)
+        {
+            if (!CanBurn(npc))
+                return false;
+            if (owner == null || !owner.active)
+            {
+                Ignite(npc);
+                return true;
+            }
+            SwordPlayer sp = owner.GetModPlayer<SwordPlayer>();
+            if (!sp.FlameAuthority)
+            {
+                // Сервер и чужие клиенты учёт не ведут (как полировка в MP):
+                // поджог не блокируем, запас считает клиент владельца
+                npc.AddBuff(BurnBuff, BurnTicks);
+                return true;
+            }
+            if (sp.HoldsFlame(npc))
+            {
+                npc.AddBuff(BurnBuff, BurnTicks);
+                return true;
+            }
+            if (sp.FreeFlames > 0 || sp.TryConsumeOrbitingFlame())
+            {
+                sp.AddFlameHolder(npc);
+                npc.AddBuff(BurnBuff, BurnTicks);
+                return true;
+            }
+            return false;
         }
 
         // Вспышка холодного огня: звук, кольцо пламени, свечение.
@@ -102,8 +153,13 @@ namespace FrostMelee.Content.Weapons
                 Center = center,
                 Radius = radius,
                 Big = big,
-                Life = big ? 14 : 10
+                // Чуть дольше прежних 10/14 тиков: вспышку успеваешь прочитать
+                Life = big ? 20 : 15
             });
+            // Цельные языки веером из центра — пламя взрыва, а не только
+            // светящийся круг и пыль; пыль выше остаётся искрами. Языки
+            // долетают почти до края зоны урона (radius)
+            Projectiles.FrostJetFx.BurstTongues(center, big, radius);
         }
 
         public override void PostUpdateEverything()
@@ -120,29 +176,34 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        public override void PostDrawTiles()
+        public static bool HasBursts => bursts.Count > 0;
+
+        // Вспышка рисуется в буфер огня FrostJetFx (аддитивный батч открыт им,
+        // координаты — от origin буфера). Свечение раскрывается от центра до
+        // края зоны урона: видимое пятно = кого задело (раньше мягкий край
+        // текстуры гас на половине радиуса, и зона урона была шире видимой)
+        public static void DrawBursts(Texture2D glow, Vector2 origin)
         {
-            if (Main.dedServ || bursts.Count == 0)
+            if (bursts.Count == 0)
                 return;
-
-            Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
-            if (glow == null || glow.IsDisposed)
-                return;
-
-            Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp,
-                DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-
+            Vector2 center = glow.Size() / 2f;
             foreach (BurstVisual b in bursts)
             {
                 float t = b.Age / (float)b.Life;
+                float open = 1f - (1f - t) * (1f - t) * (1f - t);
                 float fade = (1f - t) * (1f - t);
-                float scale = b.Radius * 2f / glow.Width;
-                Color color = new Color(120, 200, 255) * (fade * (b.Big ? 0.9f : 0.6f));
-                Main.EntitySpriteDraw(glow, b.Center - Main.screenPosition, null, color,
-                    0f, glow.Size() / 2f, scale, SpriteEffects.None, 0f);
+                // Мягкий край ThePerfectGlow заметен примерно до 0.6 его
+                // половины — поэтому масштаб с запасом, чтобы видимый край
+                // доходил до радиуса урона
+                float scale = b.Radius * 2f * 1.55f * (0.45f + 0.55f * open) / glow.Width;
+                // Жар вспышки — по ядрёности из конфига; размер пятна не
+                // трогаем: оно показывает зону урона
+                float a = (b.Big ? 0.6f : 0.44f) * FrostMeleeConfigDefaults.FireHeatScale;
+                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(40, 120, 255) * (fade * a * 0.45f),
+                    0f, center, scale, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(glow, b.Center - origin, null, new Color(150, 220, 255) * (fade * a),
+                    0f, center, scale * 0.4f, SpriteEffects.None, 0f);
             }
-
-            Main.spriteBatch.End();
         }
 
         // Взрыв погибшего горящего врага: задевает и поджигает соседей.

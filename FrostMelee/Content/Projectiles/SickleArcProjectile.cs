@@ -325,8 +325,8 @@ namespace FrostMelee.Content.Projectiles
             modifiers.HitDirectionOverride = (Main.player[Projectile.owner].Center.X < target.Center.X) ? 1 : (-1);
         }
 
-        // === Ледяная коса: Frostburn на попадании + полоса инея за дугой (только лёд, смерть не трогаем) ===
-        private const int FrostburnTicks = 270;       // 4.5 с Frostburn: вешает только сильный иней (FrostTrailSystem, зона добивания), не прямой удар
+        // === Ледяная коса: Frostbite от сильного инея + полоса инея за дугой (только лёд, смерть не трогаем) ===
+        private const int FrostbiteTicks = 270;       // 4.5 с Frostbite (BuffID.Frostburn2): вешает только сильный иней (FrostTrailSystem, зона добивания), не прямой удар
         private const int FrostTrailTicks = 60;       // сколько тиков держится иней на месте (потом тает)
         private const int FrostTrailSlowTicks = 75;   // длительность Slow на цели, вошедшей в иней (один раз за взмах на цель)
         private const float FrostTrailDensity = 0.012f; // шанс искорки инея на каждую точку следа за тик (редкие, угасают с возрастом)
@@ -376,7 +376,7 @@ namespace FrostMelee.Content.Projectiles
         // Параметры для FrostTrailSystem (константы живут здесь, наверху класса)
         internal static int FrostLife => FrostTrailTicks;
         internal static int FrostSlowTicks => FrostTrailSlowTicks;
-        internal static int FrostburnDuration => FrostburnTicks;
+        internal static int FrostbiteDuration => FrostbiteTicks;
         internal static float FrostDensity => FrostTrailDensity;
         internal static float FrostRadius => FrostTrailRadius;
         internal static int FrostCheckEvery => FrostTrailCheckEvery;
@@ -861,10 +861,14 @@ namespace FrostMelee.Content.Projectiles
                 trailEffect.World = Matrix.Identity;
                 trailEffect.View = Main.GameViewMatrix.TransformationMatrix;
                 trailEffect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
+                // ВАЖНО: состояния ставим ПОСЛЕ End(). End() при сбросе батча
+                // переписывает Blend/Rasterizer своими (FNA SpriteBatch.PrepRenderState),
+                // и наш CullMode.None терялся: видеокарта отсекала треугольники
+                // ленты при вращении влево — хвоста у дуги не было видно.
+                Main.spriteBatch.End();
                 device.BlendState = trailBlend;
                 device.DepthStencilState = DepthStencilState.None;
                 device.RasterizerState = trailRaster;
-                Main.spriteBatch.End();
                 try
                 {
                     DrawTrailPass(device, false, n, center, rOut, rIn, Projectile.localAI[0], env, core, tail, edge);
@@ -1013,7 +1017,7 @@ namespace FrostMelee.Content.Projectiles
             public readonly List<float> Weight = new List<float>(); // плотность пятна: у блока 1, в воздухе меньше, в блоке 0 (не рисуем)
             public readonly HashSet<int> Slowed = new HashSet<int>();
             public bool Mine;
-            public bool Strong;   // сильный иней: от полной заморозки, другой вид, вешает Frostburn
+            public bool Strong;   // сильный иней: от полной заморозки, другой вид, вешает Frostbite
             public bool Open = true;
             public bool Visible = true;   // false — только механика (Slow), без пятен и искр инея
             public int Tick;
@@ -1202,9 +1206,9 @@ namespace FrostMelee.Content.Projectiles
                     if (box.Contains(t.Pos[i].ToPoint()))
                     {
                         npc.AddBuff(BuffID.Slow, SickleArcProjectile.FrostSlowTicks);
-                        // Сильный иней жжёт: тот же Frostburn, что на атаках
+                        // Сильный иней жжёт хардмодным Frostbite, а не Frostburn
                         if (t.Strong)
-                            npc.AddBuff(BuffID.Frostburn, SickleArcProjectile.FrostburnDuration);
+                            npc.AddBuff(BuffID.Frostburn2, SickleArcProjectile.FrostbiteDuration);
                         t.Slowed.Add(n);
                         break;
                     }

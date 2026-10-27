@@ -59,6 +59,146 @@ namespace FrostMelee.Content.Weapons
         // Поза броска (только локальный игрок)
         private int throwFollowTicks;
         private float fireGlow;   // свечение Фростбранда от горящих рядом врагов
+        // Насколько сильно горит сам клинок Frostbrand (0..1): счёт горящих врагов
+        // и сглаживание живут в PostUpdate. От этого питаются пламя на клинке
+        // (FrostJetFx.EmitBlade) и яркость ленты взмаха — «чем больше врагов горит,
+        // тем ярче горит меч» (FROSTBRAND_ИТОГ.md). База FireIntensity > 0:
+        // клинок из холодного огня горит всегда, враги доводят его до полной.
+        public float FireGlow => fireGlow;
+        public float FireIntensity => 0.55f + 0.45f * fireGlow;
+
+        // === Конечный холодный огонь Фростбранда (балансир владельца) ===
+        // У меча всего MaxFlames языков пламени. Каждый подожжённый враг
+        // держит один; запас пуст — струя новых не поджигает (своих горящих
+        // обновляет бесплатно). Враг умер горящим — язык возвращается к
+        // игроку живым огоньком (FrostFlameWisp): бьёт врагов по пути,
+        // висит у игрока и уходит со следующим взмахом. Тычок забрал
+        // горение — язык сразу в орбиту. Потух сам по времени — молча в меч.
+        // Учёт ведёт только клиент владельца (как полировка в MP).
+        public const int MaxFlames = 5;
+        public const int OrbitMeltTicks = 360; // 6 с: не потраченный огонёк вливается обратно в меч
+        private readonly Dictionary<int, Vector2> flameHolders = new(); // whoAmI врага → его последнее место
+        private int wispCount; // живых огоньков (возврат+орбита+взмах), пересчёт в UpdateFlames
+
+        public bool FlameAuthority =>
+            Main.netMode == NetmodeID.SinglePlayer || Player.whoAmI == Main.myPlayer;
+        public bool HoldsFlame(NPC npc) => flameHolders.ContainsKey(npc.whoAmI);
+        public int FreeFlames => Math.Max(0, MaxFlames - flameHolders.Count - wispCount);
+
+        // Какая доля огня при мече и игроке (запас + живые огоньки), а не сидит
+        // на врагах. Дуга взмаха по ней показывает, есть ли чем поджигать
+        public float FlameFullness => FlameAuthority
+            ? MathHelper.Clamp((FreeFlames + wispCount) / (float)MaxFlames, 0f, 1f)
+            : 1f;
+        public void AddFlameHolder(NPC npc) => flameHolders[npc.whoAmI] = npc.Center;
+
+        private int FlameDamage()
+        {
+            Item held = Player.HeldItem;
+            if (held != null && !held.IsAir && held.type == ItemID.Frostbrand)
+                return Math.Max(1, Player.GetWeaponDamage(held) / 2);
+            for (int i = 0; i < Player.inventory.Length; i++)
+            {
+                Item it = Player.inventory[i];
+                if (it != null && !it.IsAir && it.type == ItemID.Frostbrand)
+                    return Math.Max(1, Player.GetWeaponDamage(it) / 2);
+            }
+            return 20;
+        }
+
+        public void SpawnReturnFlame(Vector2 from)
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return;
+            Projectile.NewProjectile(Player.GetSource_FromThis(), from, Vector2.Zero,
+                ModContent.ProjectileType<FrostFlameWisp>(), FlameDamage(), 0f, Player.whoAmI,
+                0f, Main.rand.NextFloat(MathHelper.TwoPi));
+        }
+
+        public void SpawnOrbitFlame()
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return;
+            Projectile.NewProjectile(Player.GetSource_FromThis(), Player.Center, Vector2.Zero,
+                ModContent.ProjectileType<FrostFlameWisp>(), FlameDamage(), 0f, Player.whoAmI,
+                1f, Main.rand.NextFloat(MathHelper.TwoPi));
+        }
+
+        // Тычок забрал горение у цели: её язык уходит из врага в орбиту у игрока.
+        // Чужой огонь (не из запаса) тоже можно подобрать, пока есть место
+        public void OnFlameDrained(NPC target)
+        {
+            bool wasHolder = flameHolders.Remove(target.whoAmI);
+            if (wasHolder || flameHolders.Count + wispCount < MaxFlames)
+                SpawnOrbitFlame();
+        }
+
+        // Запас в мече пуст, но у игрока висит огонёк — струя берёт его
+        public bool TryConsumeOrbitingFlame()
+        {
+            if (Player.whoAmI != Main.myPlayer)
+                return false;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (p.active && p.owner == Player.whoAmI && p.ModProjectile is FrostFlameWisp wisp && wisp.IsOrbiting)
+                {
+                    p.Kill();
+                    wispCount = Math.Max(0, wispCount - 1);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Взмах: висящие огоньки срываются веером по прицелу (зовёт SwordGlobalItem)
+        public void LaunchOrbitingFlames()
+        {
+            if (Player.whoAmI != Main.myPlayer || Player.HeldItem == null || Player.HeldItem.type != ItemID.Frostbrand)
+                return;
+            List<FrostFlameWisp> ready = new();
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (p.active && p.owner == Player.whoAmI && p.ModProjectile is FrostFlameWisp wisp && wisp.IsOrbiting)
+                    ready.Add(wisp);
+            }
+            if (ready.Count == 0)
+                return;
+            Vector2 dir = (Main.MouseWorld - Player.MountedCenter).SafeNormalize(new Vector2(Player.direction, 0f));
+            for (int i = 0; i < ready.Count; i++)
+                ready[i].Launch(dir.RotatedBy((i - (ready.Count - 1) * 0.5f) * 0.16f));
+        }
+
+        private void UpdateFlames()
+        {
+            int count = 0;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (p.active && p.owner == Player.whoAmI && p.ModProjectile is FrostFlameWisp)
+                    count++;
+            }
+            wispCount = count;
+
+            if (flameHolders.Count == 0)
+                return;
+            foreach (int who in new List<int>(flameHolders.Keys))
+            {
+                NPC npc = Main.npc[who];
+                if (npc.active && FrostFireSystem.IsBurning(npc))
+                {
+                    flameHolders[who] = npc.Center;
+                    continue;
+                }
+                Vector2 from = flameHolders[who];
+                flameHolders.Remove(who);
+                // умер горящим — язык летит обратно огоньком; просто потух —
+                // запас молча вернулся в меч
+                if (!npc.active)
+                    SpawnReturnFlame(from);
+            }
+        }
         // Живая дуга взмаха этого игрока: SwingBladeLayer рисует клинок её углом
         public Projectile swingArc;                 // сколько тиков ещё идёт выброс/возврат
         private Vector2 throwAimDir = Vector2.UnitX;  // линия броска, зафиксированная при вылете
@@ -361,6 +501,9 @@ namespace FrostMelee.Content.Weapons
             if (Player.whoAmI != Main.myPlayer)
                 return;
 
+            // Конечный огонь Фростбранда: умер горящий — язык возвращается
+            UpdateFlames();
+
             // Взмах меча: клинок и дуга идут по ОДНОЙ формуле угла.
             // Ваниль рисует предмет в руке по своему itemRotation (своя кривая
             // взмаха), дуга живёт по нашей кривой — из-за расхождения кривых
@@ -369,6 +512,9 @@ namespace FrostMelee.Content.Weapons
             if (CurrentMode == Mode.Swing && HoldingSword && Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
             {
                 float progress = 1f - Player.itemAnimation / (float)Player.itemAnimationMax;
+                // Скорость взмаха — общая кривая дуги (нелинейная у обоих мечей:
+                // рывок в начале, затухание к концу)
+                progress = SwordArcProjectile.SwingProgressCurve(progress, Player.HeldItem.type);
                 float theta = Player.direction >= 0
                     ? MathHelper.Pi * (1f + progress)
                     : -MathHelper.Pi * progress;
@@ -377,6 +523,23 @@ namespace FrostMelee.Content.Weapons
                 SickleSprite.Geometry geo = SickleSprite.Get(Player.HeldItem.type);
                 float baseAng = (geo.TipFor(flipped) - geo.ButtFor(flipped)).ToRotation();
                 Player.itemRotation = MathHelper.WrapAngle(theta - baseAng);
+
+                // Кисть и рука взмаха — тоже наши, плавные. Ванильная позиция
+                // меча (itemLocation) во взмахе стоит ТРЕМЯ СТУПЕНЯМИ по третям
+                // анимации (ItemCheck_ApplyUseStyle, useStyle 1: пороги 0.333 и
+                // 0.666) — под три нарисованных кадра руки. В ванилле ступени
+                // замаскированы её кривой и теми же кадрами, а на нашей: клинок
+                // рисуется прикладом от itemLocation, и на второй ступени
+                // (~67% пути) рукоять разом падает вниз на 10–16 px, когда
+                // клинок по ease-out уже почти остановился, — покадрово это
+                // «прыжок» рукояти вглубь игрока на ~70% взмаха (нашёл владелец).
+                // Ставим композитную руку вдоль клинка, как у тычка/встречи, а
+                // приклад — на её кисть: путь рукояти становится гладкой дугой
+                // вокруг плеча, ступеней нет. Запись дуги, хитбокс и слой клинка
+                // все читают itemLocation — прыжок уходит отовсюду разом
+                float armRot = theta - MathHelper.PiOver2;
+                Player.SetCompositeArmFront(true, Player.CompositeArmStretchAmount.Full, armRot);
+                Player.itemLocation = SickleSprite.HandGrip(Player, Player.CompositeArmStretchAmount.Full, armRot);
             }
 
             // Фростбранд: чем больше врагов горит рядом, тем ярче светится меч
@@ -412,7 +575,7 @@ namespace FrostMelee.Content.Weapons
             if (!HoldingSword || Player.dead)
                 return;
             bool throwing = ApplyThrowPose();
-            TrySpawnFrostJet();
+            EmitBladeFlame();
             if (throwing)
                 return;
 
@@ -440,27 +603,30 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
-        private void TrySpawnFrostJet()
+        // Только пламя-частицы на клинке (FrostJetFx) — снарядов струи здесь нет.
+        // Струю как поджигающие снаряды пускают: дуга веером (SwordArcProjectile.
+        // SpawnArcJets) и встреча факелом (SickleBraceProjectile). У тычка струи
+        // НЕТ ни в каком виде (решение владельца): он только забирает чужой огонь
+        private void EmitBladeFlame()
         {
             if (Player.HeldItem.type != ItemID.Frostbrand || CurrentMode == Mode.Spear)
                 return;
-            if (CurrentMode == Mode.Swing && Player.itemAnimation <= 0 && !PoseItemVisible)
+            // Тычок: огонь пускает сам снаряд тычка по только что поставленной
+            // линии клинка (как встреча). Отсюда (PostUpdate игрока идёт ДО
+            // обновления снарядов) линия была вчерашней, и на выпаде пламя
+            // сидело позади настоящего клинка
+            if (CurrentMode == Mode.Stab)
                 return;
-            if (CurrentMode == Mode.Stab && !IsMyProjectile(stabProj, ModContent.ProjectileType<SwordStabProjectile>()))
+            if (CurrentMode == Mode.Swing && Player.itemAnimation <= 0 && !PoseItemVisible)
                 return;
             if (!TryGetBladeLine(out Vector2 butt, out Vector2 tip))
                 return;
 
             Vector2 dir = (tip - butt).SafeNormalize(Vector2.UnitX);
-            float retract = CurrentMode == Mode.Stab ? StabRetract01() : 0f;
             // Каждый тик: на быстром взмахе частицы раз в 2 тика дают разрывы,
-            // и огонь кажется прыгающим вслед за клинком.
-            FrostJetFx.EmitBlade(butt, tip, dir, 1f - 0.8f * retract);
-            if (retract > 0f || Main.GameUpdateCount % 2 != 0)
-                return;
-
-            Projectile.NewProjectile(Player.GetSource_ItemUse(Player.HeldItem), tip, dir * 4.5f,
-                ModContent.ProjectileType<FrostFireJet>(), 0, 0.5f, Player.whoAmI);
+            // и огонь кажется прыгающим вслед за клинком. Сила пламени — от числа
+            // горящих врагов рядом (FireIntensity)
+            FrostJetFx.EmitBlade(butt, tip, dir, FireIntensity, 1f, FrostJetFx.HandSource(Player.whoAmI));
         }
 
         public float StabRetractProgress => StabRetract01();

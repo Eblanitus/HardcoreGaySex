@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using ReLogic.Content;
 using Terraria;
 using Terraria.Audio;
 using Terraria.GameContent;
@@ -46,7 +47,14 @@ namespace FrostMelee.Content.Projectiles
         private const float StickAngle = 0.49f;     // допуск острия (~28°)
         private const float StickMinSpeed = 7f;
         private const float SideHitDamageMult = 0.5f;
-        private const float StickEmbedDepth = 6f;
+        private const float StickEmbedDepth = 12f; // глубже, чем 6: меч не балансирует на кончике
+        // Втыкается только та часть клинка, которой вообще втыкаются: передний
+        // кусок у кончика. Касание серединой клинка или рукоятью — не втыкание,
+        // а удар плашмя (иначе меч «застревал» в воздухе рядом с врагом:
+        // кончик далеко сбоку, а защёлка дёргала меч к цели)
+        private const float StickTipZoneFraction = 0.35f; // доля длины от кончика
+        private const float StickTipMaxGap = 20f;         // кончик не дальше этого от врага
+        private const float StickTipReach = 16f;          // кончик не дальше этого от земли
         // Авто-возврат через N тиков; 0 = никогда (доктрина: подбери сам)
         private const int AutoReturnTicks = 0;
 
@@ -54,6 +62,7 @@ namespace FrostMelee.Content.Projectiles
         private const int LodgedAuraGrowTicks = 120;   // 2 с до полного разгорания
         private const float LodgedAuraMinRadius = 28f;
         private const float LodgedAuraMaxRadius = 88f; // дальше не растёт
+        private const int LodgedHeatTicks = 480;       // «долго сидит»: ещё 8 с пламя только густеет (картинка)
         private const int LodgedBurnPulse = 15;        // как часто поджигать/продлевать
 
         // === Ледяная коса (только ItemID.IceSickle, серп смерти не трогаем) ===
@@ -91,11 +100,6 @@ namespace FrostMelee.Content.Projectiles
             57   // пепел
         };
 
-        // Лучи от хитбокса вдоль полёта: центр и углы
-        private static readonly Vector2[] ProbeOffsets = {
-            Vector2.Zero, new Vector2(-5f, -5f), new Vector2(5f, -5f), new Vector2(-5f, 5f), new Vector2(5f, 5f)
-        };
-
         // Номер броска для блокировки предмета (задаёт SicklePlayer, только у владельца)
         public int Token;
 
@@ -124,6 +128,7 @@ namespace FrostMelee.Content.Projectiles
         private bool stuckInit;
         private Point stuckTile;
         private bool cleanNpcHit;
+        private bool stickNpcHit;
         private int lodgedAuraTicks;
         private int lodgedBurnPulse;
 
@@ -135,6 +140,22 @@ namespace FrostMelee.Content.Projectiles
 
         private bool IsIce => (int)Projectile.ai[2] == ItemID.IceSickle;
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
+        private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
+
+        // Карамелька-приманка: неподвижный леденец (лёжа, в земле или во
+        // враге) тратит заряд сладости владельца (CandyCanePlayer) — тик
+        // приманки за тик заряда. Заряд кончился — «съеден»: не манит и серый
+        private int candyStillTicks; // только ритм сладкой пыли, тикает у всех
+        private Weapons.CandyCanePlayer CandyOwner =>
+            Main.player[Projectile.owner].GetModPlayer<Weapons.CandyCanePlayer>();
+        public bool CandyEaten => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            CandyOwner.SweetTicks <= 0;
+        public bool CandyLureActive => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+            (State == StateLying || State == StateStuckTile || State == StateLodged) && !CandyEaten;
+
+        // Серый («съеденный») спрайт карамельки и его геометрия: один раз на всех
+        private static Asset<Texture2D> candyGrayAsset;
+        private static SickleSprite.Geometry? candyGrayGeo;
 
         public override void SetDefaults()
         {
@@ -166,6 +187,11 @@ namespace FrostMelee.Content.Projectiles
                     frostAtThrow = Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().Frost;
             }
             Projectile.localAI[0]++;
+            // Воткнувшийся меч рисуется ПОД врагом/блоками (DrawBehind ниже):
+            // тело врага перекрывает вошедшую часть клинка, и меч выглядит
+            // именно воткнувшимся в него, а не наклейкой поверх спрайта
+            // (требование владельца: «под текстурой, а не поверх текстуры»)
+            Projectile.hide = State == StateLodged || State == StateStuckTile;
             if (AutoReturnTicks <= 0)
                 Projectile.timeLeft = 2;
 
@@ -201,6 +227,23 @@ namespace FrostMelee.Content.Projectiles
                 State = StateLying;
                 lyingInit = false;
                 Projectile.netUpdate = true;
+            }
+
+            // Неподвижный леденец пахнет сладко и манит врагов (рулит ими
+            // CandyCaneLureNPC), пока не кончится заряд сладости владельца:
+            // тик неподвижности = тик заряда, считает только владелец
+            if ((int)Projectile.ai[2] == ItemID.CandyCaneSword &&
+                (State == StateLying || State == StateStuckTile || State == StateLodged))
+            {
+                candyStillTicks++;
+                if (Projectile.owner == Main.myPlayer && CandyOwner.SweetTicks > 0)
+                    CandyOwner.SweetTicks--;
+                if (!Main.dedServ && !CandyEaten && candyStillTicks % 18 == 0)
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(10f, 6f),
+                        DustID.Snow, new Vector2(0f, -0.6f), 0, new Color(255, 120, 140), 1f);
+                    d.noGravity = true;
+                }
             }
 
             TryPickup();
@@ -356,8 +399,8 @@ namespace FrostMelee.Content.Projectiles
 
         private bool IsCleanHit(Vector2 velocity)
         {
-            // Кувыркающаяся после отскока/падения коса острием не летит: ось ≠ ход полёта, воткнув её
-            // по оси, тело оказывалось целиком внутри блока. Втыкается только летящая остриём вперёд
+            // Чистый удар: почти идеально кончиком вперёд (допуск StickAngle).
+            // Даёт полный урон. Втыкание и волна шире — IsPointHit + касание остриём
             if (harmless)
                 return false;
             if (velocity.Length() < StickMinSpeed)
@@ -367,46 +410,122 @@ namespace FrostMelee.Content.Projectiles
             return Math.Abs(MathHelper.WrapAngle(velocity.ToRotation() - Projectile.rotation)) <= StickAngle;
         }
 
-        private bool TryLodgeInTile(Vector2 oldVelocity)
+        private bool IsPointHit(Vector2 velocity)
         {
-            if (!IsCleanHit(oldVelocity))
+            // Втыкание кувыркающегося меча (решение владельца): не только
+            // идеально кончиком по полёту, а когда острие впереди центра меча
+            // по ходу полёта — вся передняя половина кувырка. Втыкается меч
+            // под своим настоящим углом, вдоль собственной оси, без всякого
+            // доворота. Прилетел рукоятью вперёд (острие в задней половине) —
+            // втыкаться нечем: отскок
+            if (harmless)
                 return false;
-
-            Vector2 dir = oldVelocity.SafeNormalize(Vector2.UnitY);
-            float reach = oldVelocity.Length() + FlightBox;
-            float nearest = float.MaxValue, centerDist = -1f;
-            float[] dists = new float[ProbeOffsets.Length];
-            int[] types = new int[ProbeOffsets.Length];
-            for (int i = 0; i < ProbeOffsets.Length; i++)
-            {
-                dists[i] = -1f;
-                for (float d = 0f; d <= reach; d += 1f)
-                {
-                    if (!SolidTileAt(Projectile.Center + ProbeOffsets[i] + dir * d, out _, out types[i]))
-                        continue;
-                    dists[i] = d;
-                    nearest = Math.Min(nearest, d);
-                    break;
-                }
-            }
-            if (nearest == float.MaxValue)
+            if (velocity.Length() < StickMinSpeed)
                 return false;
+            if (AlwaysTipFirst)
+                return true;
+            return Math.Abs(MathHelper.WrapAngle(velocity.ToRotation() - Projectile.rotation)) < MathHelper.PiOver2;
+        }
 
-            for (int i = 0; i < ProbeOffsets.Length; i++)
-            {
-                if (dists[i] >= 0f && dists[i] <= nearest + 4f && !SoftTiles.Contains(types[i]))
-                    return false; // камень, руда, кирпич, платформа: отскок
-            }
-            centerDist = dists[0] >= 0f ? dists[0] : nearest + 5f;
-
+        // Коснулся ли врага передний кусок клинка у кончика, и сам кончик при
+        // этом рядом с врагом (а не где-то сбоку). Без этого меч застревал от
+        // касания серединой клинка и висел на враге багануто: защёлка
+        // (TipLodgeOffset) дёргала его так, чтобы кончик оказался внутри
+        private bool TipSectionTouches(NPC target)
+        {
             SickleSprite.Geometry geo = Geo;
             Vector2 axis = Projectile.rotation.ToRotationVector2();
-            float embed = Math.Min(StickEmbedDepth, geo.Length * 0.4f);
-            Vector2 contact = Projectile.Center + dir * centerDist;
+            Vector2 tip = Projectile.Center + axis * geo.FrontReach;
+            Rectangle box = target.Hitbox;
 
+            Vector2 nearest = new Vector2(
+                MathHelper.Clamp(tip.X, box.Left, box.Right),
+                MathHelper.Clamp(tip.Y, box.Top, box.Bottom));
+            if (Vector2.Distance(tip, nearest) > StickTipMaxGap)
+                return false;
+
+            // Точки вдоль переднего куска клинка: хоть одна внутри врага (с
+            // запасом 4 px) — коснулся остриём. Сэмплинг вместо
+            // CheckAABBvLineCollision: с ней условие почти никогда не
+            // выполнялось и волна ледяного меча пропала совсем
+            box.Inflate(4, 4);
+            float zoneLen = (geo.FrontReach + geo.RearReach) * StickTipZoneFraction;
+            for (float d = 0f; d <= zoneLen; d += 4f)
+            {
+                if (box.Contains((tip - axis * d).ToPoint()))
+                    return true;
+            }
+            return box.Contains((tip - axis * zoneLen).ToPoint());
+        }
+
+        private bool TryLodgeInTile(Vector2 oldVelocity)
+        {
+            if (!IsPointHit(oldVelocity))
+                return false;
+
+            // Честное втыкание БЕЗ доворота (доворот до оси полёта — костыль,
+            // замечание владельца): меч остаётся под углом, под которым
+            // прилетел, а кончик уходит в землю вдоль СОБСТВЕННОЙ оси клинка.
+            // Ищем, где ось клинка пересекает поверхность: кончик уже внутри —
+            // шагаем назад до выхода; ещё снаружи — шагаем вперёд до встречи
+            SickleSprite.Geometry geo = Geo;
+            Vector2 axis = Projectile.rotation.ToRotationVector2();
+            Vector2 tip = Projectile.Center + axis * geo.FrontReach;
+            Vector2 contact;
+            int contactType;
+            if (SolidTileAt(tip, out _, out contactType))
+            {
+                contact = tip;
+                bool exited = false;
+                for (float d = 1f; d <= 48f; d += 1f)
+                {
+                    Vector2 p = tip - axis * d;
+                    if (!SolidTileAt(p, out _, out int t))
+                    {
+                        exited = true;
+                        break;
+                    }
+                    contact = p;
+                    contactType = t;
+                }
+                if (!exited)
+                    return false; // клинок целиком в земле — не втыкание, а закапывание
+            }
+            else
+            {
+                contact = tip;
+                contactType = -1;
+                bool found = false;
+                // Только пара пикселей допуска: кончик далеко от земли вдоль
+                // оси — значит, удар приняла середина/рукоять, не втыкание
+                float reach = StickTipReach;
+                for (float d = 1f; d <= reach; d += 1f)
+                {
+                    Vector2 p = tip + axis * d;
+                    if (!SolidTileAt(p, out _, out int t))
+                        continue;
+                    contact = p;
+                    contactType = t;
+                    found = true;
+                    break;
+                }
+                if (!found)
+                    return false; // кончик земли не достал (чиркнул боком) — не втыкается
+            }
+            if (!SoftTiles.Contains(contactType))
+                return false; // камень, руда, кирпич, платформа: отскок
+
+            float embed = Math.Min(StickEmbedDepth, geo.Length * 0.4f);
+            // Кончик — на embed глубже поверхности вдоль оси, центр — от него.
+            // Угол (rotation) не трогаем вообще
+            Vector2 newCenter = contact + axis * embed - axis * geo.FrontReach;
+            // Середина или рукоять при таком угле оказались бы внутри земли —
+            // меч не воткнулся, а лёг в неё боком: не втыкаем, пусть отскочит
+            // и ляжет как положено
+            if (SolidTileAt(newCenter, out _, out _) || SolidTileAt(newCenter - axis * geo.RearReach, out _, out _))
+                return false;
             SoundEngine.PlaySound(SoundID.Dig with { Volume = 0.7f, Pitch = 0.2f }, contact);
-            // Острие (самая дальняя точка лезвия), а не центроид: рисунок торчит за ним на FrontOverhang
-            Projectile.Center = contact - axis * (geo.FrontReach - embed);
+            Projectile.Center = newCenter;
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = -1f;
             State = StateStuckTile;
@@ -417,9 +536,14 @@ namespace FrostMelee.Content.Projectiles
             Projectile.friendly = false;
             Projectile.tileCollide = false;
             Projectile.netUpdate = true;
-            // Волна льда по поверхности от броска ледяного клинка (маленькая, т.к. не убийство)
+            // Кристалл льда из земли при втыкании ледяного клинка (обычный, т.к. не убийство)
             if ((int)Projectile.ai[2] == ItemID.IceBlade && Projectile.owner == Main.myPlayer) {
-                SpawnIceWave((int)Projectile.ai[2], false);
+                SpawnIceCrystal((int)Projectile.ai[2], false);
+            }
+            // Айсберг: крупные глыбы в момент втыкания, из точки контакта
+            if (IsAisberg && Projectile.owner == Main.myPlayer) {
+                AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                    Projectile.GetSource_FromThis(), contact, Projectile.damage, Projectile.knockBack);
             }
             return true;
         }
@@ -453,8 +577,9 @@ namespace FrostMelee.Content.Projectiles
             lastTrailPos = Projectile.Center;
         }
 
-        // Огонь на летящем Frostbrand: тот же клинок, что рисует PreDraw,
-        // поэтому пламя не отрывается от брошенного меча.
+        // Огонь на летящем Frostbrand: тот же клинок, что рисует PreDraw.
+        // EmitBladeLoose, а не EmitBlade: брошенный меч не должен делить
+        // привязанную линию клинка с мечом в руке (см. FrostJetFx)
         private void EmitFrostJet()
         {
             if (State != StateFlying)
@@ -469,13 +594,15 @@ namespace FrostMelee.Content.Projectiles
             Vector2 center = VisualCenter(geo);
             Vector2 butt = center - axis * half;
             Vector2 tip = center + axis * half;
-            FrostJetFx.EmitBlade(butt, tip, axis);
+            int source = FrostJetFx.LooseSource(Projectile.whoAmI);
+            FrostJetFx.EmitBladeLoose(butt, tip, axis,
+                Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().FireIntensity, 1f, source);
             if (Main.GameUpdateCount % 2 == 0)
-                FrostJetFx.EmitJet(center, axis);
+                FrostJetFx.EmitJet(center, axis, default, source);
         }
 
         // Застрявший Frostbrand разгорается: аура растёт до предела, поджигает соседей,
-        // а если клинок висит в враге — всё время обновляет ему Frostburn.
+        // а если клинок висит в враге — всё время обновляет ему Frostbite.
         private void UpdateLodgedFrostbrand(NPC lodged)
         {
             if (!IsFrostbrand)
@@ -490,44 +617,50 @@ namespace FrostMelee.Content.Projectiles
             {
                 lodgedBurnPulse = 0;
                 if (lodged != null && lodged.active)
-                    Weapons.FrostFireSystem.Ignite(lodged);
+                    Weapons.FrostFireSystem.TryIgnite(lodged, Main.player[Projectile.owner]);
 
                 float r2 = radius * radius;
                 for (int i = 0; i < Main.maxNPCs; i++)
                 {
                     NPC npc = Main.npc[i];
-                    if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.immortal)
+                    if (!Weapons.FrostFireSystem.CanBurn(npc))
                         continue;
                     if (Vector2.DistanceSquared(npc.Center, Projectile.Center) <= r2)
-                        Weapons.FrostFireSystem.Ignite(npc);
+                        Weapons.FrostFireSystem.TryIgnite(npc, Main.player[Projectile.owner]);
                 }
             }
 
             if (Main.dedServ)
                 return;
 
+            // Вторая, медленная стадия разгорания — только картинка: аура и
+            // поджог предел уже набрали (grow за 2 с), а пламя на клинке,
+            // если меч долго сидит, ещё ~8 секунд густеет, крупнеет и светит
+            // сильнее (просьба владельца: «побольше эффекта, когда долго сидит»)
+            float heat = MathHelper.Clamp((lodgedAuraTicks - LodgedAuraGrowTicks) / (float)LodgedHeatTicks, 0f, 1f);
+            float light = 1f + 0.4f * heat;
             Lighting.AddLight(Projectile.Center,
-                0.25f + 0.45f * grow,
-                0.45f + 0.7f * grow,
-                0.7f + 0.9f * grow);
+                (0.25f + 0.45f * grow) * light,
+                (0.45f + 0.7f * grow) * light,
+                (0.7f + 0.9f * grow) * light);
 
             SickleSprite.Geometry geo = Geo;
             Vector2 axis = Projectile.rotation.ToRotationVector2();
             float half = geo.Length * 0.5f * Projectile.scale;
             Vector2 butt = Projectile.Center - axis * half;
             Vector2 tip = Projectile.Center + axis * half;
-            FrostJetFx.EmitBlade(butt, tip, axis, 0.35f + 0.65f * grow);
-
-            if (Main.GameUpdateCount % 4 != 0)
-                return;
-
-            int puffs = 1 + (int)Math.Round(grow * 2f);
-            for (int i = 0; i < puffs; i++)
-            {
-                Vector2 dir = Main.rand.NextFloat(MathHelper.TwoPi).ToRotationVector2();
-                Vector2 pos = Projectile.Center + dir * radius * Main.rand.NextFloat(0.55f, 1f);
-                FrostJetFx.EmitJet(pos, dir);
-            }
+            // Огонь сидит НА клинке и разгорается с grow — и всё. Кольца клубков
+            // по воздуху вокруг меча больше нет: огонь по воздуху не
+            // распространяется (замечание владельца). Сама аура-поджог по
+            // радиусу выше работает как работала — убрана только картинка
+            // На второй половине «нагрева» пламени вдвое больше (второй проход),
+            // а сами языки крупнее — до +70% размера при полном heat
+            int passes = heat >= 0.5f ? 2 : 1;
+            int source = FrostJetFx.LooseSource(Projectile.whoAmI);
+            for (int pass = 0; pass < passes; pass++)
+                FrostJetFx.EmitBladeLoose(butt, tip, axis, 0.35f + 0.65f * grow, 1f + 0.7f * heat, source);
+            // Зона поджога видна тихим свечением того же радиуса (только картинка)
+            FrostJetFx.LodgedAura(Projectile.Center, radius, 0.4f + 0.6f * grow);
         }
 
         private void CloseFrostTrail()
@@ -541,17 +674,16 @@ namespace FrostMelee.Content.Projectiles
             CloseFrostTrail();
         }
 
-        private void SpawnIceWave(int itemType, bool isKill)
+        private void SpawnIceCrystal(int itemType, bool isKill)
         {
-            Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
-            // Ледяные свойства (волна, сосульки) — только Ice Blade:
-            // у Frostbrand их быть не должно
+            // Кристалл — только Ice Blade: у Frostbrand ледяных пик не бывает
             if (itemType != ItemID.IceBlade) return;
-            // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
+            // Один усиленный пик из земли в точке втыкания вместо полоски
+            // волны. Бросок убил — тот же кристалл, только крупнее и больнее
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
-            // Спавним волну на земле: ищем поверхность глубоко вниз.
-            // Враг высоко в воздухе и земли рядом нет — волны не будет:
+            // Кристалл наземный: ищем поверхность глубоко вниз.
+            // Враг высоко в воздухе и земли рядом нет — кристалла не будет:
             // наземная атака не должна висеть в пустоте
             Vector2 spawn = Projectile.Center;
             Point start = spawn.ToTileCoordinates();
@@ -559,14 +691,20 @@ namespace FrostMelee.Content.Projectiles
             for (int i = 0; i < 80; i++) {
                 int y = start.Y + i;
                 if (!WorldGen.InWorld(start.X, y, 2)) break;
-                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f - 8f; found = true; break; }
+                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f; found = true; break; }
             }
             if (!found) return;
-            // Урон шипов: треть от броска, сами шипы домножат на 0.35 (как раньше волна).
-            // Волна урона не наносит — она только несёт и расставляет шипы.
-            int waveDamage = Math.Max(1, Projectile.damage / 3);
+            // Урон — полный урон броска: множители обычного и убийственного
+            // кристалла внутри IceWaveSpike (0.6 и 1.0). Параметры пика:
+            // ai[0]=1 — личный размер в полую силу; ai[1]=6 обычный кристалл
+            // (спрайт 0, самый большой), 9 — за убийство; ai[2] — масштаб со
+            // знаком направления наклона
+            float packedStage = isKill ? 9f : 6f;
+            float sizeMul = (isKill ? 0.47f : 0.35f) * dir;
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
-                ModContent.ProjectileType<IceWaveProjectile>(), 0, 0f, Projectile.owner, isKill ? 1f : 0f, dir, waveDamage);
+                ModContent.ProjectileType<IceWaveSpike>(), Projectile.damage, IceWaveSpike.SpawnKnockback, Projectile.owner,
+                1f, packedStage, sizeMul);
+            SoundEngine.PlaySound(SoundID.Item27 with { Volume = isKill ? 0.8f : 0.6f, Pitch = isKill ? 0f : 0.3f }, spawn);
             if (isKill) {
                 // звук усиления
                 SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.7f }, spawn);
@@ -752,10 +890,12 @@ namespace FrostMelee.Content.Projectiles
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
         {
-            // Чистый удар («лезвием по ходу») — выравнивание оси на полёт,
-            // как у палок: у крученого меча пиксель-зона накрывает врага
-            // почти каждый кадр, из-за чего меч застревал при каждом касании
+            // Чистый удар («лезвием по ходу», ±28°) — полный урон.
+            // Втыкание (и волна ледяного меча): остриё в передней половине
+            // кувырка И врага коснулся передний кусок клинка у кончика.
+            // Серединой/рукоятью — слабый удар и отскок без втыкания
             cleanNpcHit = IsCleanHit(Projectile.velocity);
+            stickNpcHit = IsPointHit(Projectile.velocity) && TipSectionTouches(target);
             if (!cleanNpcHit)
                 modifiers.SourceDamage *= SideHitDamageMult;
         }
@@ -766,25 +906,36 @@ namespace FrostMelee.Content.Projectiles
             if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
                 if (thrownItem == ItemID.IceBlade)
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(thrownItem);
-                // Фростбранд: поджигает; убил горящего — взрыв сильнее и шире тычкового
+                // Фростбранд: летящий меч сам НЕ поджигает. Убил горящего — взрыв
+                // сильнее и шире тычкового. Поджигает застрявший клинок своей
+                // разгорающейся аурой (UpdateLodgedFrostbrand)
                 if (thrownItem == ItemID.Frostbrand) {
                     bool wasBurning = Weapons.FrostFireSystem.WasBurning(target);
-                    Weapons.FrostFireSystem.Ignite(target);
                     if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
                         Weapons.FrostFireSystem.Explode(target, 200f, Projectile.damage * 7 / 10, Projectile.owner, true);
                 }
-                // Волна льда — оба меча, и только когда попало лезвием
-                if (cleanNpcHit && Projectile.owner == Main.myPlayer) {
-                    bool isKill = target.life <= 0;
-                    SpawnIceWave(thrownItem, isKill);
+                // Кристалл льда — когда меч втыкается остриём (а не чиркает боком):
+                // то же условие, что и само втыкание ниже, иначе меч торчит
+                // во враге, а кристалла нет — «эффект не срабатывает»
+                if (stickNpcHit && Projectile.owner == Main.myPlayer) {
+                    if (IsAisberg) {
+                        Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
+                        AisbergChunk.SpawnThrowChunks(Main.player[Projectile.owner],
+                            Projectile.GetSource_FromThis(), tip, Projectile.damage, Projectile.knockBack);
+                    }
+                    else {
+                        bool isKill = target.life <= 0;
+                        SpawnIceCrystal(thrownItem, isKill);
+                    }
                 }
             }
             if (IsIce && !zoneSpawned && Projectile.owner == Main.myPlayer && target.life <= 0)
                 SpawnFrostZone(target.Center);
 
-            if (!cleanNpcHit)
+            if (!stickNpcHit)
             {
-                // Не острием: отскакивает от врага и падает, не втыкаясь
+                // Остриём не достал: рукоятью, плашмя или серединой клинка.
+                // Отскакивает от врага и падает, не втыкаясь
                 Vector2 away = (Projectile.Center - target.Center).SafeNormalize(-Vector2.UnitY);
                 Projectile.velocity = away * Math.Max(Projectile.velocity.Length() * 0.3f, 2f) + new Vector2(0f, -1.5f);
                 spinDir = -spinDir;
@@ -796,9 +947,9 @@ namespace FrostMelee.Content.Projectiles
                 return;
             }
 
-            // Застреваем во враге остриём по ходу полёта
-            if (Projectile.velocity != Vector2.Zero)
-                Projectile.rotation = Projectile.velocity.ToRotation();
+            // Застреваем во враге как прилетел: кончик внутри цели
+            // (TipLodgeOffset), угол — настоящий угол попадания.
+            // Доворота до оси полёта нет — это костыль (замечание владельца)
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = target.whoAmI;
             State = StateLodged;
@@ -906,6 +1057,17 @@ namespace FrostMelee.Content.Projectiles
                 ? Projectile.Bottom + Vector2.Lerp(settleFromOffset, new Vector2(0f, -lyingBelow), SettleProgress)
                 : Projectile.Center;
 
+        public override void DrawBehind(int index, List<int> behindNPCsAndTiles, List<int> behindNPCs,
+            List<int> behindProjectiles, List<int> overPlayers, List<int> overWiresUI)
+        {
+            // Куда именно «под»: во враге — под NPC (тело перекрывает вошедший
+            // клинок), в земле — под блоки (земля перекрывает закопанный кончик)
+            if (State == StateLodged)
+                behindNPCs.Add(index);
+            else if (State == StateStuckTile)
+                behindNPCsAndTiles.Add(index);
+        }
+
         public override bool PreDraw(ref Color lightColor)
         {
             int itemType = (int)Projectile.ai[2];
@@ -930,6 +1092,27 @@ namespace FrostMelee.Content.Projectiles
 
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
+
+            // Леденец сереет по мере потраченного заряда сладости: серый спрайт
+            // поверх той же позы (полный заряд — красный, пустой — серый).
+            // Серый спрайт в ванильном размере 44x70, поэтому геометрия своя,
+            // а масштаб подогнан под длину нынешнего клинка
+            if (itemType == ItemID.CandyCaneSword &&
+                CandyOwner.SweetTicks < Weapons.CandyCaneLureNPC.MaxSweetTicks)
+            {
+                candyGrayAsset ??= ModContent.Request<Texture2D>(
+                    "FrostMelee/Items/Candy Cane Sword gray", AssetRequestMode.ImmediateLoad);
+                Texture2D grayTex = candyGrayAsset.Value;
+                if (grayTex != null && !grayTex.IsDisposed)
+                {
+                    candyGrayGeo ??= SickleSprite.GetSwordGeometry(grayTex);
+                    SickleSprite.Geometry gGeo = candyGrayGeo.Value;
+                    float gray = 1f - CandyOwner.SweetFrac;
+                    float gScale = gGeo.Length > 1f ? scale * geo.Length / gGeo.Length : scale;
+                    Main.EntitySpriteDraw(grayTex, butt - Main.screenPosition, null, lightColor * gray,
+                        heading - gGeo.AngleFor(false), gGeo.ButtFor(false), gScale, SpriteEffects.None, 0f);
+                }
+            }
             return false;
         }
     }

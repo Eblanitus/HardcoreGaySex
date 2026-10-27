@@ -75,8 +75,8 @@ public class SwordGlobalItem : GlobalItem
 
             int arcType = ModContent.ProjectileType<SwordArcProjectile>();
             float adjustedItemScale = player.GetAdjustedItemScale(item);
-            // Дуга — единственный удар взмаха: полный урон взмаха (со стихией меча).
-            // К краю дуги урон падает — см. SwordArcProjectile.ModifyHitNPC
+            // Дуга — единственный удар взмаха: полный урон взмаха (со стихией меча),
+            // без спада — хитбокс равен самому клинку (SwordArcProjectile.BladeHit)
             int arcDamage = Math.Max(1, (int)Math.Round(damage * SwordTypes.SwingDamageMult(item) * SwordPlayer.PolishDamageMult(player, item)));
 
             // Размер дуги — от реальной длины клинка (рукоять → остриё по пикселям;
@@ -107,6 +107,11 @@ public class SwordGlobalItem : GlobalItem
                 // Кто взмахнул: от меча зависят ледяные свойства удара
                 arc.SwordItem = item.type;
             }
+
+            // Фростбранд: вернувшиеся языки пламени висят у игрока огоньками
+            // и уходят вместе со взмахом (бьют и поджигают — FrostFlameWisp)
+            if (item.type == ItemID.Frostbrand)
+                player.GetModPlayer<SwordPlayer>().LaunchOrbitingFlames();
             return false;
         }
     }

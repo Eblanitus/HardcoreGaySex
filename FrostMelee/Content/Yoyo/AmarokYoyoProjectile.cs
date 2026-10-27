@@ -46,8 +46,8 @@ namespace FrostMelee.Content.Yoyo
         private const float CloneFollowSpeed = 12f; // скорость догоняющего двойника
         private const int DetachCooldown = 45;      // отрыв сосульки не чаще, чем раз в это число тиков
         private const int HitCooldownBase = 10;     // тиков между ударами по цели, как ванила
-        private const float FrostburnChance = 0.67f;
-        private const int FrostburnTicks = 150;
+        private const float FrostbiteChance = 0.67f; // как у ванильного Амарока
+        private const int FrostbiteTicks = 150;
 
         // Player-owned projectiles follow tML's owner-authoritative projectile model.
         // Observers extrapolate velocity only; they must never read their own mouse
@@ -528,8 +528,8 @@ namespace FrostMelee.Content.Yoyo
             if (!IsAuthority)
                 return;
             Projectile.netUpdate = true;
-            if (Main.rand.NextFloat() < FrostburnChance)
-                target.AddBuff(BuffID.Frostburn, FrostburnTicks);
+            if (Main.rand.NextFloat() < FrostbiteChance)
+                target.AddBuff(BuffID.Frostburn2, FrostbiteTicks);
             // Раз в DetachCooldown тиков, не чаще: циклы частых ударов круга
             // не спишут весь лёд за секунду
             // Cooldown is measured in game ticks in PostAI, not in hit events.
