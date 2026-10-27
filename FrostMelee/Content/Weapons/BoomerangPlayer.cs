@@ -36,6 +36,8 @@ public class BoomerangPlayer : ModPlayer
 
 	public bool HoldingBoomerang() => IsBoomerang(Player.HeldItem);
 
+	public bool LightOut() => OwnProjectileActive(ModContent.ProjectileType<BoomerangLightProjectile>());
+
 	public bool HeavyOut() => OwnProjectileActive(ModContent.ProjectileType<BoomerangHeavyProjectile>());
 
 	private bool OwnProjectileActive(int type)
