@@ -28,9 +28,9 @@ public class BoomerangPlayer : ModPlayer
 	public const float SpinHeavyStartCharge = 0.5f; // тяжёлый начинает зарядку с 50%
 	public const float SpinSwingExponent = 1.8f; // разгон: медленное начало, быстрый конец (у мечей наоборот)
 
-	// Поза зарядки тяжёлого: рука на замахе, как у броска меча (SwordPlayer)
+	// Поза зарядки тяжёлого: рука на замахе, как у броска меча (SwordPlayer).
+	// Сам бумеранг слой рисует ванильным хватом взмаха, а не геометрией серпа.
 	public const float ChargeWindupBack = 2.4f; // угол руки назад-вверх от линии броска (рад)
-	public const float ChargeGripInset = 4f;    // сколько спрайта позади кисти
 
 	// Анимация броска: замах лёгкого (бумеранг в руке) → вылет → доработка руки.
 	// Замах + доработка = темп лёгких бросков, ритм потока не меняется.
@@ -40,10 +40,10 @@ public class BoomerangPlayer : ModPlayer
 
 	public bool Charging;
 	public float Charge;
-	// Позу зарядки рисует BoomerangChargePoseLayer от кисти (PoseHandOffset, PoseItemDir)
+	// Позу рисует BoomerangChargePoseLayer от кисти ванильным хватом взмаха
 	public bool PoseItemVisible;
 	public Vector2 PoseHandOffset;
-	public Vector2 PoseItemDir = Vector2.UnitX;
+	public float PoseItemRotation;
 	public int SpinTicks;
 	// ПКМ-тап просит ванильный взмах: SetControls подставляет нажатие, CanUseItem по этому
 	// флагу отличает запрос от обычного ЛКМ (ЛКМ предмет сам по себе не использует).
@@ -220,7 +220,14 @@ public class BoomerangPlayer : ModPlayer
 			return player.itemRotation;
 		float progress = MathHelper.Clamp(1f - player.itemAnimation / (float)player.itemAnimationMax, 0f, 1f);
 		float eased = MathF.Pow(progress, SpinSwingExponent);
-		float remaining = 1f - eased;
+		return SwingRotationForRemaining(player, 1f - eased);
+	}
+
+	// Та же ванильная формула по «оставшейся доле» взмаха: 1 — полный замах.
+	// Позы бросков держат бумеранг этим углом и ванильным origin, поэтому хват
+	// совпадает с обычным размахом, а не с прикладом серпа/меча.
+	public static float SwingRotationForRemaining(Player player, float remaining)
+	{
 		float rotation = (remaining - 0.5f) * -player.direction * 3.5f - player.direction * 0.3f;
 		return player.gravDir == -1f ? -rotation : rotation;
 	}
@@ -263,7 +270,7 @@ public class BoomerangPlayer : ModPlayer
 		SickleStabProjectile.HideBackArm(Player, armWorld.ToRotationVector2());
 
 		PoseItemVisible = true;
-		PoseItemDir = aim;
+		PoseItemRotation = WindupItemRotation(p);
 		PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
 	}
 
@@ -283,10 +290,12 @@ public class BoomerangPlayer : ModPlayer
 
 		Vector2 aim;
 		float armWorld;
+		float windupProgress = 0f;
 		Player.CompositeArmStretchAmount stretch;
 		if (windup) {
 			aim = AimDirection();
 			float p = MathHelper.Clamp(1f - (lightWindupTicks - 1f) / LightWindupTicks, 0f, 1f);
+			windupProgress = p;
 			int dirSign = aim.X >= 0 ? 1 : -1;
 			float back = aim.ToRotation() - dirSign * ChargeWindupBack;
 			armWorld = LerpAngle(MathHelper.PiOver2, back, p);
@@ -319,11 +328,15 @@ public class BoomerangPlayer : ModPlayer
 
 		if (windup) {
 			PoseItemVisible = true;
-			PoseItemDir = aim;
+			PoseItemRotation = WindupItemRotation(windupProgress);
 			PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
 		}
 		return true;
 	}
+
+	// На замахе бумеранг постепенно доходит до стартового кадра обычного взмаха.
+	private float WindupItemRotation(float progress) =>
+		SwingRotationForRemaining(Player, MathHelper.Lerp(0.7f, 1f, MathHelper.Clamp(progress, 0f, 1f)));
 
 	private static float LerpAngle(float a, float b, float t) =>
 		a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);
