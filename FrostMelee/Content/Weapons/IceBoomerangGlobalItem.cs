@@ -6,10 +6,10 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons;
 
-// Ледяной бумеранг по boomer.md: ЛКМ — удар в руке (ванильный взмах настоящим предметом),
-// ПКМ-тап — лёгкий бросок (сам возвращается), ПКМ-держать — зарядка с прицелом и
-// тяжёлый бросок (втыкается — иди забирай). Броски спавнит BoomerangPlayer;
-// ванильный снаряд бумеранга отключён. Сквозь стены не летит ничего.
+// Ледяной бумеранг по boomer.md: ЛКМ держать — поток лёгких бросков (сами возвращаются),
+// ПКМ-тап — удар в руке (ванильный взмах настоящим предметом), ПКМ-держать — зарядка
+// с прицелом и тяжёлый бросок (отскакивает и падает — иди забирай). Броски и запрос
+// взмаха — BoomerangPlayer; ванильный снаряд бумеранга отключён. Сквозь стены ничего.
 public class IceBoomerangGlobalItem : GlobalItem
 {
 	public override bool AppliesToEntity(Item item, bool lateInstantiation) => item.type == ItemID.IceBoomerang;
@@ -19,15 +19,16 @@ public class IceBoomerangGlobalItem : GlobalItem
 		item.useStyle = ItemUseStyleID.Swing;
 		item.noMelee = false; // удар в руке бьёт по-настоящему
 		item.noUseGraphic = false; // у ванильного бумеранга графика в руке скрыта — возвращаем
-		item.shoot = ProjectileID.None; // броски — только наши, по ПКМ
+		item.shoot = ProjectileID.None; // броски — только наши (BoomerangPlayer)
 		item.autoReuse = true;
 	}
 
 	public override bool CanUseItem(Item item, Player player)
 	{
-		// Брошенный бумеранг ещё в воздухе/воткнут — рукой махать нечем.
+		// Ванильный взмах — только по запросу ПКМ-тапа. Обычный ЛКМ предмет не использует
+		// (ЛКМ — это лёгкие броски), а брошенный тяжёлый — махать нечем.
 		BoomerangPlayer bp = player.GetModPlayer<BoomerangPlayer>();
-		return !bp.Charging && !bp.BoomerangOut();
+		return bp.SwingRequested && !bp.HeavyOut();
 	}
 
 	public override void ModifyTooltips(Item item, List<TooltipLine> tooltips)

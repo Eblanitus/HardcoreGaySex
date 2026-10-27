@@ -8,30 +8,33 @@ using FrostMelee.Content.Projectiles;
 
 namespace FrostMelee.Content.Weapons;
 
-// Ввод бумеранга: ЛКМ — обычный взмах в руке (ванильный предмет),
-// ПКМ-тап — лёгкий бросок (сам возвращается), ПКМ-держать — зарядка с прицелом,
-// отпустить — тяжёлый бросок (втыкается, идти забирать). Схема philosophy.md.
-// Пока любой брошенный бумеранг жив — предметом пользоваться нельзя.
+// Ввод бумеранга: ЛКМ держать — бесконечный поток лёгких бросков (сами возвращаются),
+// ПКМ-тап — удар в руке (ванильный взмах), ПКМ-держать — зарядка с прицелом,
+// отпустить — тяжёлый бросок (отскакивает и падает, идти забирать).
+// Пока тяжёлый бумеранг не в руке, предметом пользоваться нельзя.
 public class BoomerangPlayer : ModPlayer
 {
 	public const int TapThresholdTicks = 18; // как у мечей (SwordPlayer)
 	public const int ChargeFullTicks = 45;
+	public const int LightThrowIntervalTicks = 18; // темп лёгких бросков при зажатом ЛКМ
 	public const float LightDamageMult = 0.8f;  // бесплатный возврат = слабый урон
 	public const float HeavyDamageMin = 1.1f;
 	public const float HeavyDamageMax = 2.0f;
 
 	public bool Charging;
 	public float Charge;
+	// ПКМ-тап просит ванильный взмах: SetControls подставляет нажатие, CanUseItem по этому
+	// флагу отличает запрос от обычного ЛКМ (ЛКМ предмет сам по себе не использует).
+	public bool SwingRequested;
 
 	private int rmbHoldTicks;
+	private int lightCooldown;
+	private int swingRequestAge;
 	private int lastHeldType;
 
 	public static bool IsBoomerang(Item item) => item.type == ItemID.IceBoomerang;
 
 	public bool HoldingBoomerang() => IsBoomerang(Player.HeldItem);
-
-	public bool BoomerangOut() => OwnProjectileActive(ModContent.ProjectileType<BoomerangLightProjectile>())
-		|| OwnProjectileActive(ModContent.ProjectileType<BoomerangHeavyProjectile>());
 
 	public bool HeavyOut() => OwnProjectileActive(ModContent.ProjectileType<BoomerangHeavyProjectile>());
 
@@ -62,11 +65,23 @@ public class BoomerangPlayer : ModPlayer
 		if (held.type != lastHeldType) {
 			lastHeldType = held.type;
 			ResetCharge();
+			SwingRequested = false;
+			lightCooldown = 0;
 		}
 
 		if (!IsBoomerang(held) || Player.dead) {
 			ResetCharge();
+			SwingRequested = false;
 			return;
+		}
+
+		// Запрос взмаха живёт недолго: взмах начался или срок истёк — сбрасываем.
+		if (SwingRequested) {
+			swingRequestAge++;
+			if (Player.itemAnimation > 0 || swingRequestAge > 3) {
+				SwingRequested = false;
+				swingRequestAge = 0;
+			}
 		}
 
 		bool uiBlocked = Player.mouseInterface || Main.drawingPlayerChat || Main.blockMouse
@@ -74,12 +89,26 @@ public class BoomerangPlayer : ModPlayer
 			|| Main.SmartInteractShowingGenuine;
 
 		bool rmb = Main.mouseRight && !uiBlocked;
+		bool lmb = Main.mouseLeft && !uiBlocked;
 		bool swinging = Player.itemAnimation > 0;
 
-		if (uiBlocked || BoomerangOut()) {
+		if (uiBlocked || HeavyOut()) {
 			ResetCharge();
+			lightCooldown = 0;
 			return;
 		}
+
+		// ЛКМ держать — лёгкие броски без конца, по одному в интервал.
+		if (lmb && !Charging && !swinging) {
+			if (lightCooldown > 0)
+				lightCooldown--;
+			if (lightCooldown <= 0) {
+				LightThrow(held);
+				lightCooldown = LightThrowIntervalTicks;
+			}
+		}
+		else if (!lmb)
+			lightCooldown = 0; // следующее нажатие бросает сразу
 
 		if (rmb) {
 			if (!swinging) {
@@ -95,14 +124,23 @@ public class BoomerangPlayer : ModPlayer
 			return;
 		}
 
-		// Отпустили ПКМ.
+		// Отпустили ПКМ: шла зарядка — тяжёлый бросок, был тап — удар в руке.
 		if (rmbHoldTicks > 0 && !swinging) {
 			if (Charging)
 				HeavyThrow(held, Charge);
-			else
-				LightThrow(held);
+			else {
+				SwingRequested = true;
+				swingRequestAge = 0;
+			}
 		}
 		ResetCharge();
+	}
+
+	public override void SetControls()
+	{
+		// ПКМ-тап просит взмах: подставляем ваниле нажатие использования предмета.
+		if (SwingRequested)
+			Player.controlUseItem = true;
 	}
 
 	private Vector2 ThrowOrigin(Vector2 dir)
