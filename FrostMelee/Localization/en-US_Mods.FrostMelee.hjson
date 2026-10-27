@@ -3,6 +3,7 @@ Items: {
 		DisplayName: Aisberg
 		Tooltip: Ice chunks explode when they crack and inflict Frostbite
 	}
+
 	GlacialFlail: {
 		DisplayName: Glacial Flail
 		Tooltip: Two flails in one: a spun throw and a straight launched shot

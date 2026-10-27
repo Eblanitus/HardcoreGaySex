@@ -3,6 +3,7 @@ Items: {
 		DisplayName: Айсберг
 		Tooltip: Ледяные глыбы при расколе взрываются и накладывают Фростбайт
 	}
+
 	GlacialFlail: {
 		DisplayName: Ледниковый цеп
 		Tooltip: Два цепа в одном: крутка с броском и прямой выстрел на цепи
@@ -16,7 +17,6 @@ Projectiles: {
 	SickleThrowProjectile.DisplayName: Бросок серпа
 	SwordArcProjectile.DisplayName: Дуга меча
 	SwordStabProjectile.DisplayName: Выпад мечом
-	GlacialFlailProjectile.DisplayName: Ледниковый цеп
 	// AmarokYoyoProjectile.DisplayName: Amarok Yoyo Projectile
 	// AmarokShardProjectile.DisplayName: Amarok Shard Projectile
 	// IceWaveProjectile.DisplayName: Ice Wave Projectile
@@ -31,6 +31,7 @@ Projectiles: {
 	// AisbergChunk.DisplayName: Aisberg Chunk
 	// BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
 	// BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
+	GlacialFlailProjectile.DisplayName: Ледниковый цеп
 }
 
 Stance: {
