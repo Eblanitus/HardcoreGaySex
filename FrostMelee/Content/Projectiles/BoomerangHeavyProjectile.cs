@@ -23,6 +23,7 @@ public class BoomerangHeavyProjectile : ModProjectile
 	public const float EnemyBounceBack = 0.65f; // отскок назад от врага
 	public const float EnemyPopUp = -5f;        // и вверх перед падением
 	public const float PickupRadius = 36f;
+	public const float CatchRadius = 48f; // перехват на лету, когда пролетает мимо игрока
 	public const int FrostburnTicks = 240;
 
 	public static float LaunchSpeed(float charge) => BaseSpeed + ChargeSpeedBonus * charge;
@@ -52,11 +53,27 @@ public class BoomerangHeavyProjectile : ModProjectile
 	private ref float State => ref Projectile.ai[1];
 
 	private int spinDir = 1;
+	private bool leftOwner; // улетел от игрока — теперь можно ловить при возврате
 
 	public override void AI()
 	{
 		Player owner = Main.player[Projectile.owner];
 		int state = (int)State;
+
+		// Перехват на лету: пролетает мимо игрока — игрок всегда стягивает.
+		// Сначала должен улететь за радиус, иначе ловил бы сам бросок в момент старта.
+		if (state != StateResting && Projectile.owner == Main.myPlayer && owner.active && !owner.dead) {
+			float dist = Vector2.Distance(Projectile.Center, owner.Center);
+			if (!leftOwner) {
+				if (dist > CatchRadius)
+					leftOwner = true;
+			}
+			else if (dist < CatchRadius) {
+				SoundEngine.PlaySound(SoundID.Grab, Projectile.Center);
+				Projectile.Kill();
+				return;
+			}
+		}
 
 		if (state == StateResting) {
 			Projectile.timeLeft = 2; // лежит, пока не подберут
