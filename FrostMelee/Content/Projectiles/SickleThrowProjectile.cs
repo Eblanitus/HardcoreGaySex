@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using ReLogic.Content;
 using Terraria;
 using Terraria.Audio;
 using Terraria.GameContent;
@@ -141,13 +142,18 @@ namespace FrostMelee.Content.Projectiles
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
         private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
 
-        // Карамелька-приманка: сколько тиков леденец пролежал/провисел воткнутым.
-        // Дошло до порога — его «съели»: бледнеет и перестаёт манить (CandyCaneLureNPC)
+        // Карамелька-приманка: сколько тиков леденец пробыл неподвижным —
+        // лежит, воткнут в землю или торчит во враге. Дошло до порога — его
+        // «съели»: перестаёт манить, а по пути потихоньку сереет (PreDraw)
         private int candyGroundTicks;
         public bool CandyEaten => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
             candyGroundTicks >= Weapons.CandyCaneLureNPC.EatTicks;
         public bool CandyLureActive => (int)Projectile.ai[2] == ItemID.CandyCaneSword &&
-            (State == StateLying || State == StateStuckTile) && !CandyEaten;
+            (State == StateLying || State == StateStuckTile || State == StateLodged) && !CandyEaten;
+
+        // Серый («съеденный») спрайт карамельки и его геометрия: один раз на всех
+        private static Asset<Texture2D> candyGrayAsset;
+        private static SickleSprite.Geometry? candyGrayGeo;
 
         public override void SetDefaults()
         {
@@ -221,11 +227,11 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.netUpdate = true;
             }
 
-            // Леденец на земле пахнет сладко и манит врагов (рулит ими
-            // CandyCaneLureNPC), пока его не «съедят»: счётчик идёт только
-            // пока меч лежит или воткнут в землю
+            // Неподвижный леденец пахнет сладко и манит врагов (рулит ими
+            // CandyCaneLureNPC), пока его не «съедят»: счётчик идёт, пока меч
+            // лежит, воткнут в землю или торчит во враге
             if ((int)Projectile.ai[2] == ItemID.CandyCaneSword &&
-                (State == StateLying || State == StateStuckTile))
+                (State == StateLying || State == StateStuckTile || State == StateLodged))
             {
                 candyGroundTicks++;
                 if (!Main.dedServ && !CandyEaten && candyGroundTicks % 18 == 0)
@@ -1078,12 +1084,25 @@ namespace FrostMelee.Content.Projectiles
             FrozenSpear.DrawBlend(texture, butt, geo, heading - geo.AngleFor(false), false, lightColor, scale,
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
 
-            // Съеденный леденец бледный: белёсая копия поверх той же позы —
-            // видно, что сладкого запаха (и приманки) больше нет
-            if (CandyEaten)
+            // Леденец потихоньку сереет, пока его «едят»: серый спрайт поверх
+            // той же позы, сила — доля съеденности (в конце полностью серый).
+            // Серый спрайт в ванильном размере 44x70, поэтому геометрия своя,
+            // а масштаб подогнан под длину нынешнего клинка
+            if (itemType == ItemID.CandyCaneSword && candyGroundTicks > 0)
             {
-                Main.EntitySpriteDraw(texture, butt - Main.screenPosition, null, Color.White * 0.6f,
-                    heading - geo.AngleFor(false), geo.ButtFor(false), scale, SpriteEffects.None, 0f);
+                candyGrayAsset ??= ModContent.Request<Texture2D>(
+                    "FrostMelee/Items/Candy Cane Sword gray", AssetRequestMode.ImmediateLoad);
+                Texture2D grayTex = candyGrayAsset.Value;
+                if (grayTex != null && !grayTex.IsDisposed)
+                {
+                    candyGrayGeo ??= SickleSprite.GetSwordGeometry(grayTex);
+                    SickleSprite.Geometry gGeo = candyGrayGeo.Value;
+                    float gray = MathHelper.Clamp(
+                        candyGroundTicks / (float)Weapons.CandyCaneLureNPC.EatTicks, 0f, 1f);
+                    float gScale = gGeo.Length > 1f ? scale * geo.Length / gGeo.Length : scale;
+                    Main.EntitySpriteDraw(grayTex, butt - Main.screenPosition, null, lightColor * gray,
+                        heading - gGeo.AngleFor(false), gGeo.ButtFor(false), gScale, SpriteEffects.None, 0f);
+                }
             }
             return false;
         }
