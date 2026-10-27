@@ -270,16 +270,20 @@ public class BoomerangHeavyProjectile : ModProjectile
 
 	// Поверхность именно воды: лава, мёд и шиммер шайбу не держат.
 	// Опрашиваем низ хитбокса и идём вверх до верхнего жидкого тайла.
+	// HasWater в этой версии tML нет — проверяем тип жидкости напрямую.
+	private static bool IsWaterTile(int x, int y) =>
+		Main.tile[x, y].LiquidAmount > 0 && Main.tile[x, y].LiquidType == LiquidID.Water;
+
 	private static bool TryGetWaterSurface(Vector2 center, out float surfaceY)
 	{
 		surfaceY = 0f;
 		Point probe = new Vector2(center.X, center.Y + 12f).ToTileCoordinates();
 		if (probe.X < 0 || probe.X >= Main.maxTilesX || probe.Y < 0 || probe.Y >= Main.maxTilesY
-			|| !Main.tile[probe.X, probe.Y].HasWater)
+			|| !IsWaterTile(probe.X, probe.Y))
 			return false;
 
 		int y = probe.Y;
-		while (y > 0 && Main.tile[probe.X, y - 1].HasWater)
+		while (y > 0 && IsWaterTile(probe.X, y - 1))
 			y--;
 
 		surfaceY = y * 16f + (256f - Main.tile[probe.X, y].LiquidAmount) / 16f;
