@@ -3,6 +3,10 @@ Items: {
 		DisplayName: Aisberg
 		Tooltip: Ice chunks explode when they crack and inflict Frostbite
 	}
+	GlacialFlail: {
+		DisplayName: Glacial Flail
+		Tooltip: A fully spun-up boulder hits harder and inflicts Frostbite
+	}
 }
 
 Projectiles: {
@@ -26,6 +30,7 @@ Projectiles: {
 	AisbergChunk.DisplayName: Aisberg Chunk
 	BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
 	BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
+	GlacialFlailProjectile.DisplayName: Glacial Flail
 }
 
 Stance: {
@@ -74,6 +79,13 @@ BoomerangControlsTooltip:
 	RMB: backswing — hits point blank and spins up your next throw
 	RMB (hold): charge with an aim line, release — heavy throw (slides like a puck, floats in water, go pick it up)
 	Nothing flies through walls
+	'''
+GlacialFlailControlsTooltip:
+	'''
+	LMB (hold): the boulder spins around you and gains momentum — damage and knockback grow
+	Release LMB: the boulder flies to your cursor on its chain, but hits weaker
+	LMB while it flies: yank the boulder back
+	It does not hit through walls
 	'''
 
 Configs: {

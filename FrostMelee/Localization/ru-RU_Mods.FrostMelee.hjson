@@ -3,6 +3,10 @@ Items: {
 		DisplayName: Айсберг
 		Tooltip: Ледяные глыбы при расколе взрываются и накладывают Фростбайт
 	}
+	GlacialFlail: {
+		DisplayName: Ледниковый цеп
+		Tooltip: Раскрученная глыба бьёт больнее и вешает Фростбайт
+	}
 }
 
 Projectiles: {
@@ -12,6 +16,7 @@ Projectiles: {
 	SickleThrowProjectile.DisplayName: Бросок серпа
 	SwordArcProjectile.DisplayName: Дуга меча
 	SwordStabProjectile.DisplayName: Выпад мечом
+	GlacialFlailProjectile.DisplayName: Ледниковый цеп
 	// AmarokYoyoProjectile.DisplayName: Amarok Yoyo Projectile
 	// AmarokShardProjectile.DisplayName: Amarok Shard Projectile
 	// IceWaveProjectile.DisplayName: Ice Wave Projectile
@@ -74,6 +79,13 @@ BoomerangControlsTooltip:
 	ПКМ: размах — бьёт в упор и раскручивает следующий бросок
 	ПКМ (зажать): зарядка с прицелом, отпустить — тяжёлый бросок (скользит шайбой, в воде не тонет, идти забирать)
 	Сквозь стены не летит ничего
+	'''
+GlacialFlailControlsTooltip:
+	'''
+	ЛКМ (держать): глыба крутится вокруг тебя и разгоняется — урон и отброс растут
+	Отпустить ЛКМ: глыба летит к курсору на цепи, но бьёт слабее
+	ЛКМ в полёте: дёрнуть глыбу обратно
+	Сквозь стены не бьёт
 	'''
 
 Configs: {
