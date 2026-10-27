@@ -21,7 +21,7 @@ namespace FrostMelee
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261027-candy-3";
+        public const string BuildTag = "20261027-candy-4";
 
         public override void Load()
         {
@@ -91,6 +91,12 @@ namespace FrostMelee
             TryOverride(ItemID.IceBlade, "FrostMelee/Items/Ice_Blade");
             Content.Weapons.IceBladeVisual.RegisterClean(TextureAssets.Item[ItemID.IceBlade]);
             TryOverride(ItemID.Frostbrand, "FrostMelee/Items/Frostbrand");
+
+            // Карамелька: ванильный спрайт огромный (44x70, клинок 77 px —
+            // длиннее Фростбранда у дохардмодной конфеты). Своя копия уменьшена
+            // до длины Ice Blade (~52 px): размер в руке, дуга и зоны меряются
+            // по спрайту и уменьшаются все разом
+            TryOverride(ItemID.CandyCaneSword, "FrostMelee/Items/CandyCaneSword");
         }
 
         private void TryOverride(int itemId, string texturePath)
