@@ -536,9 +536,9 @@ namespace FrostMelee.Content.Projectiles
             Projectile.friendly = false;
             Projectile.tileCollide = false;
             Projectile.netUpdate = true;
-            // Волна льда по поверхности от броска ледяного клинка (маленькая, т.к. не убийство)
+            // Кристалл льда из земли при втыкании ледяного клинка (обычный, т.к. не убийство)
             if ((int)Projectile.ai[2] == ItemID.IceBlade && Projectile.owner == Main.myPlayer) {
-                SpawnIceWave((int)Projectile.ai[2], false);
+                SpawnIceCrystal((int)Projectile.ai[2], false);
             }
             // Айсберг: крупные глыбы в момент втыкания, из точки контакта
             if (IsAisberg && Projectile.owner == Main.myPlayer) {
@@ -674,17 +674,16 @@ namespace FrostMelee.Content.Projectiles
             CloseFrostTrail();
         }
 
-        private void SpawnIceWave(int itemType, bool isKill)
+        private void SpawnIceCrystal(int itemType, bool isKill)
         {
-            Mod.Logger.Info($"[Wave] попытка спавна: item={itemType}, isKill={isKill}");
-            // Ледяные свойства (волна, сосульки) — только Ice Blade:
-            // у Frostbrand их быть не должно
+            // Кристалл — только Ice Blade: у Frostbrand ледяных пик не бывает
             if (itemType != ItemID.IceBlade) return;
-            // Маленькая волна на попадании, длинная на убийстве — как у Deerclops, но ухудшенная
+            // Один усиленный пик из земли в точке втыкания вместо полоски
+            // волны. Бросок убил — тот же кристалл, только крупнее и больнее
             int dir = Projectile.velocity.X >= 0 ? 1 : -1;
             if (Projectile.velocity.LengthSquared() < 1f) dir = Main.player[Projectile.owner].direction;
-            // Спавним волну на земле: ищем поверхность глубоко вниз.
-            // Враг высоко в воздухе и земли рядом нет — волны не будет:
+            // Кристалл наземный: ищем поверхность глубоко вниз.
+            // Враг высоко в воздухе и земли рядом нет — кристалла не будет:
             // наземная атака не должна висеть в пустоте
             Vector2 spawn = Projectile.Center;
             Point start = spawn.ToTileCoordinates();
@@ -692,14 +691,20 @@ namespace FrostMelee.Content.Projectiles
             for (int i = 0; i < 80; i++) {
                 int y = start.Y + i;
                 if (!WorldGen.InWorld(start.X, y, 2)) break;
-                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f - 8f; found = true; break; }
+                if (WorldGen.SolidTile(start.X, y)) { spawn.Y = y * 16f; found = true; break; }
             }
             if (!found) return;
-            // Урон шипов: треть от броска, сами шипы домножат на 0.35 (как раньше волна).
-            // Волна урона не наносит — она только несёт и расставляет шипы.
-            int waveDamage = Math.Max(1, Projectile.damage / 3);
+            // Урон — полный урон броска: множители обычного и убийственного
+            // кристалла внутри IceWaveSpike (0.6 и 1.0). Параметры пика:
+            // ai[0]=1 — личный размер в полую силу; ai[1]=6 обычный кристалл
+            // (спрайт 0, самый большой), 9 — за убийство; ai[2] — масштаб со
+            // знаком направления наклона
+            float packedStage = isKill ? 9f : 6f;
+            float sizeMul = (isKill ? 1.35f : 1f) * dir;
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), spawn, Vector2.Zero,
-                ModContent.ProjectileType<IceWaveProjectile>(), 0, 0f, Projectile.owner, isKill ? 1f : 0f, dir, waveDamage);
+                ModContent.ProjectileType<IceWaveSpike>(), Projectile.damage, IceWaveSpike.SpawnKnockback, Projectile.owner,
+                1f, packedStage, sizeMul);
+            SoundEngine.PlaySound(SoundID.Item27 with { Volume = isKill ? 0.8f : 0.6f, Pitch = isKill ? 0f : 0.3f }, spawn);
             if (isKill) {
                 // звук усиления
                 SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.7f }, spawn);
@@ -909,9 +914,9 @@ namespace FrostMelee.Content.Projectiles
                     if (wasBurning && target.life <= 0 && Projectile.owner == Main.myPlayer)
                         Weapons.FrostFireSystem.Explode(target, 200f, Projectile.damage * 7 / 10, Projectile.owner, true);
                 }
-                // Волна льда — когда меч втыкается остриём (а не чиркает боком):
+                // Кристалл льда — когда меч втыкается остриём (а не чиркает боком):
                 // то же условие, что и само втыкание ниже, иначе меч торчит
-                // во враге, а волны нет — «эффект не срабатывает»
+                // во враге, а кристалла нет — «эффект не срабатывает»
                 if (stickNpcHit && Projectile.owner == Main.myPlayer) {
                     if (IsAisberg) {
                         Vector2 tip = Projectile.Center + Projectile.rotation.ToRotationVector2() * Geo.FrontReach;
@@ -920,7 +925,7 @@ namespace FrostMelee.Content.Projectiles
                     }
                     else {
                         bool isKill = target.life <= 0;
-                        SpawnIceWave(thrownItem, isKill);
+                        SpawnIceCrystal(thrownItem, isKill);
                     }
                 }
             }
