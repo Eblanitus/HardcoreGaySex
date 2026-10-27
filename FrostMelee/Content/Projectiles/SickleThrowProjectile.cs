@@ -1105,7 +1105,7 @@ namespace FrostMelee.Content.Projectiles
                 Texture2D grayTex = candyGrayAsset.Value;
                 if (grayTex != null && !grayTex.IsDisposed)
                 {
-                    candyGrayGeo ??= SickleSprite.GetSwordGeometry(grayTex);
+                    candyGrayGeo ??= SickleSprite.GetCandyGrayGeometry();
                     SickleSprite.Geometry gGeo = candyGrayGeo.Value;
                     float gray = 1f - CandyOwner.SweetFrac;
                     float gScale = gGeo.Length > 1f ? scale * geo.Length / gGeo.Length : scale;

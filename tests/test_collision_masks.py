@@ -31,7 +31,7 @@ class CollisionMaskTests(unittest.TestCase):
                 width, height = map(int, match.group(1, 2))
                 bits = base64.b64decode(match.group(3), validate=True)
                 self.assertEqual(len(bits), (width * height + 7) // 8)
-                with Image.open(ROOT / f'FrostMelee/Items/{filename}.png') as image:
+                with Image.open(ROOT / filename) as image:
                     self.assertEqual((width, height), image.size)
                     alpha = image.convert('RGBA').getchannel('A').tobytes()
                 self.assertTrue(any(a > 128 for a in alpha))

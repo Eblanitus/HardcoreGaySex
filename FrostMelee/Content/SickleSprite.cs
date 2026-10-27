@@ -83,16 +83,9 @@ namespace FrostMelee.Content
             return geometry;
         }
 
-        // Геометрия произвольного спрайта меча (не инвентарного предмета):
-        // тот же замер «по-мечовому», что Get делает для мечей. Нужна, когда
-        // поверх обычного спрайта рисуется другой рисунок того же клинка
-        // (длинный Фростбранд во встрече) — у него свой приклад и своя ось.
-        public static Geometry GetSwordGeometry(Texture2D texture)
-        {
-            if (Main.dedServ || texture == null || texture.IsDisposed)
-                return Fallback;
-            return MeasureSword(texture);
-        }
+        // Visual variants use their own baked profiles as well; no GPU readback.
+        public static Geometry GetLongFrostbrandGeometry() => MeasureSword(WeaponCollisionMasks.LongFrostbrand);
+        public static Geometry GetCandyGrayGeometry() => MeasureSword(WeaponCollisionMasks.CandyGray);
 
         // =====================================================================
         // ЗОНА УДАРА: лезвие серпа по пикселям спрайта

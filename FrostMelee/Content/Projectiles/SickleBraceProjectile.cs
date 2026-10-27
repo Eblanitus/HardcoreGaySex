@@ -473,7 +473,7 @@ namespace FrostMelee.Content.Projectiles
             // Геометрию длинного спрайта меряем один раз (и заново, если текстура сменилась)
             if (longGeoCache == null || longGeoTexture != tex)
             {
-                longGeoCache = SickleSprite.GetSwordGeometry(tex);
+                longGeoCache = SickleSprite.GetLongFrostbrandGeometry();
                 longGeoTexture = tex;
             }
             SickleSprite.Geometry longGeo = longGeoCache.Value;
