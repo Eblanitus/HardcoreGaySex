@@ -31,6 +31,7 @@ public class BoomerangPlayer : ModPlayer
 	// Поза зарядки тяжёлого: рука на замахе, как у броска меча (SwordPlayer).
 	// Бумеранг слой сажает в кисть за нижнее крыло и ведёт по углу руки.
 	public const float ChargeWindupBack = 2.4f; // угол руки назад-вверх от линии броска (рад)
+	public const float WindupArcLift = 0.5f; // подъём кисти над плечом в середине замаха (рад): без него рука с бумерангом режет через бедро
 
 	// Анимация броска: замах лёгкого (бумеранг в руке) → вылет → доработка руки.
 	// Замах + доработка = темп лёгких бросков, ритм потока не меняется.
@@ -261,7 +262,7 @@ public class BoomerangPlayer : ModPlayer
 		float p = MathHelper.Clamp(Charge * 1.6f, 0f, 1f);
 		int dirSign = aim.X >= 0 ? 1 : -1;
 		float back = aim.ToRotation() - dirSign * ChargeWindupBack;
-		float armWorld = LerpAngle(MathHelper.PiOver2, back, p);
+		float armWorld = WindupArmAngle(back, p);
 		Player.CompositeArmStretchAmount stretch = p < 0.5f
 			? Player.CompositeArmStretchAmount.None
 			: Player.CompositeArmStretchAmount.Quarter;
@@ -296,7 +297,7 @@ public class BoomerangPlayer : ModPlayer
 			float p = MathHelper.Clamp(1f - (lightWindupTicks - 1f) / LightWindupTicks, 0f, 1f);
 			int dirSign = aim.X >= 0 ? 1 : -1;
 			float back = aim.ToRotation() - dirSign * ChargeWindupBack;
-			armWorld = LerpAngle(MathHelper.PiOver2, back, p);
+			armWorld = WindupArmAngle(back, p);
 			stretch = p < 0.5f
 				? Player.CompositeArmStretchAmount.None
 				: Player.CompositeArmStretchAmount.Quarter;
@@ -356,6 +357,20 @@ public class BoomerangPlayer : ModPlayer
 
 	private static float LerpAngle(float a, float b, float t) =>
 		a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);
+
+	// Путь руки на замахе: не прямым поворотом от «вниз» к «назад-вверх»
+	// (кисть с бумерангом резала через бедро и дёргалась рывком), а дугой
+	// через плечо: в середине поворота рука приподнята на WindupArcLift
+	// в сторону хода, а сам ход сглажен smoothstep'ом — без рывка
+	// на старте и в конце. Концы те же, что у прямого поворота.
+	private float WindupArmAngle(float back, float p)
+	{
+		p = MathHelper.Clamp(p, 0f, 1f);
+		float e = p * p * (3f - 2f * p);
+		float travel = MathHelper.WrapAngle(back - MathHelper.PiOver2);
+		float lift = MathF.Sin(e * MathHelper.Pi) * WindupArcLift * MathF.Sign(travel) * Player.gravDir;
+		return MathHelper.PiOver2 + travel * e + lift;
+	}
 
 	private Vector2 ThrowOrigin(Vector2 dir)
 	{
