@@ -133,30 +133,20 @@ public class BoomerangPlayer : ModPlayer
 		SoundEngine.PlaySound(SoundID.Item1, Player.Center);
 	}
 
-	// Прицел тяжёлого броска: точки пыли по симулированной траектории до первого тайла.
-	// Та же физика, что у BoomerangHeavyProjectile (гравитация/скорость — его константы).
+	// Прицел тяжёлого броска: точки пыли по полной симулированной траектории —
+	// полёт, отскоки от тайлов, отскок от первого врага и падение до места остановки.
+	// Симуляция живёт в BoomerangHeavyProjectile.TraceAim на общих константах.
 	private void DrawAim()
 	{
 		Vector2 dir = AimDirection();
-		Vector2 pos = ThrowOrigin(dir);
-		Vector2 vel = dir * BoomerangHeavyProjectile.LaunchSpeed(Charge);
-		for (int step = 0; step < 120; step++) {
-			vel.Y = MathHelper.Min(vel.Y + BoomerangHeavyProjectile.Gravity, BoomerangHeavyProjectile.MaxFallSpeed);
-			pos += vel;
-			Point tilePos = pos.ToTileCoordinates();
-			bool hit = tilePos.X < 0 || tilePos.X >= Main.maxTilesX || tilePos.Y < 0 || tilePos.Y >= Main.maxTilesY
-				|| WorldGen.SolidTile(tilePos.X, tilePos.Y);
-			if (hit) {
-				Dust end = Dust.NewDustDirect(pos - new Vector2(6f), 12, 12, DustID.SnowflakeIce, 0f, 0f, 60, default, 1.1f);
-				end.noGravity = true;
-				end.velocity = Vector2.Zero;
-				break;
-			}
-			if (step % 3 == 0) {
-				Dust d = Dust.NewDustDirect(pos - new Vector2(2f), 4, 4, DustID.Frost, 0f, 0f, 150, default, 0.7f);
-				d.noGravity = true;
-				d.velocity = Vector2.Zero;
-			}
+		var points = BoomerangHeavyProjectile.TraceAim(ThrowOrigin(dir), dir * BoomerangHeavyProjectile.LaunchSpeed(Charge));
+		for (int i = 0; i < points.Count; i += 3) {
+			Dust d = Dust.NewDustDirect(points[i] - new Vector2(2f), 4, 4, DustID.Frost, 0f, 0f, 150, default, 0.7f);
+			d.noGravity = true;
+			d.velocity = Vector2.Zero;
 		}
+		Dust end = Dust.NewDustDirect(points[^1] - new Vector2(6f), 12, 12, DustID.SnowflakeIce, 0f, 0f, 60, default, 1.1f);
+		end.noGravity = true;
+		end.velocity = Vector2.Zero;
 	}
 }

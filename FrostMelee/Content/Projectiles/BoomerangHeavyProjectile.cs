@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.Audio;
@@ -7,23 +8,29 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Projectiles;
 
 // Тяжёлый бросок бумеранга (зарядка ПКМ): летит по дуге под гравитацией,
-// втыкается в первого врага или в землю и ОСТАЁТСЯ там — иди забирай сам.
-// Пока он жив, предметом нельзя пользоваться (BoomerangPlayer/GlobalItem).
-// Сквозь стены не летит никогда.
+// ОТСКАКИВАЕТ от стен и пола с потерей скорости, от первого врага отлетает и падает.
+// Останавливается на земле и лежит, пока не подберёшь. Пока он жив, предметом
+// пользоваться нельзя (BoomerangPlayer/GlobalItem). Сквозь стены не летит никогда.
 public class BoomerangHeavyProjectile : ModProjectile
 {
 	public const float Gravity = 0.25f;
 	public const float MaxFallSpeed = 14f;
 	public const float BaseSpeed = 10f;
 	public const float ChargeSpeedBonus = 7f;
+	public const float BounceLoss = 0.55f;    // остаток скорости после отскока от тайла
+	public const float GroundFriction = 0.7f; // трение о землю при отскоке от пола
+	public const float RestSpeed = 1.6f;      // медленнее = лёг и лежит
+	public const float EnemyBounceBack = 0.25f; // отскок назад от врага
+	public const float EnemyPopUp = -2f;        // и чуть вверх перед падением
 	public const float PickupRadius = 36f;
 	public const int FrostburnTicks = 240;
 
 	public static float LaunchSpeed(float charge) => BaseSpeed + ChargeSpeedBonus * charge;
+	public static Vector2 EnemyBounceVelocity(Vector2 vel) => new Vector2(-vel.X * EnemyBounceBack, EnemyPopUp);
 
-	private const int StateFlying = 0;
-	private const int StateFalling = 1; // враг-носитель умер — бумеранг падает
-	private const int StateStuck = 2;
+	private const int StateFlying = 0;  // боеспособен
+	private const int StateFalling = 1; // потрачен (попал по врагу), безвреден, отскакивает до остановки
+	private const int StateResting = 2; // лежит, ждёт подбора
 
 	public override string Texture => $"Terraria/Images/Item_{ItemID.IceBoomerang}";
 
@@ -33,22 +40,17 @@ public class BoomerangHeavyProjectile : ModProjectile
 		Projectile.height = 28;
 		Projectile.friendly = true;
 		Projectile.DamageType = DamageClass.Melee;
-		// penetrate = -1: при penetrate=1 движок убивает снаряд сразу после OnHitNPC
-		// и втыкание не успевает сработать. Один хит обеспечивает CanHitNPC + friendly=false.
-		Projectile.penetrate = -1;
+		Projectile.penetrate = -1; // один хит обеспечивают CanHitNPC и смена состояния
 		Projectile.usesLocalNPCImmunity = true;
 		Projectile.localNPCHitCooldown = -1;
 		Projectile.tileCollide = true;
 		Projectile.ignoreWater = true;
-		Projectile.timeLeft = 600; // предохранитель полёта; воткнутый живёт до подбора
+		Projectile.timeLeft = 600; // предохранитель полёта; лежащий живёт до подбора
 		Projectile.aiStyle = -1;
 	}
 
-	private ref float LodgedNpc => ref Projectile.ai[0]; // whoAmI врага, -1 = нет
 	private ref float State => ref Projectile.ai[1];
 
-	private Vector2 lodgeOffset;
-	private bool lodgeInit;
 	private int spinDir = 1;
 
 	public override void AI()
@@ -56,27 +58,8 @@ public class BoomerangHeavyProjectile : ModProjectile
 		Player owner = Main.player[Projectile.owner];
 		int state = (int)State;
 
-		if (state == StateStuck) {
-			Projectile.timeLeft = 2; // живёт, пока не подберут
-			if (LodgedNpc >= 0f) {
-				NPC npc = Main.npc[(int)LodgedNpc];
-				if (npc.active && npc.life > 0) {
-					if (!lodgeInit) {
-						lodgeOffset = Projectile.Center - npc.Center;
-						lodgeInit = true;
-					}
-					Projectile.Center = npc.Center + lodgeOffset;
-				}
-				else {
-					// Носитель умер — бумеранг падает на землю.
-					LodgedNpc = -1f;
-					lodgeInit = false;
-					State = StateFalling;
-					Projectile.tileCollide = true;
-					Projectile.velocity = Vector2.Zero;
-					Projectile.netUpdate = true;
-				}
-			}
+		if (state == StateResting) {
+			Projectile.timeLeft = 2; // лежит, пока не подберут
 			if (Projectile.owner == Main.myPlayer && owner.active && !owner.dead
 				&& Vector2.Distance(Projectile.Center, owner.Center) < PickupRadius) {
 				SoundEngine.PlaySound(SoundID.Grab, Projectile.Center);
@@ -85,23 +68,32 @@ public class BoomerangHeavyProjectile : ModProjectile
 			return;
 		}
 
-		// Полёт (бросок или падение после смерти носителя).
 		if (Projectile.velocity.X != 0f)
 			spinDir = Projectile.velocity.X >= 0f ? 1 : -1;
 		Projectile.rotation += 0.4f * spinDir;
 		Projectile.velocity.Y = MathHelper.Min(Projectile.velocity.Y + Gravity, MaxFallSpeed);
 
 		if (state == StateFalling)
-			Projectile.timeLeft = 2; // долетит до земли и воткнётся
+			Projectile.timeLeft = 2; // обязательно долетит до остановки
 	}
 
-	// Бьёт только в полёте броска — воткнутый/падающий безвреден.
+	// Бьёт только в боевом полёте — потраченный/лежащий безвреден.
 	public override bool? CanHitNPC(NPC target) => (int)State == StateFlying ? null : false;
 
 	public override bool OnTileCollide(Vector2 oldVelocity)
 	{
-		Stick(-1f);
+		bool hitFloor = false;
+		if (Projectile.velocity.X != oldVelocity.X)
+			Projectile.velocity.X = -oldVelocity.X * BounceLoss;
+		if (Projectile.velocity.Y != oldVelocity.Y) {
+			hitFloor = oldVelocity.Y > 0f;
+			Projectile.velocity.Y = -oldVelocity.Y * BounceLoss;
+			Projectile.velocity.X *= GroundFriction;
+		}
 		SoundEngine.PlaySound(SoundID.Dig, Projectile.Center);
+		// Ложится только после удара об пол сверху вниз — не «прилипает» к стенке на вершине дуги.
+		if (hitFloor && Projectile.velocity.Length() < RestSpeed)
+			ComeToRest();
 		return false;
 	}
 
@@ -109,19 +101,81 @@ public class BoomerangHeavyProjectile : ModProjectile
 	{
 		target.AddBuff(BuffID.Frostburn, FrostburnTicks);
 		if ((int)State == StateFlying) {
-			Stick(target.whoAmI);
+			// Отскочил от врага и падает — дальше только отскоки от тайлов до остановки.
+			State = StateFalling;
+			Projectile.velocity = EnemyBounceVelocity(Projectile.velocity);
+			Projectile.friendly = false;
+			Projectile.netUpdate = true;
 			SoundEngine.PlaySound(SoundID.NPCHit5, Projectile.Center);
 		}
 	}
 
-	private void Stick(float npcIndex)
+	private void ComeToRest()
 	{
-		State = StateStuck;
-		LodgedNpc = npcIndex;
+		State = StateResting;
 		Projectile.velocity = Vector2.Zero;
 		Projectile.friendly = false;
 		Projectile.tileCollide = false;
-		// Рисуется поверх врага — должно быть видно, что воткнулся.
 		Projectile.netUpdate = true;
+	}
+
+	// Прицел: тот же полёт пошагово — гравитация, отскоки от тайлов, отскок от первого
+	// врага на пути и падение до места остановки. Константы общие с настоящим снарядом.
+	public static List<Vector2> TraceAim(Vector2 pos, Vector2 vel, int maxSteps = 480)
+	{
+		var points = new List<Vector2> { pos };
+		bool armed = true;
+		for (int step = 0; step < maxSteps; step++) {
+			vel.Y = MathHelper.Min(vel.Y + Gravity, MaxFallSpeed);
+
+			Vector2 next = pos + new Vector2(vel.X, 0f);
+			if (SolidAt(next))
+				vel.X = -vel.X * BounceLoss;
+			else
+				pos = next;
+
+			bool wasFalling = vel.Y > 0f;
+			next = pos + new Vector2(0f, vel.Y);
+			if (SolidAt(next)) {
+				vel.Y = -vel.Y * BounceLoss;
+				vel.X *= GroundFriction;
+				if (wasFalling && vel.Length() < RestSpeed)
+					break; // здесь ляжет — pos последняя точка
+			}
+			else
+				pos = next;
+
+			points.Add(pos);
+
+			if (armed) {
+				var box = new Rectangle((int)pos.X - 14, (int)pos.Y - 14, 28, 28);
+				for (int i = 0; i < Main.maxNPCs; i++) {
+					NPC npc = Main.npc[i];
+					if (npc.active && !npc.friendly && npc.life > 0 && box.Intersects(npc.Hitbox)) {
+						vel = EnemyBounceVelocity(vel);
+						armed = false;
+						break;
+					}
+				}
+			}
+		}
+		points.Add(pos);
+		return points;
+	}
+
+	// Приближение хитбокса 28×28: любой из четырёх углов в твёрдом тайле.
+	private static bool SolidAt(Vector2 center)
+	{
+		return CornerSolid(center.X - 13f, center.Y - 13f)
+			|| CornerSolid(center.X + 13f, center.Y - 13f)
+			|| CornerSolid(center.X - 13f, center.Y + 13f)
+			|| CornerSolid(center.X + 13f, center.Y + 13f);
+	}
+
+	private static bool CornerSolid(float x, float y)
+	{
+		Point t = new Vector2(x, y).ToTileCoordinates();
+		return t.X < 0 || t.X >= Main.maxTilesX || t.Y < 0 || t.Y >= Main.maxTilesY
+			|| WorldGen.SolidTile(t.X, t.Y);
 	}
 }
