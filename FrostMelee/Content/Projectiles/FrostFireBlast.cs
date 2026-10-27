@@ -44,6 +44,17 @@ namespace FrostMelee.Content.Projectiles
             Weapons.FrostFireSystem.TryIgnite(target, Main.player[Projectile.owner]);
         }
 
+        // Взрыв круглый: бьёт только тех, кто реально в радиусе. Угол
+        // квадратной коробки доставал на 41% дальше радиуса
+        public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox)
+        {
+            float r = System.Math.Max(8f, Projectile.ai[0]);
+            Vector2 closest = new Vector2(
+                MathHelper.Clamp(Projectile.Center.X, targetHitbox.Left, targetHitbox.Right),
+                MathHelper.Clamp(Projectile.Center.Y, targetHitbox.Top, targetHitbox.Bottom));
+            return Vector2.DistanceSquared(closest, Projectile.Center) <= r * r;
+        }
+
         public override bool PreDraw(ref Color lightColor) => false;
     }
 }
