@@ -28,8 +28,16 @@ public class BoomerangPlayer : ModPlayer
 	public const float SpinHeavyStartCharge = 0.5f; // тяжёлый начинает зарядку с 50%
 	public const float SpinSwingExponent = 1.8f; // разгон: медленное начало, быстрый конец (у мечей наоборот)
 
+	// Поза зарядки тяжёлого: рука на замахе, как у броска меча (SwordPlayer)
+	public const float ChargeWindupBack = 2.4f; // угол руки назад-вверх от линии броска (рад)
+	public const float ChargeGripInset = 4f;    // сколько спрайта позади кисти
+
 	public bool Charging;
 	public float Charge;
+	// Позу зарядки рисует BoomerangChargePoseLayer от кисти (PoseHandOffset, PoseItemDir)
+	public bool PoseItemVisible;
+	public Vector2 PoseHandOffset;
+	public Vector2 PoseItemDir = Vector2.UnitX;
 	public int SpinTicks;
 	// ПКМ-тап просит ванильный взмах: SetControls подставляет нажатие, CanUseItem по этому
 	// флагу отличает запрос от обычного ЛКМ (ЛКМ предмет сам по себе не использует).
@@ -193,13 +201,46 @@ public class BoomerangPlayer : ModPlayer
 
 	public override void PostUpdate()
 	{
-		// Ваниль каждый тик ставит свой линейный itemRotation — перебиваем его
-		// разгонной кривой размаха перед отрисовкой, как SwordPlayer для мечей.
 		if (Player.whoAmI != Main.myPlayer)
 			return;
-		if (HoldingBoomerang() && Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
+		PoseItemVisible = false;
+		if (!HoldingBoomerang())
+			return;
+		if (Charging) {
+			ApplyChargePose();
+			return;
+		}
+		// Ваниль каждый тик ставит свой линейный itemRotation — перебиваем его
+		// разгонной кривой размаха перед отрисовкой, как SwordPlayer для мечей.
+		if (Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
 			Player.itemRotation = SpinSwingRotation(Player);
 	}
+
+	// Замах зарядки тяжёлого: рука уходит назад-вверх от линии броска, как замах
+	// броска меча (SwordPlayer.ApplyThrowPose). Глубина замаха растёт с зарядом
+	// и выходит на полную раньше полного заряда. Бумеранг в руке рисует
+	// BoomerangChargePoseLayer — ванилла предмет в покое не рисует.
+	private void ApplyChargePose()
+	{
+		Vector2 aim = AimDirection();
+		float p = MathHelper.Clamp(Charge * 1.6f, 0f, 1f);
+		int dirSign = aim.X >= 0 ? 1 : -1;
+		float back = aim.ToRotation() - dirSign * ChargeWindupBack;
+		float armWorld = LerpAngle(MathHelper.PiOver2, back, p);
+		Player.CompositeArmStretchAmount stretch = p < 0.5f
+			? Player.CompositeArmStretchAmount.None
+			: Player.CompositeArmStretchAmount.Quarter;
+		float armRot = armWorld - MathHelper.PiOver2;
+		Player.SetCompositeArmFront(true, stretch, armRot);
+		SickleStabProjectile.HideBackArm(Player, armWorld.ToRotationVector2());
+
+		PoseItemVisible = true;
+		PoseItemDir = aim;
+		PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
+	}
+
+	private static float LerpAngle(float a, float b, float t) =>
+		a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);
 
 	private Vector2 ThrowOrigin(Vector2 dir)
 	{
