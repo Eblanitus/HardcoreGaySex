@@ -29,7 +29,7 @@ public class BoomerangPlayer : ModPlayer
 	public const float SpinSwingExponent = 1.8f; // разгон: медленное начало, быстрый конец (у мечей наоборот)
 
 	// Поза зарядки тяжёлого: рука на замахе, как у броска меча (SwordPlayer).
-	// Сам бумеранг слой рисует ванильным хватом взмаха, а не геометрией серпа.
+	// Бумеранг слой сажает в кисть за нижнее крыло и ведёт по углу руки.
 	public const float ChargeWindupBack = 2.4f; // угол руки назад-вверх от линии броска (рад)
 
 	// Анимация броска: замах лёгкого (бумеранг в руке) → вылет → доработка руки.
@@ -40,7 +40,7 @@ public class BoomerangPlayer : ModPlayer
 
 	public bool Charging;
 	public float Charge;
-	// Позу рисует BoomerangChargePoseLayer от кисти ванильным хватом взмаха
+	// Позу рисует BoomerangChargePoseLayer от кисти за нижнее крыло спрайта
 	public bool PoseItemVisible;
 	public Vector2 PoseHandOffset;
 	public float PoseItemRotation;
@@ -224,8 +224,8 @@ public class BoomerangPlayer : ModPlayer
 	}
 
 	// Та же ванильная формула по «оставшейся доле» взмаха: 1 — полный замах.
-	// Позы бросков держат бумеранг этим углом и ванильным origin, поэтому хват
-	// совпадает с обычным размахом, а не с прикладом серпа/меча.
+	// Только для самого размаха и его хитбокса: позы бросков ведут бумеранг
+	// по руке (HeldBoomerangRotation), иначе на части углов он висит отдельно.
 	public static float SwingRotationForRemaining(Player player, float remaining)
 	{
 		float rotation = (remaining - 0.5f) * -player.direction * 3.5f - player.direction * 0.3f;
@@ -270,7 +270,7 @@ public class BoomerangPlayer : ModPlayer
 		SickleStabProjectile.HideBackArm(Player, armWorld.ToRotationVector2());
 
 		PoseItemVisible = true;
-		PoseItemRotation = WindupItemRotation(p);
+		PoseItemRotation = HeldBoomerangRotation(armWorld);
 		PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
 	}
 
@@ -290,12 +290,10 @@ public class BoomerangPlayer : ModPlayer
 
 		Vector2 aim;
 		float armWorld;
-		float windupProgress = 0f;
 		Player.CompositeArmStretchAmount stretch;
 		if (windup) {
 			aim = AimDirection();
 			float p = MathHelper.Clamp(1f - (lightWindupTicks - 1f) / LightWindupTicks, 0f, 1f);
-			windupProgress = p;
 			int dirSign = aim.X >= 0 ? 1 : -1;
 			float back = aim.ToRotation() - dirSign * ChargeWindupBack;
 			armWorld = LerpAngle(MathHelper.PiOver2, back, p);
@@ -328,15 +326,33 @@ public class BoomerangPlayer : ModPlayer
 
 		if (windup) {
 			PoseItemVisible = true;
-			PoseItemRotation = WindupItemRotation(windupProgress);
+			PoseItemRotation = HeldBoomerangRotation(armWorld);
 			PoseHandOffset = SickleSprite.HandGrip(Player, stretch, armRot) - Player.Center;
 		}
 		return true;
 	}
 
-	// На замахе бумеранг постепенно доходит до стартового кадра обычного взмаха.
-	private float WindupItemRotation(float progress) =>
-		SwingRotationForRemaining(Player, MathHelper.Lerp(0.7f, 1f, MathHelper.Clamp(progress, 0f, 1f)));
+	// Хват позы — нижний конец спрайта (реальное крыло, не пустой угол кадра).
+	// Ванильный origin взмаха стоит в пустом углу, а его угол не зависит от
+	// руки: на части углов прицела бумеранг уезжал от кисти. Здесь ось
+	// «хват → дальнее крыло» идёт ровно по руке, поэтому хват не разъезжается.
+	internal static Vector2 HeldGrip(SickleSprite.Geometry geo, bool flipped, out Vector2 far)
+	{
+		Vector2 butt = geo.ButtFor(flipped);
+		Vector2 tip = geo.TipFor(flipped);
+		far = butt.Y > tip.Y ? tip : butt;
+		return butt.Y > tip.Y ? butt : tip;
+	}
+
+	private float HeldBoomerangRotation(float armWorld)
+	{
+		SickleSprite.Geometry geo = SickleSprite.Get(Player.HeldItem.type);
+		Vector2 grip = HeldGrip(geo, Player.direction == -1, out Vector2 far);
+		Vector2 axis = far - grip;
+		if (Player.gravDir == -1f)
+			axis.Y = -axis.Y;
+		return armWorld - axis.ToRotation();
+	}
 
 	private static float LerpAngle(float a, float b, float t) =>
 		a + MathHelper.WrapAngle(b - a) * MathHelper.Clamp(t, 0f, 1f);

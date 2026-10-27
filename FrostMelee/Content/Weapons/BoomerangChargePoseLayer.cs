@@ -8,9 +8,8 @@ namespace FrostMelee.Content.Weapons;
 
 // Рисует бумеранг в руке на замахах зарядки и лёгкого броска (ванилла
 // предмет-«взмах» в покое не рисует). Кисть и угол задаёт BoomerangPlayer.
-// Хват — строго ванильный для Swing: origin у нижнего края спрайта, флип по
-// направлению и гравитации, масштаб GetAdjustedItemScale. Геометрию серпа
-// сюда нельзя: она сажала бумеранг в руку верхним кончиком.
+// Origin — реальное нижнее крыло спрайта (HeldGrip), а не пустой угол кадра
+// ванильного взмаха: из-за него бумеранг на части углов висел отдельно от руки.
 public class BoomerangChargePoseLayer : PlayerDrawLayer
 {
 	public override Position GetDefaultPosition() => new AfterParent(PlayerDrawLayers.HeldItem);
@@ -31,14 +30,14 @@ public class BoomerangChargePoseLayer : PlayerDrawLayer
 			return;
 
 		Vector2 hand = player.Center + bp.PoseHandOffset;
-		Vector2 origin = new Vector2(
-			texture.Width * 0.5f - texture.Width * 0.5f * player.direction,
-			texture.Height);
+		bool flipped = player.direction == -1;
+		SickleSprite.Geometry geo = SickleSprite.Get(itemType);
+		Vector2 origin = BoomerangPlayer.HeldGrip(geo, flipped, out _);
 		if (player.gravDir == -1f)
 			origin.Y = texture.Height - origin.Y;
 
 		SpriteEffects effects = SpriteEffects.None;
-		if (player.direction == -1)
+		if (flipped)
 			effects |= SpriteEffects.FlipHorizontally;
 		if (player.gravDir == -1f)
 			effects |= SpriteEffects.FlipVertically;
