@@ -9,7 +9,7 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Weapons;
 
 // Ледяной бумеранг по boomer.md: ЛКМ держать — поток лёгких бросков (сами возвращаются),
-// ПКМ-тап — удар в руке (ванильный взмах, хитбокс — по видимому спрайту), ПКМ-держать — зарядка
+// ПКМ-тап — размах (бьёт в упор и раскручивает следующий бросок), ПКМ-держать — зарядка
 // с прицелом и тяжёлый бросок (отскакивает и падает — иди забирай). Броски и запрос
 // взмаха — BoomerangPlayer; ванильный снаряд бумеранга отключён. Сквозь стены ничего.
 public class IceBoomerangGlobalItem : GlobalItem
@@ -43,10 +43,13 @@ public class IceBoomerangGlobalItem : GlobalItem
 		// грубо расширенный по фазам анимации. У бумеранга из-за этого зона удара
 		// уезжает от видимого спрайта. Строим прямоугольник по четырём углам
 		// именно того кадра, который сейчас рисуется в руке: та же точка
-		// itemLocation, тот же origin ванильной отрисовки, itemRotation и масштаб.
+		// itemLocation, тот же origin ванильной отрисовки и масштаб, а угол —
+		// разгонная кривая размаха (BoomerangPlayer.SpinSwingRotation), которой
+		// PostUpdate ставит itemRotation перед отрисовкой.
 		const float spriteWidth = 18f;
 		const float spriteHeight = 32f;
 		float scale = player.GetAdjustedItemScale(item);
+		float swingRotation = BoomerangPlayer.SpinSwingRotation(player);
 		Vector2 origin = new Vector2(
 			spriteWidth * 0.5f - spriteWidth * 0.5f * player.direction,
 			player.gravDir == -1f ? 0f : spriteHeight);
@@ -61,7 +64,7 @@ public class IceBoomerangGlobalItem : GlobalItem
 				(i & 1) == 0 ? 0f : spriteWidth,
 				(i & 2) == 0 ? 0f : spriteHeight);
 			Vector2 point = player.itemLocation
-				+ (corner - origin).RotatedBy(player.itemRotation) * scale;
+				+ (corner - origin).RotatedBy(swingRotation) * scale;
 
 			minX = MathF.Min(minX, point.X);
 			minY = MathF.Min(minY, point.Y);

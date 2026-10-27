@@ -71,7 +71,7 @@ SwordControlsTooltip:
 BoomerangControlsTooltip:
 	'''
 	LMB (hold): endless light throws — weak, they come back on their own
-	RMB: hit with it in hand, point blank
+	RMB: backswing — hits point blank and spins up your next throw
 	RMB (hold): charge with an aim line, release — heavy throw (bounces off and drops, go pick it up)
 	Nothing flies through walls
 	'''

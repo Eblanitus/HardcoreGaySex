@@ -9,8 +9,8 @@ using FrostMelee.Content.Projectiles;
 namespace FrostMelee.Content.Weapons;
 
 // Ввод бумеранга: ЛКМ держать — бесконечный поток лёгких бросков (сами возвращаются),
-// ПКМ-тап — удар в руке (ванильный взмах), ПКМ-держать — зарядка с прицелом,
-// отпустить — тяжёлый бросок (отскакивает и падает, идти забирать).
+// ПКМ-тап — размах: бьёт в упор и раскручивает следующий бросок, ПКМ-держать —
+// зарядка с прицелом, отпустить — тяжёлый бросок (отскакивает и падает, идти забирать).
 // Пока тяжёлый бумеранг не в руке, предметом пользоваться нельзя.
 public class BoomerangPlayer : ModPlayer
 {
@@ -21,8 +21,16 @@ public class BoomerangPlayer : ModPlayer
 	public const float HeavyDamageMin = 1.1f;
 	public const float HeavyDamageMax = 2.0f;
 
+	// Раскрутка от размаха (ПКМ-тап): попадание не требуется, это разминка перед броском,
+	// но враг под размахом получает обычный урон взмаха.
+	public const int SpinDurationTicks = 180; // 3 секунды на следующий бросок
+	public const float SpinLightSpeedMult = 1.3f; // лёгкий летит на 30% быстрее и дальше
+	public const float SpinHeavyStartCharge = 0.5f; // тяжёлый начинает зарядку с 50%
+	public const float SpinSwingExponent = 1.8f; // разгон: медленное начало, быстрый конец (у мечей наоборот)
+
 	public bool Charging;
 	public float Charge;
+	public int SpinTicks;
 	// ПКМ-тап просит ванильный взмах: SetControls подставляет нажатие, CanUseItem по этому
 	// флагу отличает запрос от обычного ЛКМ (ЛКМ предмет сам по себе не использует).
 	public bool SwingRequested;
@@ -30,6 +38,8 @@ public class BoomerangPlayer : ModPlayer
 	private int rmbHoldTicks;
 	private int lightCooldown;
 	private int swingRequestAge;
+	private bool spinGrantedForSwing;
+	private bool spinChargeActive;
 	private int lastHeldType;
 
 	public static bool IsBoomerang(Item item) => item.type == ItemID.IceBoomerang;
@@ -55,6 +65,7 @@ public class BoomerangPlayer : ModPlayer
 		rmbHoldTicks = 0;
 		Charging = false;
 		Charge = 0f;
+		spinChargeActive = false;
 	}
 
 	public override void PreUpdate()
@@ -68,23 +79,35 @@ public class BoomerangPlayer : ModPlayer
 			lastHeldType = held.type;
 			ResetCharge();
 			SwingRequested = false;
+			SpinTicks = 0;
+			spinGrantedForSwing = false;
 			lightCooldown = 0;
 		}
 
 		if (!IsBoomerang(held) || Player.dead) {
 			ResetCharge();
 			SwingRequested = false;
+			SpinTicks = 0;
+			spinGrantedForSwing = false;
 			return;
 		}
 
 		// Запрос взмаха живёт недолго: взмах начался или срок истёк — сбрасываем.
+		// Начавшийся размах сразу даёт раскрутку — попадание для неё не нужно.
 		if (SwingRequested) {
 			swingRequestAge++;
+			if (Player.itemAnimation > 0 && !spinGrantedForSwing) {
+				SpinTicks = SpinDurationTicks;
+				spinGrantedForSwing = true;
+			}
 			if (Player.itemAnimation > 0 || swingRequestAge > 3) {
 				SwingRequested = false;
 				swingRequestAge = 0;
 			}
 		}
+
+		if (SpinTicks > 0)
+			SpinTicks--;
 
 		bool uiBlocked = Player.mouseInterface || Main.drawingPlayerChat || Main.blockMouse
 			|| Main.mapFullscreen || Main.gamePaused || Player.cursorItemIconEnabled
@@ -117,8 +140,14 @@ public class BoomerangPlayer : ModPlayer
 			if (!swinging) {
 				rmbHoldTicks++;
 				if (rmbHoldTicks >= TapThresholdTicks) {
+					// Раскрутка тратится в момент начала зарядки: тяжёлый стартует с 50%.
+					if (!Charging && SpinTicks > 0) {
+						spinChargeActive = true;
+						SpinTicks = 0;
+					}
 					Charging = true;
-					Charge = MathHelper.Clamp((rmbHoldTicks - TapThresholdTicks) / (float)ChargeFullTicks, 0f, 1f);
+					float chargeTicks = (rmbHoldTicks - TapThresholdTicks) / (float)ChargeFullTicks;
+					Charge = MathHelper.Clamp((spinChargeActive ? SpinHeavyStartCharge : 0f) + chargeTicks, 0f, 1f);
 					Player.ChangeDir(Main.MouseWorld.X >= Player.Center.X ? 1 : -1);
 					if (Main.GameUpdateCount % 2 == 0)
 						DrawAim();
@@ -127,12 +156,13 @@ public class BoomerangPlayer : ModPlayer
 			return;
 		}
 
-		// Отпустили ПКМ: шла зарядка — тяжёлый бросок, был тап — удар в руке.
+		// Отпустили ПКМ: шла зарядка — тяжёлый бросок, был тап — размах.
 		if (rmbHoldTicks > 0 && !swinging) {
 			if (Charging)
 				HeavyThrow(held, Charge);
 			else {
 				SwingRequested = true;
+				spinGrantedForSwing = false;
 				swingRequestAge = 0;
 			}
 		}
@@ -144,6 +174,31 @@ public class BoomerangPlayer : ModPlayer
 		// ПКМ-тап просит взмах: подставляем ваниле нажатие использования предмета.
 		if (SwingRequested)
 			Player.controlUseItem = true;
+	}
+
+	// Угол размаха: та же ванильная формула взмаха, но ход по времени нелинейный
+	// с разгоном (степень > 1): начало медленное, конец быстрый. У мечей кривая
+	// обратная. Один источник угла на двоих: отрисовка (PostUpdate ниже) и
+	// хитбокс удара (IceBoomerangGlobalItem.UseItemHitbox).
+	public static float SpinSwingRotation(Player player)
+	{
+		if (player.itemAnimationMax <= 0)
+			return player.itemRotation;
+		float progress = MathHelper.Clamp(1f - player.itemAnimation / (float)player.itemAnimationMax, 0f, 1f);
+		float eased = MathF.Pow(progress, SpinSwingExponent);
+		float remaining = 1f - eased;
+		float rotation = (remaining - 0.5f) * -player.direction * 3.5f - player.direction * 0.3f;
+		return player.gravDir == -1f ? -rotation : rotation;
+	}
+
+	public override void PostUpdate()
+	{
+		// Ваниль каждый тик ставит свой линейный itemRotation — перебиваем его
+		// разгонной кривой размаха перед отрисовкой, как SwordPlayer для мечей.
+		if (Player.whoAmI != Main.myPlayer)
+			return;
+		if (HoldingBoomerang() && Player.itemAnimation > 0 && Player.itemAnimationMax > 0)
+			Player.itemRotation = SpinSwingRotation(Player);
 	}
 
 	private Vector2 ThrowOrigin(Vector2 dir)
@@ -159,8 +214,13 @@ public class BoomerangPlayer : ModPlayer
 	private void LightThrow(Item held)
 	{
 		Vector2 dir = AimDirection();
+		// Раскрутка тратится на первый же лёгкий: быстрее стартует — дальше улетает.
+		bool spun = SpinTicks > 0;
+		if (spun)
+			SpinTicks = 0;
+		float speed = BoomerangLightProjectile.LaunchSpeed * (spun ? SpinLightSpeedMult : 1f);
 		int damage = Math.Max(1, (int)MathF.Round(Player.GetWeaponDamage(held) * LightDamageMult));
-		Projectile.NewProjectile(Player.GetSource_ItemUse(held), ThrowOrigin(dir), dir * BoomerangLightProjectile.LaunchSpeed,
+		Projectile.NewProjectile(Player.GetSource_ItemUse(held), ThrowOrigin(dir), dir * speed,
 			ModContent.ProjectileType<BoomerangLightProjectile>(), damage, Player.GetWeaponKnockback(held), Player.whoAmI);
 		SoundEngine.PlaySound(SoundID.Item1, Player.Center);
 	}
