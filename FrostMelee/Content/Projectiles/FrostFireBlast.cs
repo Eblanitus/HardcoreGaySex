@@ -29,15 +29,19 @@ namespace FrostMelee.Content.Projectiles
             {
                 Projectile.localAI[0] = 1f;
                 int r = (int)Projectile.ai[0];
+                // Размер меняется после спавна — центр надо вернуть на место,
+                // иначе зона урона уезжала вправо-вниз на весь радиус
+                Vector2 center = Projectile.Center;
                 Projectile.width = r * 2;
                 Projectile.height = r * 2;
+                Projectile.Center = center;
             }
             Projectile.velocity = Vector2.Zero;
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            Weapons.FrostFireSystem.Ignite(target);
+            Weapons.FrostFireSystem.TryIgnite(target, Main.player[Projectile.owner]);
         }
 
         public override bool PreDraw(ref Color lightColor) => false;
