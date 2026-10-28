@@ -152,6 +152,7 @@ SharedFlailControlsTooltip: "LMB: straight throw; hold to repeat. RMB: spin. Whi
 
 LassoStatus: {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	NoTarget: Lasso: hold RMB and point at an enemy
 	Ineligible: Lasso: this target cannot be bound (boss, dummy, immunity or segment)
 	Occupied: Lasso: target is already bound
@@ -164,6 +165,8 @@ LassoStatus: {
 	Returning: Lasso: head returning
 	NeedSpin: Lasso: release LMB, wait for the head to return, then hold RMB
 =======
+=======
+>>>>>>> 37a57694b4338e4bce957bdabbbdfed4de53b71e
     NoTarget: "Lasso: hold RMB, aim at an enemy and CLICK LMB"
     Ineligible: "Lasso: this target cannot be bound (boss, dummy, immunity or segment)"
     Occupied: "Lasso: target is already bound"
