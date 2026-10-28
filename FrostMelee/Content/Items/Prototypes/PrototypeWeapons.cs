@@ -81,12 +81,16 @@ namespace FrostMelee.Content.Items.Prototypes
         public override void ModifyTooltips(List<TooltipLine> tooltips)
         {
             base.ModifyTooltips(tooltips);
-            tooltips.Add(new TooltipLine(Mod, "SharedFlailControls", Language.GetTextValue("Mods.FrostMelee.SharedFlailControlsTooltip")));
+            if (FrostMeleeConfigDefaults.ShowControlTooltips)
+                tooltips.Add(new TooltipLine(Mod, "SharedFlailControls", Language.GetTextValue("Mods.FrostMelee.SharedFlailControlsTooltip")));
         }
 
         public override void SetDefaults()
         {
-            Item.CloneDefaults(ItemID.BallOHurt);
+            Item.CloneDefaults(ItemID.BallOHurt); // Keep the existing prototype's item stats.
+            // ExampleAdvancedFlail uses MeleeNoSpeed, then scales projectile movement
+            // explicitly. Avoid applying melee speed twice through item use timing.
+            Item.DamageType = DamageClass.MeleeNoSpeed;
             Item.channel = false;
             Item.noMelee = true;
             Item.noUseGraphic = true;

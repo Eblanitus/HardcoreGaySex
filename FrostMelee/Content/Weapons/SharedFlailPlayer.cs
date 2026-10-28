@@ -42,20 +42,29 @@ namespace FrostMelee.Content.Weapons
             return false;
         }
 
-        public override void PreUpdate()
+        public override void SetControls()
+        {
+            // RMB is a weapon input here, not open-door/chest/smart-interact input.
+            if (Player.whoAmI == Main.myPlayer && Player.HeldItem.ModItem is PrototypeFlail
+                && Main.mouseRight && !Player.mouseInterface && !Main.drawingPlayerChat
+                && !Main.blockMouse && !Main.mapFullscreen)
+                Player.controlUseTile = false;
+        }
+
+        // Run after vanilla has refreshed noItems/CC and processed normal item use.
+        public override void PostUpdate()
         {
             if (Player.whoAmI != Main.myPlayer)
                 return;
 
             bool blocked = Player.mouseInterface || Main.drawingPlayerChat || Main.blockMouse
-                || Main.mapFullscreen || Main.gamePaused || Player.cursorItemIconEnabled
-                || Main.SmartInteractShowingGenuine;
+                || Main.mapFullscreen || Main.gamePaused;
             CanControl = Player.active && !Player.dead && !Player.ghost && !Player.noItems && !Player.CCed
                 && Player.HeldItem.ModItem is PrototypeFlail && !blocked;
             LeftHeld = CanControl && Main.mouseLeft;
             RightHeld = CanControl && Main.mouseRight;
             LeftPressed = LeftHeld && !previousLeft;
-            previousLeft = LeftHeld;
+            previousLeft = Main.mouseLeft; // UI suppression must not manufacture a new click.
 
             if (!CanControl)
             {
@@ -76,10 +85,12 @@ namespace FrostMelee.Content.Weapons
 
             Item held = Player.HeldItem;
             var mode = RightHeld ? SharedFlailProjectile.FlailMode.Spin : SharedFlailProjectile.FlailMode.Flight;
-            Vector2 velocity = mode == SharedFlailProjectile.FlailMode.Flight ? Aim * held.shootSpeed : Vector2.Zero;
+            float meleeSpeed = MathHelper.Clamp(Player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
+            Vector2 velocity = mode == SharedFlailProjectile.FlailMode.Flight
+                ? Aim * held.shootSpeed * meleeSpeed + Player.velocity : Vector2.Zero;
             activeIndex = Projectile.NewProjectile(Player.GetSource_ItemUse(held), Player.MountedCenter,
                 velocity, held.shoot, Player.GetWeaponDamage(held), Player.GetWeaponKnockback(held),
-                Player.whoAmI, (float)mode, Aim.ToRotation(), Aim.X >= 0f ? 1f : -1f);
+                Player.whoAmI, (float)mode, 0f, Aim.X >= 0f ? 1f : -1f);
             if (IsActiveFlail(activeIndex))
                 SoundEngine.PlaySound(SoundID.Item1, Player.Center);
             repeatCooldown = RepeatDelay;
