@@ -38,7 +38,6 @@ Items: {
 		DisplayName: Aisberg
 		Tooltip: Ice chunks explode when they crack and inflict Frostbite
 	}
-
 }
 
 Projectiles: {
@@ -147,14 +146,12 @@ Configs: {
 PrototypeNotice: Prototype: temporary stats and artwork, unique mechanics pending
 NorthPolePrototypeNotice: Rework scaffold: shared spear moves, unique mechanics pending
 TreeSwordPrototypeNotice: Rework scaffold: shared sword moves, unique mechanics pending
-
 ThrownTooltipSpear: Spear thrown — walk up to it to pick it up
 BaseSpearControlsTooltip:
-    '''
-    LMB: circular swing
-    Tap RMB: toggle braced spear
-    Hold RMB: thrusts
-    RMB + LMB: throw; walk up to the spear to pick it up
-    '''
-
-SharedFlailControlsTooltip: "LMB: straight throw; hold to repeat. RMB: spin. A new LMB click with a deployed head drops it: hold LMB to keep it on the ground; release to recall."
+	'''
+	LMB: circular swing
+	Tap RMB: toggle braced spear
+	Hold RMB: thrusts
+	RMB + LMB: throw; walk up to the spear to pick it up
+	'''
+SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. A new LMB click with a deployed head drops it: hold LMB to keep it on the ground; release to recall.
