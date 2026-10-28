@@ -24,10 +24,6 @@ Items: {
 		Tooltip: A Hardmode flail; unique mechanics are not implemented yet
 	}
 
-	LanternFlail: {
-		DisplayName: Lantern Flail
-		Tooltip: A lantern on a chain; its light mechanic is not implemented yet
-	}
 
 	SnowBoomerang: {
 		DisplayName: Snow Boomerang
@@ -45,7 +41,6 @@ Projectiles: {
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
 	PolarStarProjectile.DisplayName: "{$Mods.FrostMelee.Items.PolarStar.DisplayName}"
-	LanternFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.LanternFlail.DisplayName}"
 	SnowBoomerangProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowBoomerang.DisplayName}"
 	SickleArcProjectile.DisplayName: Sickle Arc Projectile
 	SickleStabProjectile.DisplayName: Sickle Stab Projectile
@@ -148,6 +143,7 @@ NorthPolePrototypeNotice: Rework scaffold: shared spear moves, unique mechanics 
 TreeSwordPrototypeNotice: Rework scaffold: shared sword moves, unique mechanics pending
 ThrownTooltipSpear: Spear thrown — walk up to it to pick it up
 BaseSpearControlsTooltip:
+<<<<<<< HEAD
 	'''
 	LMB: circular swing
 	Tap RMB: toggle braced spear
@@ -155,3 +151,13 @@ BaseSpearControlsTooltip:
 	RMB + LMB: throw; walk up to the spear to pick it up
 	'''
 SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. A new LMB click with a deployed head drops it: hold LMB to keep it on the ground; release to recall.
+=======
+    '''
+    LMB: circular swing
+    Tap RMB: toggle braced spear
+    Hold RMB: thrusts
+    RMB + LMB: throw; walk up to the spear to pick it up
+    '''
+
+SharedFlailControlsTooltip: "LMB: straight throw; hold to repeat. RMB: spin; aim at an enemy to wrap it. One full orbit binds one target for up to 3 seconds. Keep RMB held; a new LMB click yanks it for damage. Bosses and immovable targets are excluded; walls or insufficient chain break the lasso. Without a lasso, a new LMB click drops the head; hold to keep it down, release to recall."
+>>>>>>> a4e9aa45e65678058da9c79cc236dd76884cfd88
