@@ -84,40 +84,64 @@ namespace FrostMelee.Content.Projectiles
                 lassoHeld = input.RightHeld;
                 Projectile.netUpdate = true;
             }
-            if (Mode == FlailMode.Wrap)
+            bool comboPressed = input.ConsumeLassoPress();
+            if (Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast)
             {
-                if (!input.RightHeld || OrbitNPC == null || !input.CanControl)
+                if (!input.RightHeld || (Mode == FlailMode.Wrap && OrbitNPC == null) || !input.CanControl)
                     ChangeMode(FlailMode.Return);
-                else if (input.LeftPressed && BoundNPC() != null)
+                else if (comboPressed && BoundNPC() != null)
                 {
                     yankRequest++;
                     Projectile.netUpdate = true;
                 }
                 return true;
             }
-            if (Mode != FlailMode.Spin || !input.RightHeld || !input.LeftPressed)
+            if ((Mode != FlailMode.Spin && Mode != FlailMode.Flight) || !input.RightHeld || !comboPressed)
                 return false;
-            // Hover is aim ONLY. A fresh LMB edge while RMB is held casts the
-            // head; keeping the cursor over an NPC must never auto-start a wrap.
-            NPC chosen = SelectLassoTarget(player, input.AimWorld, out string reason);
-            if (chosen == null)
+            // Always cast along the aim. Target acquisition happens on the swept
+            // flight path, never from a mandatory cursor-hover precondition.
+            ChangeMode(FlailMode.LassoCast);
+            float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
+            Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed + player.velocity;
+            Projectile.netUpdate = true;
+            return true;
+        }
+
+        private void UpdateLassoCast(Player player)
+        {
+            Projectile.rotation += 0.25f;
+            if (!IsAuthority)
+                return;
+            NPC chosen = null;
+            float nearest = float.MaxValue;
+            for (int i = 0; i < Main.maxNPCs; i++)
             {
-                // A cast without a valid target still flies, rather than falling
-                // at the player's feet or auto-locking a later hovered enemy.
-                lassoFailure = reason;
-                ChangeMode(FlailMode.Flight);
-                float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
-                Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed + player.velocity;
-                return true;
+                NPC npc = Main.npc[i];
+                if (!FlailLassoNPC.Eligible(npc) || npc.GetGlobalNPC<FlailLassoNPC>().Bound)
+                    continue;
+                float hit = 0f;
+                if (!Collision.CheckAABBvLineCollision(npc.position, npc.Size, Projectile.Center,
+                    Projectile.Center + Projectile.velocity, Projectile.width, ref hit)
+                    || hit >= nearest
+                    || !Collision.CanHitLine(Projectile.Center, 1, 1, npc.Center, 1, 1))
+                    continue;
+                chosen = npc;
+                nearest = hit;
+            }
+            if (chosen == null)
+                return;
+            if (Vector2.Distance(player.MountedCenter, chosen.Center) + LoopLength(chosen) + TargetOrbitRadius(chosen) > ChainLength)
+            {
+                lassoFailure = "TooShort";
+                ChangeMode(FlailMode.Return);
+                return;
             }
             orbitTarget = chosen.whoAmI;
             orbitType = chosen.type;
             ChangeMode(FlailMode.Wrap);
-            // Enter from above, not at a raw polar angle that could send the
-            // head below a ground enemy before the first orbit even starts.
             StateTimer = -MathHelper.PiOver2;
+            Projectile.velocity = Vector2.Zero;
             Projectile.netUpdate = true;
-            return true;
         }
 
         private NPC SelectLassoTarget(Player player, Vector2 mouse, out string reason)
@@ -161,6 +185,8 @@ namespace FrostMelee.Content.Projectiles
         {
             if (Mode == FlailMode.Return)
                 return lassoFailure ?? "Returning";
+            if (Mode == FlailMode.LassoCast)
+                return "Casting";
             if (Mode == FlailMode.Wrap)
             {
                 NPC bound = BoundNPC();

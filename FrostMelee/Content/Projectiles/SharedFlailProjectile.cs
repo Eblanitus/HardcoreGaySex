@@ -16,7 +16,7 @@ namespace FrostMelee.Content.Projectiles
     // by SyncProjectile. Only the owner reads input or decides transitions.
     public abstract partial class SharedFlailProjectile : ModProjectile
     {
-        public enum FlailMode { Spin, Flight, Drop, Return, Wrap }
+        public enum FlailMode { Spin, Flight, Drop, Return, Wrap, LassoCast }
         public abstract int SourceItemType { get; }
         protected virtual float ChainLength => 320f;
         protected virtual float OrbitRadius => 40f;
@@ -24,7 +24,7 @@ namespace FrostMelee.Content.Projectiles
         protected virtual float ReturnSpeed => 20f;
         protected virtual float Gravity => 0.8f;
 
-        public FlailMode Mode => Projectile.ai[0] >= 0f && Projectile.ai[0] <= (float)FlailMode.Wrap
+        public FlailMode Mode => Projectile.ai[0] >= 0f && Projectile.ai[0] <= (float)FlailMode.LassoCast
             ? (FlailMode)(int)Projectile.ai[0] : FlailMode.Return;
         private bool IsAuthority => Projectile.owner == Main.myPlayer;
         private bool initialized;
@@ -62,8 +62,8 @@ namespace FrostMelee.Content.Projectiles
             StateTimer = 0f;
             Projectile.ResetLocalNPCHitImmunity();
             Projectile.netUpdate = true;
-            Projectile.friendly = next != FlailMode.Return;
-            Projectile.tileCollide = next == FlailMode.Flight || next == FlailMode.Drop || next == FlailMode.Wrap;
+            Projectile.friendly = next != FlailMode.Return && next != FlailMode.Wrap && next != FlailMode.LassoCast;
+            Projectile.tileCollide = next == FlailMode.Flight || next == FlailMode.Drop || next == FlailMode.Wrap || next == FlailMode.LassoCast;
         }
 
         public override void AI()
@@ -115,10 +115,10 @@ namespace FrostMelee.Content.Projectiles
                     syncTicks = 0;
                     Projectile.netUpdate = true;
                 }
-                if ((Mode == FlailMode.Flight || Mode == FlailMode.Drop)
+                if ((Mode == FlailMode.Flight || Mode == FlailMode.Drop || Mode == FlailMode.LassoCast)
                     && Vector2.DistanceSquared(player.MountedCenter, Projectile.Center + Projectile.velocity) > ChainLength * ChainLength)
                     ChangeMode(FlailMode.Return);
-                if ((Mode == FlailMode.Flight && StateTimer > 90f) || (Mode == FlailMode.Return && StateTimer > 180f))
+                if (((Mode == FlailMode.Flight || Mode == FlailMode.LassoCast) && StateTimer > 90f) || (Mode == FlailMode.Return && StateTimer > 180f))
                 {
                     if (Mode == FlailMode.Return)
                     {
@@ -135,8 +135,8 @@ namespace FrostMelee.Content.Projectiles
                 StateTimer += Mode == FlailMode.Spin ? meleeSpeed : 1f;
             Projectile.ownerHitCheck = Mode == FlailMode.Spin;
             Projectile.localNPCHitCooldown = Mode == FlailMode.Spin ? 20 : 10;
-            Projectile.friendly = Mode != FlailMode.Return;
-            Projectile.tileCollide = Mode == FlailMode.Flight || Mode == FlailMode.Drop || Mode == FlailMode.Wrap;
+            Projectile.friendly = Mode != FlailMode.Return && Mode != FlailMode.Wrap && Mode != FlailMode.LassoCast;
+            Projectile.tileCollide = Mode == FlailMode.Flight || Mode == FlailMode.Drop || Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast;
             switch (Mode)
             {
                 case FlailMode.Spin:
@@ -153,6 +153,9 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.Center = ClearOrbitPosition(anchor, wanted);
                     Projectile.velocity = Vector2.Zero;
                     Projectile.rotation = angle;
+                    break;
+                case FlailMode.LassoCast:
+                    UpdateLassoCast(player);
                     break;
                 case FlailMode.Wrap:
                     LassoAI(player, meleeSpeed);
@@ -218,7 +221,7 @@ namespace FrostMelee.Content.Projectiles
             return last;
         }
 
-        public override bool? CanDamage() => Mode == FlailMode.Return
+        public override bool? CanDamage() => Mode == FlailMode.Return || Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast
             || (Mode == FlailMode.Spin && StateTimer <= 12f) ? false : null;
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
@@ -242,7 +245,7 @@ namespace FrostMelee.Content.Projectiles
             bool hitX = oldVelocity.X != Projectile.velocity.X;
             bool hitY = oldVelocity.Y != Projectile.velocity.Y;
             bool impact = (hitX && Math.Abs(oldVelocity.X) > 4f) || (hitY && Math.Abs(oldVelocity.Y) > 4f);
-            if (Mode == FlailMode.Flight || Mode == FlailMode.Wrap)
+            if (Mode == FlailMode.Flight || Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast)
             {
                 if (Mode == FlailMode.Wrap)
                     lassoFailure = "Blocked";

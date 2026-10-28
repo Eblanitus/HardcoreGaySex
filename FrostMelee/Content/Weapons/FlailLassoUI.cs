@@ -20,7 +20,7 @@ namespace FrostMelee.Content.Weapons
                 return;
             string key = input.ActiveHead?.LassoHint(player, input.AimWorld) ?? "NoTarget";
             Color color = key == "Bound" ? Color.LightGreen
-                : key == "Wrapping" || key == "Yanking" ? Color.Gold : Color.LightGray;
+                : key == "Casting" || key == "Wrapping" || key == "Yanking" ? Color.Gold : Color.LightGray;
             Vector2 position = new Vector2(24f, Main.screenHeight - 100f);
             Utils.DrawBorderString(spriteBatch, Language.GetTextValue("Mods.FrostMelee.LassoStatus." + key), position, color, 0.85f);
         }

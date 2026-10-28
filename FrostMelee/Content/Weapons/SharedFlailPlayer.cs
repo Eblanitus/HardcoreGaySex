@@ -21,6 +21,14 @@ namespace FrostMelee.Content.Weapons
         public Vector2 Aim { get; private set; } = Vector2.UnitX;
 
         private bool previousLeft;
+        private bool pendingLassoPress;
+
+        public bool ConsumeLassoPress()
+        {
+            bool pressed = pendingLassoPress;
+            pendingLassoPress = false;
+            return pressed;
+        }
         private int repeatCooldown;
         private int activeIndex = -1;
 
@@ -68,6 +76,10 @@ namespace FrostMelee.Content.Weapons
             LeftHeld = CanControl && Main.mouseLeft;
             RightHeld = CanControl && Main.mouseRight;
             LeftPressed = LeftHeld && !previousLeft;
+            if (RightHeld && LeftPressed)
+                pendingLassoPress = true;
+            if (!CanControl || !RightHeld)
+                pendingLassoPress = false;
             previousLeft = Main.mouseLeft; // UI suppression must not manufacture a new click.
 
             if (!CanControl)
