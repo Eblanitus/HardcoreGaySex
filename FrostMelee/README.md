@@ -1,33 +1,76 @@
-# Frost Melee (ледяные оружия серии HardcoreMelee)
+# FrostMelee — ледяная линейка HardcoreMelee
 
-Мод перекраивает ванильное ледяное оружие под доктрину серии (philosophy.md в HardcoreMelee): оружие сильнее вблизи, набор приёмов один — взмах, тычки, выставленное оружие (встреча/копьё), бросок без автовозврата. ЛКМ — взмах, ПКМ тап — выставляемый режим (тык-тумблер), ПКМ зажать — тычки, ПКМ + ЛКМ — бросок.
+Переработка ближнего боя Terraria / tModLoader: сближение должно быть выгоднее
+дистанционной стрельбы. Общие принципы — [философия серии](../HardcoreMelee/philosophy.md).
 
-## Подсистемы
+> Наличие классов и общих приёмов не означает, что оружие закончено.
+> Актуальные статусы каждого оружия и границы проверки — в [STATUS.md](STATUS.md).
+> Обновлено 28 октября 2026 года по исходникам и решениям владельца.
 
-- Замороженное копьё (ванильная Ледяная коса, ItemID.IceSickle): полная система приёмов + шкала заморозки. sickle.md.
-- Ледяные мечи (Ice Blade, Frostbrand): тот же набор приёмов без шкалы, взмах-дуга и «встреча». swords.md.
-- Йо-йо Амарок: свой полёт вместо ванильного, наводка, круг, нарастающий лёд. amarok.md.
-- Северный полюс и Ледяной бумеранг — пока ванилла 1:1 (заглушки GlobalItem с TODO).
+## Навигация
 
-## Структура
+- [Статусы оружия](STATUS.md) — что реализовано, что проверено и что осталось.
+- [Прогрессия и планы](plans.md) — получение, будущие оружия, утверждённые решения.
+- [Технические задачи и проверки](../MAINTENANCE.md).
+- [Сборка и тесты](../BUILDING.md).
+- [Сетевая стабилизация](../NETWORK_STABILIZATION.md) — внесённые изменения и игровые сценарии.
 
-- FrostMelee.cs — подмена текстур в Load (серп → IceSpearHeld, мечи → Ice_Blade/Frostbrand), позы для Weapon Out Lite, восстановление при выгрузке.
-- Content/Sickle* — мозг приёмов (SicklePlayer), глобалка предмета (SickleGlobalItem), геометрия спрайта (SickleSprite), слои рисования (SickleThrowPoseLayer, SickleSpinSwingLayer), текстуры (SickleTextures), индикатор над головой (SickleUI), ФРОЗЕН-вид (FrozenSpear).
-- Content/Projectiles — дуга взмаха (SickleArcProjectile), тычок (SickleStabProjectile), выставленное копьё (SickleBraceProjectile), бросок (SickleThrowProjectile), зона инея от взрыва (FrostZoneSystem).
-- Content/Items — глобалка серпа, ThrownLockItem (блокировка предмета в полёте).
-- Content/Weapons — мечи: SwordPlayer, SwordGlobalItem, SwordTypes, SwordArcProjectile, SwordStabProjectile, SwordThrowPoseLayer, SwordUI + заглушки NorthPole / IceBoomerang и каркас SpearPlayer.
-- Content/Yoyo — AmarokPlayer (ввод), AmarokGlobalItem, AmarokYoyoProjectile, AmarokShardProjectile, AmarokCounterweightGlobal, YoyoUI.
-- StabRibbon.cs — вершинная лента-шлейф тычка.
-- FrostMeleeConfig.cs — клиентские настройки: индикатор приёма и подсказки управления.
-- Localized RU/EN через hjson.
+## Управление
 
-## Состояние
+**Мечи и Замороженное копьё:** ЛКМ — взмах; короткое ПКМ — переключение
+встречи/выставленного копья; удержание ПКМ — тычки; ПКМ + ЛКМ — бросок.
+Брошенное оружие остаётся в мире, его нужно забрать.
 
-- Готовы: копьё (система серпа), мечи, Амарок, зона инея, индикатор приёма, конфиг, локализация.
-- Не начато: Северный полюс, Ледяной бумеранг (только TODO), тумблер встрече у Севера.
-- Мусор в репозитории: *.bak-версии снарядов (Content/Yoyo, Content/Projectiles) и старые отладочные заметки .cursor о несуществующих файлах (IceSpearProjectile, DeathSpearProjectile) — убрать при чистке.
+**Амарок:** удержание ЛКМ — управление курсором; ПКМ без ЛКМ — наводка;
+ЛКМ + ПКМ — круг. См. [amarok.md](amarok.md).
 
-## Зависимости
+**Ледяной бумеранг:** удержание ЛКМ — лёгкие возвращающиеся броски;
+ПКМ-тап — размах; удержание ПКМ — зарядка тяжёлого броска с прицелом.
+Тяжёлый бросок требует подбора. См. [план бумерангов](../HardcoreMelee/boomer.md).
 
-- Мод Weapon Out Lite — мягкая (Mod.Call через try/catch, отсутствие не мешает).
-- Наши снаряды мечей переиспользуют снаряды серпа (рисуют любой предмет по ai[2], меряя спрайт по пикселям) — новые проекты для мечей не дублируются.
+**Ледниковый цеп:** пока отдельный старый прототип управления; новая схема
+и лассо из [flails.md](../HardcoreMelee/flails.md) ещё не реализованы.
+Общие кнопки мечей нельзя автоматически переносить на все классы оружия.
+
+## Реализованные подсистемы
+
+- **Замороженное копьё / Ice Sickle:** приёмы, шкала заморозки, иней,
+  замороженный вид — [sickle.md](sickle.md).
+- **Мечи:** общие приёмы, полировка Ice Blade, холодное пламя Frostbrand,
+  заготовка праздничных мечей и Айсберг — [swords.md](swords.md),
+  [FROSTBRAND_ИТОГ.md](FROSTBRAND_ИТОГ.md), [AISBERG.md](AISBERG.md).
+- **Амарок:** свой полёт, наводка, круг, лёд, двойник и осколки.
+- **Бумеранг:** лёгкий/тяжёлый броски, размах, холодный вихрь и скольжение.
+- **Интерфейс:** индикаторы, подсказки, клиентские настройки, RU/EN-локализация.
+- **Геометрия FrostMelee:** общие CPU-маски исходных PNG; они работают без GPU
+  и на выделенном сервере. Генератор — `../tools/generate_collision_masks.py`.
+
+**Северный полюс остаётся ванильным:** `NorthPoleGlobalItem` и `SpearPlayer` —
+каркасы, не законченная переработка. **Меч из ёлки не сделан:** общие приёмы
+и окраска дуги — лишь заготовка, собственной механики нет.
+
+## Основные файлы
+
+| Путь | Назначение |
+|---|---|
+| `FrostMelee.cs` | Подмена/восстановление текстур, интеграция Weapon Out Lite, приём сетевой шкалы Frost |
+| `Content/SicklePlayer.cs`, `Content/Items/SickleGlobalItem.cs` | Режимы и ввод Замороженного копья |
+| `Content/Weapons/SwordPlayer.cs`, `SwordGlobalItem.cs`, `SwordTypes.cs` | Режимы и реестр мечей |
+| `Content/Projectiles/Sickle*Projectile.cs`, `SwordStabProjectile.cs` | Приёмы и общие снаряды |
+| `Content/SickleSprite.cs`, `WeaponCollisionMasks.Generated.cs` | Геометрия и маски попаданий |
+| `Content/Weapons/BoomerangPlayer.cs`, `Content/Projectiles/Boomerang*Projectile.cs` | Бумеранг |
+| `Content/Yoyo/` | Амарок |
+| `Content/Items/Aisberg.cs`, `Content/Projectiles/Aisberg*`, `Content/Weapons/AisbergPlayer.cs` | Айсберг и глыбы |
+| `Content/Items/GlacialFlail.cs`, `Content/Projectiles/GlacialFlailProjectile.cs` | Старый прототип цепа |
+| `FrostMeleeConfig.cs`, `Localization/` | Настройки и тексты |
+
+Мечи переиспользуют часть снарядов копья: тип предмета передаётся через `ai[2]`.
+Не все приёмы имеют отдельный класс для каждого оружия.
+
+## Зависимости и ограничения
+
+- Требуются установленный tModLoader и подходящий .NET SDK; точная версия
+  окружения для проверенного релиза пока не зафиксирована.
+- Weapon Out Lite — необязательная интеграция через `Mod.Call`.
+- Сетевая работа не считается полностью проверенной. Python-тесты проверяют
+  маски, но не компиляцию C#, игровые коллизии или баланс.
