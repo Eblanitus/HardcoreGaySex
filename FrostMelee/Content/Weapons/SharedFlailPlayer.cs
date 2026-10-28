@@ -9,7 +9,7 @@ using FrostMelee.Content.Projectiles;
 namespace FrostMelee.Content.Weapons
 {
     // One input owner for Snowball, Polar Star and Lantern. The item never fires
-    // through vanilla Shoot as well. The old GlacialFlail controller is separate.
+    // through vanilla Shoot as well. Polar Star replaces the retired GlacialFlail; there is no second controller.
     public class SharedFlailPlayer : ModPlayer
     {
         public const int RepeatDelay = 10;

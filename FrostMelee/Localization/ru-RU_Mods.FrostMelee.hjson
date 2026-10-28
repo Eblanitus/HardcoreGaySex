@@ -39,10 +39,6 @@ Items: {
 		Tooltip: Ледяные глыбы при расколе взрываются и накладывают Фростбайт
 	}
 
-	GlacialFlail: {
-		DisplayName: Ледниковый цеп
-		Tooltip: Два цепа в одном: крутка с броском и прямой выстрел на цепи
-	}
 }
 
 Projectiles: {
@@ -72,7 +68,6 @@ Projectiles: {
 	// AisbergChunk.DisplayName: Aisberg Chunk
 	// BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
 	// BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
-	GlacialFlailProjectile.DisplayName: Ледниковый цеп
 }
 
 Stance: {
@@ -121,13 +116,6 @@ BoomerangControlsTooltip:
 	ПКМ: размах — бьёт в упор и раскручивает следующий бросок
 	ПКМ (зажать): зарядка с прицелом, отпустить — тяжёлый бросок (скользит шайбой, в воде не тонет, идти забирать)
 	Сквозь стены не летит ничего
-	'''
-GlacialFlailControlsTooltip:
-	'''
-	ЛКМ (держать): глыба крутится вокруг тебя и разгоняется — урон и отброс растут
-	Отпустить ЛКМ: бросок по дуге на цепи; зажать ЛКМ в полёте — уронить глыбу, отпустить — вернуть
-	ПКМ: прямой выстрел глыбой без гравитации; из крутки сохраняет часть разгона и возвращается в крутку
-	Сквозь стены не бьёт
 	'''
 
 Configs: {

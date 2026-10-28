@@ -114,6 +114,8 @@ namespace FrostMelee.Content.Items.Prototypes
             .AddIngredient(ItemID.Chain, 8).AddTile(TileID.Anvils).Register();
     }
 
+    // Saved GlacialFlail items resolve to the replacement instead of UnloadedItem.
+    [LegacyName("GlacialFlail")]
     public class PolarStar : PrototypeFlail
     {
         protected override int ProjectileType => ModContent.ProjectileType<PolarStarProjectile>();

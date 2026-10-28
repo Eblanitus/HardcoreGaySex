@@ -29,8 +29,12 @@
 ПКМ-тап — размах; удержание ПКМ — зарядка тяжёлого броска с прицелом.
 Тяжёлый бросок требует подбора. См. [план бумерангов](../HardcoreMelee/boomer.md).
 
-**Ледниковый цеп:** пока отдельный старый прототип управления; новая схема
-и лассо из [flails.md](../HardcoreMelee/flails.md) ещё не реализованы.
+**Цепы:** Снежный ком — дохардмод, Полярная звезда — хардмодная замена
+Ледникового цепа (не дополнительный четвёртый цеп). ЛКМ — прямой бросок,
+ПКМ — крутка; новый клик ЛКМ с активной головой — сброс, отпускание — возврат.
+Старые сохранённые Ледниковые цепы загружаются как Полярная звезда.
+Дроп старого цепа с черепах удалён; Звезда получается крафтом.
+Лассо и уникальные механики ещё не реализованы; см. [flails.md](../HardcoreMelee/flails.md).
 Общие кнопки мечей нельзя автоматически переносить на все классы оружия.
 
 ## Реализованные подсистемы
@@ -72,7 +76,7 @@
 | `Content/Weapons/BoomerangPlayer.cs`, `Content/Projectiles/Boomerang*Projectile.cs` | Бумеранг |
 | `Content/Yoyo/` | Амарок |
 | `Content/Items/Aisberg.cs`, `Content/Projectiles/Aisberg*`, `Content/Weapons/AisbergPlayer.cs` | Айсберг и глыбы |
-| `Content/Items/GlacialFlail.cs`, `Content/Projectiles/GlacialFlailProjectile.cs` | Старый прототип цепа |
+| `Content/Weapons/SharedFlailPlayer.cs`, `Content/Projectiles/SharedFlailProjectile.cs` | Общий контроллер трёх новых цепов |
 | `FrostMeleeConfig.cs`, `Localization/` | Настройки и тексты |
 
 Мечи переиспользуют часть снарядов копья: тип предмета передаётся через `ai[2]`.
