@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.GameContent;
+using Terraria.ID;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
@@ -42,7 +43,8 @@ namespace FrostMelee.Content.Items
             if (!IsLockedForLocal(item) || !FrostMeleeConfigDefaults.ShowControlTooltips)
                 return;
             // Серп брошен / меч брошен — свой текст
-            string key = Weapons.SwordTypes.IsSword(item) ? "ThrownTooltipSword" : "ThrownTooltip";
+            string key = item.type == ItemID.NorthPole ? "ThrownTooltipSpear"
+                : Weapons.SwordTypes.IsSword(item) ? "ThrownTooltipSword" : "ThrownTooltip";
             tooltips.Add(new TooltipLine(Mod, "SickleThrown",
                 Language.GetTextValue("Mods.FrostMelee." + key))
             {

@@ -4,24 +4,19 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Северный полюс (КОПЬЯ.md): длина и укол. После Плантеры, отдельно от ледяной семьи.
-    // Приёмы живут в SpearPlayer, здесь только крючок предмета.
-    // Сейчас ванилла 1:1 — механики сюда, когда дойдём.
+    // North Pole is registered in SickleTypes, so the shared long-weapon hooks
+    // supply swing, thrust, brace, throw, poses, UI and per-item throw locking.
+    // Keep this profile for spear-specific defaults rather than a second input AI.
     public class NorthPoleGlobalItem : GlobalItem
     {
-        public override bool AppliesToEntity(Item entity, bool lateInstantiation) => true;
-
-        private static bool IsSpear(Item item) => item.type == ItemID.NorthPole;
+        public override bool AppliesToEntity(Item entity, bool lateInstantiation) =>
+            entity.type == ItemID.NorthPole;
 
         public override void SetDefaults(Item item)
         {
-            if (!IsSpear(item))
-                return;
-            // TODO(КОПЬЯ.md): взмах — круг маленького радиуса (толпа вплотную);
-            // TODO(КОПЬЯ.md): тычки — частые и точные, главный урон в одну цель;
-            // TODO(КОПЬЯ.md): встреча — враг натыкается сам, урон от скорости сближения;
-            // TODO(КОПЬЯ.md): бросок — летит строго остриём, втыкается, идти забирать.
-            // TODO: ванильные снежинки — решить, остаются или заменяются приёмами.
+            // Vanilla's held spear/channel attack is replaced by the shared moves.
+            // Damage, use times, rarity, acquisition and vanilla texture stay intact.
+            item.channel = false;
         }
     }
 }

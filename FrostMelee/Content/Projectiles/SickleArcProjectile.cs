@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.IO;
 using System.Collections.Generic;
 using Terraria;
 using Terraria.GameContent;
@@ -40,11 +41,31 @@ namespace FrostMelee.Content.Projectiles
         // Докуда достаёт клинок: считает SickleGlobalItem у владельца
         public float BladeReach;
 
-        // Что за серп и как он вращается: задаёт SickleGlobalItem.Shoot (бьёт только владелец,
-        // синхронизировать не нужно). SwingFace — та же сторона, что у SickleSpinSwingLayer.
+        // The shared arc needs its weapon profile on observers too: North Pole
+        // must not be mistaken for Ice Sickle or use the fallback blade shape.
         public int ItemType;
         public float ItemScale = 1f;
         public float SwingFace = 1f;
+
+        public override void SendExtraAI(BinaryWriter writer)
+        {
+            writer.Write(ItemType);
+            writer.Write(ItemScale);
+            writer.Write(SwingFace);
+            writer.Write(BladeReach);
+        }
+
+        public override void ReceiveExtraAI(BinaryReader reader)
+        {
+            int type = reader.ReadInt32();
+            float scale = reader.ReadSingle();
+            float face = reader.ReadSingle();
+            float reach = reader.ReadSingle();
+            ItemType = type == ItemID.IceSickle || type == ItemID.NorthPole ? type : 0;
+            ItemScale = float.IsFinite(scale) ? Math.Clamp(scale, 0.1f, 10f) : 1f;
+            SwingFace = face < 0f ? -1f : 1f;
+            BladeReach = float.IsFinite(reach) ? Math.Clamp(reach, 0f, 1000f) : 0f;
+        }
 
         // false — убрать «контрольную» линию дуги за кончиком лезвия, бьёт только серп
         public static bool ArcLineControl = true;
@@ -343,7 +364,7 @@ namespace FrostMelee.Content.Projectiles
         // Пока идёт взмах, каждый тик добавляем точки на пройденной за тик части дуги (клинок по BladeAngleAt)
         private void RecordFrostTrail(Player player)
         {
-            if (Main.dedServ)
+            if (Main.dedServ || ItemType != ItemID.IceSickle)
                 return;
             float max = SwingMaxTicks(player);
             float progress = SwingProgress(player);

@@ -1,4 +1,39 @@
 Items: {
+	FlinxYoyo: {
+		DisplayName: Йо-йо из меха Флинкса
+		Tooltip: Пушистое йо-йо; пока обычный ванильный полёт
+	}
+
+	YetiYoyo: {
+		DisplayName: Нога йети
+		Tooltip: Тяжёлое меховое йо-йо; собственная механика ещё не реализована
+	}
+
+	YetiPaw: {
+		DisplayName: Лапа йети
+		Tooltip: Временный материал для изготовления Ноги йети
+	}
+
+	SnowballFlail: {
+		DisplayName: Снежный ком
+		Tooltip: Дохардмодный цеп; накопление снега ещё не реализовано
+	}
+
+	PolarStar: {
+		DisplayName: Полярная звезда
+		Tooltip: Хардмодный цеп; собственная механика ещё не реализована
+	}
+
+	LanternFlail: {
+		DisplayName: Цеп-фонарь
+		Tooltip: Фонарь на цепи; механика света ещё не реализована
+	}
+
+	SnowBoomerang: {
+		DisplayName: Снежный бумеранг
+		Tooltip: Пост-Големный бумеранг; пока обычный ванильный полёт
+	}
+
 	Aisberg: {
 		DisplayName: Айсберг
 		Tooltip: Ледяные глыбы при расколе взрываются и накладывают Фростбайт
@@ -11,6 +46,12 @@ Items: {
 }
 
 Projectiles: {
+	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
+	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
+	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
+	PolarStarProjectile.DisplayName: "{$Mods.FrostMelee.Items.PolarStar.DisplayName}"
+	LanternFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.LanternFlail.DisplayName}"
+	SnowBoomerangProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowBoomerang.DisplayName}"
 	SickleArcProjectile.DisplayName: Дуга серпа
 	SickleStabProjectile.DisplayName: Выпад серпом
 	SickleBraceProjectile.DisplayName: Серп-копьё
@@ -114,3 +155,18 @@ Configs: {
 		}
 	}
 }
+
+PrototypeNotice: Заготовка: временные характеристики и графика, без уникальной механики
+NorthPolePrototypeNotice: Заготовка переработки: общие приёмы копья, собственная механика ещё не реализована
+TreeSwordPrototypeNotice: Заготовка переработки: общие приёмы меча, собственной механики пока нет
+
+ThrownTooltipSpear: Копьё брошено — подойди к нему, чтобы подобрать
+BaseSpearControlsTooltip:
+    '''
+    ЛКМ: круговой взмах
+    ПКМ коротко: переключить выставленное копьё
+    ПКМ удерживать: тычки
+    ПКМ + ЛКМ: бросок; подойти к копью для подбора
+    '''
+
+SharedFlailControlsTooltip: "ЛКМ — прямой бросок; удержание повторяет броски. ПКМ — крутка. Новый клик ЛКМ с активной головой — сброс: держите ЛКМ, чтобы оставить её на земле; отпустите для возврата."
