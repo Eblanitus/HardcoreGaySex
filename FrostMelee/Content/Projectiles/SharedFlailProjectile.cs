@@ -244,6 +244,8 @@ namespace FrostMelee.Content.Projectiles
             bool impact = (hitX && Math.Abs(oldVelocity.X) > 4f) || (hitY && Math.Abs(oldVelocity.Y) > 4f);
             if (Mode == FlailMode.Flight || Mode == FlailMode.Wrap)
             {
+                if (Mode == FlailMode.Wrap)
+                    lassoFailure = "Blocked";
                 // One transition to an intangible return: cannot stick to a corner.
                 ChangeMode(FlailMode.Return);
             }

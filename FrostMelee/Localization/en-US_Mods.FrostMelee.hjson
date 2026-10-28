@@ -149,3 +149,17 @@ BaseSpearControlsTooltip:
 	RMB + LMB: throw; walk up to the spear to pick it up
 	'''
 SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin; aim at an enemy to wrap it. One full orbit binds one target for up to 3 seconds. Keep RMB held; a new LMB click yanks it for damage. Bosses and immovable targets are excluded; walls or insufficient chain break the lasso. Without a lasso, a new LMB click drops the head; hold to keep it down, release to recall.
+
+LassoStatus: {
+    NoTarget: "Lasso: hold RMB and point at an enemy"
+    Ineligible: "Lasso: this target cannot be bound (boss, dummy, immunity or segment)"
+    Occupied: "Lasso: target is already bound"
+    TooShort: "Lasso: not enough chain for the path and loop — move closer"
+    Blocked: "Lasso: obstacle blocks the wrap"
+    Ready: "Lasso: target available — keep RMB held"
+    Wrapping: "Lasso: wrapping — hold RMB for one full orbit"
+    Bound: "Lasso: target bound — keep RMB held and click LMB to yank"
+    Yanking: "Lasso: yanking"
+    Returning: "Lasso: head returning"
+    NeedSpin: "Lasso: release LMB, wait for the head to return, then hold RMB"
+}

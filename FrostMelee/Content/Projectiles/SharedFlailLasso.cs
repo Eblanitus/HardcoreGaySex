@@ -22,6 +22,7 @@ namespace FrostMelee.Content.Projectiles
         private float previousAngle;
         private float winding;
         private bool trackingAngle;
+        private string lassoFailure;
 
         private static float LoopLength(NPC npc)
         {
@@ -97,31 +98,69 @@ namespace FrostMelee.Content.Projectiles
                 return false;
             // Hover selection is owner-only. Other peers receive the index/type,
             // and the server still requires an actual complete orbit to bind it.
-            NPC chosen = null;
-            float nearest = float.MaxValue;
-            for (int i = 0; i < Main.maxNPCs; i++)
-            {
-                NPC npc = Main.npc[i];
-                if (!FlailLassoNPC.Eligible(npc) || npc.GetGlobalNPC<FlailLassoNPC>().Bound)
-                    continue;
-                Rectangle hover = npc.Hitbox;
-                hover.Inflate(16, 16);
-                float distance = Vector2.DistanceSquared(input.AimWorld, npc.Center);
-                if (!hover.Contains(input.AimWorld.ToPoint()) || distance >= nearest
-                    || Vector2.Distance(player.MountedCenter, npc.Center) + LoopLength(npc) + TargetOrbitRadius(npc) > ChainLength
-                    || !Collision.CanHitLine(player.MountedCenter, 1, 1, npc.Center, 1, 1))
-                    continue;
-                chosen = npc;
-                nearest = distance;
-            }
+            NPC chosen = SelectLassoTarget(player, input.AimWorld, out _);
             if (chosen == null)
                 return false;
             orbitTarget = chosen.whoAmI;
             orbitType = chosen.type;
             ChangeMode(FlailMode.Wrap);
-            StateTimer = (Projectile.Center - chosen.Center).ToRotation();
+            // Enter from above, not at a raw polar angle that could send the
+            // head below a ground enemy before the first orbit even starts.
+            StateTimer = -MathHelper.PiOver2;
             Projectile.netUpdate = true;
             return true;
+        }
+
+        private NPC SelectLassoTarget(Player player, Vector2 mouse, out string reason)
+        {
+            NPC nearest = null;
+            float distance = float.MaxValue;
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC npc = Main.npc[i];
+                if (!npc.active || npc.friendly || npc.townNPC)
+                    continue;
+                Rectangle hover = npc.Hitbox;
+                hover.Inflate(24, 24);
+                float d = Vector2.DistanceSquared(mouse, npc.Center);
+                if (hover.Contains(mouse.ToPoint()) && d < distance)
+                {
+                    nearest = npc;
+                    distance = d;
+                }
+            }
+            reason = "NoTarget";
+            if (nearest == null)
+                return null;
+            if (!FlailLassoNPC.Eligible(nearest))
+                reason = "Ineligible";
+            else if (nearest.GetGlobalNPC<FlailLassoNPC>().Bound)
+                reason = "Occupied";
+            else if (Vector2.Distance(player.MountedCenter, nearest.Center) + LoopLength(nearest) + TargetOrbitRadius(nearest) > ChainLength)
+                reason = "TooShort";
+            else if (!Collision.CanHitLine(player.MountedCenter, 1, 1, nearest.Center, 1, 1))
+                reason = "Blocked";
+            else
+            {
+                reason = "Ready";
+                return nearest;
+            }
+            return null;
+        }
+
+        public string LassoHint(Player player, Vector2 mouse)
+        {
+            if (Mode == FlailMode.Return)
+                return lassoFailure ?? "Returning";
+            if (Mode == FlailMode.Wrap)
+            {
+                NPC bound = BoundNPC();
+                return bound == null ? "Wrapping" : bound.GetGlobalNPC<FlailLassoNPC>().Yanking ? "Yanking" : "Bound";
+            }
+            if (Mode != FlailMode.Spin)
+                return "NeedSpin";
+            SelectLassoTarget(player, mouse, out string reason);
+            return reason;
         }
 
         private void LassoAI(Player player, float meleeSpeed)

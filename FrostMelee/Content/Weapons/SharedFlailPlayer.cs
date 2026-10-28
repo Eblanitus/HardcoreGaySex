@@ -28,6 +28,9 @@ namespace FrostMelee.Content.Weapons
             && Main.projectile[index].active && Main.projectile[index].owner == Player.whoAmI
             && Main.projectile[index].ModProjectile is SharedFlailProjectile;
 
+        public SharedFlailProjectile ActiveHead => IsActiveFlail(activeIndex)
+            ? Main.projectile[activeIndex].ModProjectile as SharedFlailProjectile : null;
+
         private bool HasActiveFlail()
         {
             if (IsActiveFlail(activeIndex))
