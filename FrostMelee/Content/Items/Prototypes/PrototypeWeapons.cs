@@ -128,17 +128,6 @@ namespace FrostMelee.Content.Items.Prototypes
             .AddTile(TileID.MythrilAnvil).Register();
     }
 
-    public class LanternFlail : PrototypeFlail
-    {
-        protected override int ProjectileType => ModContent.ProjectileType<LanternFlailProjectile>();
-        protected override int BaseDamage => 22;
-        protected override int Rarity => ItemRarityID.Blue;
-
-        public override void AddRecipes() => CreateRecipe()
-            .AddIngredient(ItemID.Torch, 5).AddIngredient(ItemID.Chain, 8)
-            .AddRecipeGroup(RecipeGroupID.IronBar, 10).AddTile(TileID.Anvils).Register();
-    }
-
     // Formerly deferred concept: only a vanilla-style boomerang scaffold here.
     public class SnowBoomerang : PrototypeWeapon
     {

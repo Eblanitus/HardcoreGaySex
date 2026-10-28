@@ -53,17 +53,7 @@ d.polygon([(16,16),(27,17),(18,19),(16,21)],fill='#4b88c0')
 d.rectangle((14,14,18,18),fill='#eaffff')
 save(im,'PolarStar')
 
-im,d=canvas()
-d.rectangle((12,2,20,7),outline=INK,width=2)
-d.polygon([(9,7),(23,7),(27,12),(25,27),(7,27),(5,12)],fill=INK)
-d.polygon([(10,10),(22,10),(24,13),(22,24),(10,24),(8,13)],fill='#6f8490')
-d.rectangle((11,12,21,23),fill='#c98945')
-d.polygon([(14,22),(13,18),(17,13),(19,18),(18,22)],fill='#fff2b3')
-d.line((10,11,11,24),fill=INK,width=2)
-d.line((22,11,21,24),fill=INK,width=2)
-d.line((16,10,16,24),fill=INK)
-d.rectangle((7,26,25,28),fill=INK)
-save(im,'LanternFlail')
+
 
 im,d=canvas()
 d.polygon([(3,6),(8,3),(27,19),(29,27),(24,29),(19,23)],fill=INK)

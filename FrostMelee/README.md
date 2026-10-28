@@ -59,7 +59,7 @@
 
 ## Новые заготовки
 
-Йо-йо Флинкса, Нога йети, Снежный ком, Полярная звезда, Цеп-фонарь,
+Йо-йо Флинкса, Нога йети, Снежный ком, Полярная звезда,
 Снежный бумеранг и материал Лапа йети получили базу, PNG и RU/EN.
 Они используют обычные ванильные AI, не законченные уникальные механики.
 Северный полюс и ёлочный меч остаются на своих ванильных ID; новых копий нет.
@@ -77,7 +77,7 @@
 | `Content/Weapons/BoomerangPlayer.cs`, `Content/Projectiles/Boomerang*Projectile.cs` | Бумеранг |
 | `Content/Yoyo/` | Амарок |
 | `Content/Items/Aisberg.cs`, `Content/Projectiles/Aisberg*`, `Content/Weapons/AisbergPlayer.cs` | Айсберг и глыбы |
-| `Content/Weapons/SharedFlailPlayer.cs`, `Content/Projectiles/SharedFlailProjectile.cs` | Общий контроллер трёх новых цепов |
+| `Content/Weapons/SharedFlailPlayer.cs`, `Content/Projectiles/SharedFlailProjectile.cs` | Общий контроллер двух новых цепов |
 | `FrostMeleeConfig.cs`, `Localization/` | Настройки и тексты |
 
 Мечи переиспользуют часть снарядов копья: тип предмета передаётся через `ai[2]`.

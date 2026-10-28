@@ -24,10 +24,6 @@ Items: {
 		Tooltip: A Hardmode flail; unique mechanics are not implemented yet
 	}
 
-	LanternFlail: {
-		DisplayName: Lantern Flail
-		Tooltip: A lantern on a chain; its light mechanic is not implemented yet
-	}
 
 	SnowBoomerang: {
 		DisplayName: Snow Boomerang
@@ -46,7 +42,6 @@ Projectiles: {
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
 	PolarStarProjectile.DisplayName: "{$Mods.FrostMelee.Items.PolarStar.DisplayName}"
-	LanternFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.LanternFlail.DisplayName}"
 	SnowBoomerangProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowBoomerang.DisplayName}"
 	SickleArcProjectile.DisplayName: Sickle Arc Projectile
 	SickleStabProjectile.DisplayName: Sickle Stab Projectile

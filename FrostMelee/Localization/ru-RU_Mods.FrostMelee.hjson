@@ -24,10 +24,6 @@ Items: {
 		Tooltip: Хардмодный цеп; собственная механика ещё не реализована
 	}
 
-	LanternFlail: {
-		DisplayName: Цеп-фонарь
-		Tooltip: Фонарь на цепи; механика света ещё не реализована
-	}
 
 	SnowBoomerang: {
 		DisplayName: Снежный бумеранг
@@ -46,7 +42,6 @@ Projectiles: {
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
 	PolarStarProjectile.DisplayName: "{$Mods.FrostMelee.Items.PolarStar.DisplayName}"
-	LanternFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.LanternFlail.DisplayName}"
 	SnowBoomerangProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowBoomerang.DisplayName}"
 	SickleArcProjectile.DisplayName: Дуга серпа
 	SickleStabProjectile.DisplayName: Выпад серпом
