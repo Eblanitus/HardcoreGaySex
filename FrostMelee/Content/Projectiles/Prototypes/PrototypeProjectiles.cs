@@ -54,19 +54,19 @@ namespace FrostMelee.Content.Projectiles.Prototypes
     public class SnowballFlailProjectile : PrototypeFlailProjectile
     {
         protected override string SpriteName => "SnowballFlail";
-        public override int SourceItemType => ModContent.ItemType<FrostMelee.Content.Items.Prototypes.SnowballFlail>();
+        public override int SourceItemType => ModContent.ItemType<global::FrostMelee.Content.Items.Prototypes.SnowballFlail>();
     }
 
     public class PolarStarProjectile : PrototypeFlailProjectile
     {
         protected override string SpriteName => "PolarStar";
-        public override int SourceItemType => ModContent.ItemType<FrostMelee.Content.Items.Prototypes.PolarStar>();
+        public override int SourceItemType => ModContent.ItemType<global::FrostMelee.Content.Items.Prototypes.PolarStar>();
     }
 
     public class LanternFlailProjectile : PrototypeFlailProjectile
     {
         protected override string SpriteName => "LanternFlail";
-        public override int SourceItemType => ModContent.ItemType<FrostMelee.Content.Items.Prototypes.LanternFlail>();
+        public override int SourceItemType => ModContent.ItemType<global::FrostMelee.Content.Items.Prototypes.LanternFlail>();
     }
 
     public class SnowBoomerangProjectile : ModProjectile
