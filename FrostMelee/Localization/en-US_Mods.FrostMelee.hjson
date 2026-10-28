@@ -157,4 +157,4 @@ BaseSpearControlsTooltip:
     RMB + LMB: throw; walk up to the spear to pick it up
     '''
 
-SharedFlailControlsTooltip: "LMB: straight throw; hold to repeat. RMB: spin. A new LMB click with a deployed head drops it: hold LMB to keep it on the ground; release to recall."
+SharedFlailControlsTooltip: "LMB: straight throw; hold to repeat. RMB: spin; aim at an enemy to wrap it. One full orbit binds one target for up to 3 seconds. Keep RMB held; a new LMB click yanks it for damage. Bosses and immovable targets are excluded; walls or insufficient chain break the lasso. Without a lasso, a new LMB click drops the head; hold to keep it down, release to recall."

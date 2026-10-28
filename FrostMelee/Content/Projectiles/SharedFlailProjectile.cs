@@ -10,13 +10,13 @@ using FrostMelee.Content.Weapons;
 
 namespace FrostMelee.Content.Projectiles
 {
-    // Shared mechanical base only: no lasso, snow growth, star effects or lantern resource.
+    // Shared flail and lasso base. No weapon-specific snow/star/lantern resource.
     // Adapted mechanics from tModLoader ExampleAdvancedFlailProjectile (stable).
     // ai[0] = mode, ai[1] = state timer, ai[2] = facing at launch. These are synced
     // by SyncProjectile. Only the owner reads input or decides transitions.
-    public abstract class SharedFlailProjectile : ModProjectile
+    public abstract partial class SharedFlailProjectile : ModProjectile
     {
-        public enum FlailMode { Spin, Flight, Drop, Return }
+        public enum FlailMode { Spin, Flight, Drop, Return, Wrap }
         public abstract int SourceItemType { get; }
         protected virtual float ChainLength => 320f;
         protected virtual float OrbitRadius => 40f;
@@ -24,7 +24,7 @@ namespace FrostMelee.Content.Projectiles
         protected virtual float ReturnSpeed => 20f;
         protected virtual float Gravity => 0.8f;
 
-        public FlailMode Mode => Projectile.ai[0] >= 0f && Projectile.ai[0] <= (float)FlailMode.Return
+        public FlailMode Mode => Projectile.ai[0] >= 0f && Projectile.ai[0] <= (float)FlailMode.Wrap
             ? (FlailMode)(int)Projectile.ai[0] : FlailMode.Return;
         private bool IsAuthority => Projectile.owner == Main.myPlayer;
         private bool initialized;
@@ -63,7 +63,7 @@ namespace FrostMelee.Content.Projectiles
             Projectile.ResetLocalNPCHitImmunity();
             Projectile.netUpdate = true;
             Projectile.friendly = next != FlailMode.Return;
-            Projectile.tileCollide = next == FlailMode.Flight || next == FlailMode.Drop;
+            Projectile.tileCollide = next == FlailMode.Flight || next == FlailMode.Drop || next == FlailMode.Wrap;
         }
 
         public override void AI()
@@ -91,6 +91,10 @@ namespace FrostMelee.Content.Projectiles
                 var input = player.GetModPlayer<SharedFlailPlayer>();
                 if (!boundItemHeld || !input.CanControl)
                     ChangeMode(FlailMode.Return);
+                else if (HandleLassoInput(player, input))
+                {
+                    // A bound-target yank takes priority over ordinary head dropping.
+                }
                 else if (initialized)
                 {
                     // Ignore the spawning click. Only a NEW click drops a deployed head.
@@ -127,11 +131,12 @@ namespace FrostMelee.Content.Projectiles
             initialized = true;
 
             float meleeSpeed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
-            StateTimer += Mode == FlailMode.Spin ? meleeSpeed : 1f;
+            if (Mode != FlailMode.Wrap)
+                StateTimer += Mode == FlailMode.Spin ? meleeSpeed : 1f;
             Projectile.ownerHitCheck = Mode == FlailMode.Spin;
             Projectile.localNPCHitCooldown = Mode == FlailMode.Spin ? 20 : 10;
             Projectile.friendly = Mode != FlailMode.Return;
-            Projectile.tileCollide = Mode == FlailMode.Flight || Mode == FlailMode.Drop;
+            Projectile.tileCollide = Mode == FlailMode.Flight || Mode == FlailMode.Drop || Mode == FlailMode.Wrap;
             switch (Mode)
             {
                 case FlailMode.Spin:
@@ -148,6 +153,9 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.Center = ClearOrbitPosition(anchor, wanted);
                     Projectile.velocity = Vector2.Zero;
                     Projectile.rotation = angle;
+                    break;
+                case FlailMode.Wrap:
+                    LassoAI(player, meleeSpeed);
                     break;
                 case FlailMode.Flight:
                     Projectile.rotation += 0.25f;
@@ -234,7 +242,7 @@ namespace FrostMelee.Content.Projectiles
             bool hitX = oldVelocity.X != Projectile.velocity.X;
             bool hitY = oldVelocity.Y != Projectile.velocity.Y;
             bool impact = (hitX && Math.Abs(oldVelocity.X) > 4f) || (hitY && Math.Abs(oldVelocity.Y) > 4f);
-            if (Mode == FlailMode.Flight)
+            if (Mode == FlailMode.Flight || Mode == FlailMode.Wrap)
             {
                 // One transition to an intangible return: cannot stick to a corner.
                 ChangeMode(FlailMode.Return);
@@ -273,24 +281,12 @@ namespace FrostMelee.Content.Projectiles
             // ExampleMod's arm-position correction for slopes and stepping up tiles.
             Vector2 start = Main.GetPlayerArmPosition(Projectile);
             start.Y -= Main.player[Projectile.owner].gfxOffY;
-            Vector2 delta = Projectile.Center - start;
-            float distance = delta.Length();
-            if (float.IsFinite(distance) && distance > 1f)
-            {
-                Texture2D chain = ModContent.Request<Texture2D>("FrostMelee/Content/Projectiles/SharedFlailChain").Value;
-                Vector2 direction = delta / distance;
-                // Start at the head and finish at the hand; overlap links by two pixels.
-                float spacing = Math.Max(1f, chain.Height - 2f);
-                int links = Math.Min(200, (int)Math.Ceiling(distance / spacing));
-                for (int i = 0; i < links; i++)
-                {
-                    Vector2 at = Projectile.Center - direction * (i * spacing);
-                    Point tile = at.ToTileCoordinates();
-                    Main.EntitySpriteDraw(chain, at - Main.screenPosition, null,
-                        Lighting.GetColor(tile.X, tile.Y), direction.ToRotation() + MathHelper.PiOver2,
-                        chain.Size() * 0.5f, 1f, SpriteEffects.None, 0f);
-                }
-            }
+            Texture2D chain = ModContent.Request<Texture2D>("FrostMelee/Content/Projectiles/SharedFlailChain").Value;
+            NPC bound = BoundNPC();
+            if (bound != null)
+                DrawLasso(chain, start, bound);
+            else
+                DrawChainSegment(chain, start, Projectile.Center);
             // Explicit center/origin: the 32px sprites and 28px hitboxes must not
             // produce an off-center wobble when rotated.
             Texture2D head = TextureAssets.Projectile[Type].Value;

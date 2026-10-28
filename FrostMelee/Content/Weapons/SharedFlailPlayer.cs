@@ -17,6 +17,7 @@ namespace FrostMelee.Content.Weapons
         public bool LeftHeld { get; private set; }
         public bool RightHeld { get; private set; }
         public bool LeftPressed { get; private set; }
+        public Vector2 AimWorld { get; private set; }
         public Vector2 Aim { get; private set; } = Vector2.UnitX;
 
         private bool previousLeft;
@@ -72,7 +73,8 @@ namespace FrostMelee.Content.Weapons
                 return; // The active head sees CanControl=false and returns.
             }
 
-            Aim = (Main.MouseWorld - Player.MountedCenter).SafeNormalize(new Vector2(Player.direction, 0f));
+            AimWorld = Main.MouseWorld;
+            Aim = (AimWorld - Player.MountedCenter).SafeNormalize(new Vector2(Player.direction, 0f));
             if (HasActiveFlail())
             {
                 repeatCooldown = RepeatDelay;
