@@ -285,8 +285,9 @@ namespace FrostMelee.Content.Projectiles
             start.Y -= Main.player[Projectile.owner].gfxOffY;
             Texture2D chain = ModContent.Request<Texture2D>("FrostMelee/Content/Projectiles/SharedFlailChain").Value;
             NPC bound = BoundNPC();
-            if (bound != null)
-                DrawLasso(chain, start, bound);
+            NPC wrapping = Mode == FlailMode.Wrap ? OrbitNPC : null;
+            if (bound != null || wrapping != null)
+                DrawLasso(chain, start, bound ?? wrapping, bound != null);
             else
                 DrawChainSegment(chain, start, Projectile.Center);
             // Explicit center/origin: the 32px sprites and 28px hitboxes must not

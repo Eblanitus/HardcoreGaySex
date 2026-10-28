@@ -20,6 +20,7 @@ namespace FrostMelee.Content.Projectiles
         private int wrapTicks;
         private int trackedTarget = -1;
         private float previousAngle;
+        private float wrapStartAngle;
         private float winding;
         private bool trackingAngle;
         private string lassoFailure;
@@ -94,13 +95,21 @@ namespace FrostMelee.Content.Projectiles
                 }
                 return true;
             }
-            if (Mode != FlailMode.Spin || !input.RightHeld)
+            if (Mode != FlailMode.Spin || !input.RightHeld || !input.LeftPressed)
                 return false;
-            // Hover selection is owner-only. Other peers receive the index/type,
-            // and the server still requires an actual complete orbit to bind it.
-            NPC chosen = SelectLassoTarget(player, input.AimWorld, out _);
+            // Hover is aim ONLY. A fresh LMB edge while RMB is held casts the
+            // head; keeping the cursor over an NPC must never auto-start a wrap.
+            NPC chosen = SelectLassoTarget(player, input.AimWorld, out string reason);
             if (chosen == null)
-                return false;
+            {
+                // A cast without a valid target still flies, rather than falling
+                // at the player's feet or auto-locking a later hovered enemy.
+                lassoFailure = reason;
+                ChangeMode(FlailMode.Flight);
+                float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
+                Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed + player.velocity;
+                return true;
+            }
             orbitTarget = chosen.whoAmI;
             orbitType = chosen.type;
             ChangeMode(FlailMode.Wrap);
@@ -198,8 +207,9 @@ namespace FrostMelee.Content.Projectiles
                 wanted = target.Center + OrbitOffset(target, StateTimer);
                 Vector2 delta = wanted - Projectile.Center;
                 Projectile.velocity = delta.SafeNormalize(Vector2.Zero) * Math.Min(12f * meleeSpeed, delta.Length());
-                if (Main.netMode != NetmodeID.MultiplayerClient)
-                    TrackWinding(target);
+                // Clients predict only the visible growing chain. NPC binding
+                // remains strictly server-owned.
+                TrackWinding(target);
             }
             if (Main.netMode != NetmodeID.MultiplayerClient)
                 handledYank = yankRequest; // No queued pre-capture yank can trigger later.
@@ -222,18 +232,32 @@ namespace FrostMelee.Content.Projectiles
             if (!valid)
                 return;
             float angle = normalized.ToRotation();
+            if (!trackingAngle)
+                wrapStartAngle = angle;
             if (trackingAngle)
             {
                 float step = MathHelper.WrapAngle(angle - previousAngle);
                 if (Math.Abs(step) > 0.6f)
+                {
                     winding = 0f; // Packet/teleport discontinuity is never a full wrap.
+                    wrapStartAngle = angle;
+                }
                 else
                     winding += step; // Reversals undo winding instead of counting twice.
                 if (Math.Abs(winding) >= MathHelper.TwoPi)
                 {
-                    if (target.GetGlobalNPC<FlailLassoNPC>().TryBind(target, this))
+                    if (Main.netMode == NetmodeID.MultiplayerClient)
+                        winding = Math.Sign(winding) * MathHelper.TwoPi;
+                    else if (target.GetGlobalNPC<FlailLassoNPC>().TryBind(target, this))
+                    {
                         hadBinding = true;
-                    winding = 0f;
+                        winding = Math.Sign(winding) * MathHelper.TwoPi;
+                    }
+                    else
+                    {
+                        winding = 0f;
+                        wrapStartAngle = angle;
+                    }
                 }
             }
             previousAngle = angle;
@@ -262,27 +286,32 @@ namespace FrostMelee.Content.Projectiles
             lassoHeld = held;
         }
 
-        private void DrawLasso(Texture2D chain, Vector2 hand, NPC npc)
+        private void DrawLasso(Texture2D chain, Vector2 hand, NPC npc, bool bound)
         {
-            Vector2 radius = npc.Size * 0.5f + new Vector2(4f, 0f);
-            Vector2 entry = EllipseEdge(npc.Center, radius, hand);
-            DrawChainSegment(chain, hand, entry);
-            const int count = 32;
-            for (int i = 0; i < count; i++)
+            // Lay down the loop progressively along the measured orbit. Before
+            // a turn is complete, never display an already-closed decorative loop.
+            float turn = bound ? (Projectile.ai[2] < 0f ? -MathHelper.TwoPi : MathHelper.TwoPi)
+                : MathHelper.Clamp(winding, -MathHelper.TwoPi, MathHelper.TwoPi);
+            if (!bound && (!trackingAngle || Math.Abs(turn) < 0.01f))
             {
-                float a = i * MathHelper.TwoPi / count;
-                float b = (i + 1) * MathHelper.TwoPi / count;
-                DrawChainSegment(chain, npc.Center + new Vector2(MathF.Cos(a) * radius.X, MathF.Sin(a) * radius.Y),
-                    npc.Center + new Vector2(MathF.Cos(b) * radius.X, MathF.Sin(b) * radius.Y));
+                DrawChainSegment(chain, hand, Projectile.Center);
+                return;
             }
-            DrawChainSegment(chain, EllipseEdge(npc.Center, radius, Projectile.Center), Projectile.Center);
-        }
-
-        private static Vector2 EllipseEdge(Vector2 center, Vector2 radius, Vector2 toward)
-        {
-            Vector2 v = (toward - center).SafeNormalize(Vector2.UnitX);
-            float scale = 1f / MathF.Sqrt(v.X * v.X / (radius.X * radius.X) + v.Y * v.Y / (radius.Y * radius.Y));
-            return center + v * scale;
+            Vector2 radius = npc.Size * 0.5f + new Vector2(4f, 0f);
+            Vector2 relative = Projectile.Center - npc.Center;
+            float start = bound ? new Vector2(relative.X / radius.X, relative.Y / radius.Y).ToRotation() : wrapStartAngle;
+            Vector2 entry = npc.Center + start.ToRotationVector2() * radius;
+            DrawChainSegment(chain, hand, entry);
+            int count = Math.Max(1, (int)Math.Ceiling(Math.Abs(turn) / MathHelper.TwoPi * 32f));
+            Vector2 last = entry;
+            for (int i = 1; i <= count; i++)
+            {
+                float angle = start + turn * i / count;
+                Vector2 next = npc.Center + angle.ToRotationVector2() * radius;
+                DrawChainSegment(chain, last, next);
+                last = next;
+            }
+            DrawChainSegment(chain, last, Projectile.Center);
         }
 
         private static void DrawChainSegment(Texture2D chain, Vector2 from, Vector2 to)
