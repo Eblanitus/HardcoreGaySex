@@ -59,6 +59,28 @@ class SnowballSourceContracts(unittest.TestCase):
         self.assertNotIn('ItemID.Chain', snow + polar)
         self.assertNotIn('ItemID.SoulofLight', polar)
 
+    def test_lasso_click_latches_without_held_buttons(self):
+        lasso = source('Content/Projectiles/SharedFlailLasso.cs')
+        controls = source('Content/Weapons/SharedFlailPlayer.cs')
+        handler = lasso.split('private bool HandleLassoInput', 1)[1].split('private void UpdateLassoCast', 1)[0]
+        self.assertIn('lassoActive = true;', handler)
+        self.assertNotIn('input.RightHeld', handler)
+        self.assertNotIn('input.LeftHeld', handler)
+        self.assertIn('comboPressed && BoundNPC() != null', handler)
+        self.assertIn('LeftPressed && (RightHeld || ActiveHead?.LassoInProgress == true)', controls)
+        self.assertNotIn('if (!CanControl || !RightHeld)', controls)
+        self.assertIn('!LeftHeld && !RightHeld && !pendingLassoPress', controls)
+        base = source('Content/Projectiles/SharedFlailProjectile.cs')
+        self.assertIn('lassoActive = false;', base)
+
+    def test_quick_wrap_respects_winding_discontinuity_guard(self):
+        lasso = source('Content/Projectiles/SharedFlailLasso.cs')
+        self.assertIn('float angularStep = Math.Min(0.4f, 0.4f * meleeSpeed);', lasso)
+        self.assertIn('Math.Abs(step) > 0.6f', lasso)
+        self.assertIn('Math.Min(32f * meleeSpeed, delta.Length())', lasso)
+        # Source contract only; actual NPC motion and server winding need a game test.
+        self.assertNotIn('StateTimer += 0.12f', lasso)
+
     def test_lasso_links_use_one_continuous_path(self):
         lasso = source('Content/Projectiles/SharedFlailLasso.cs')
         draw = lasso.split('private void DrawLasso(', 1)[1].split('private static void DrawChainSegment', 1)[0]

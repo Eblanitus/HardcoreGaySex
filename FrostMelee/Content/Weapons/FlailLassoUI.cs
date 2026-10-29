@@ -27,7 +27,7 @@ namespace FrostMelee.Content.Weapons
                 spriteBatch.Draw(pixel, new Rectangle(24, Main.screenHeight - 106, (int)(100f * mass), 4), Color.LightCyan);
             }
             SharedFlailPlayer input = player.GetModPlayer<SharedFlailPlayer>();
-            if (!input.CanControl || !input.RightHeld)
+            if (!input.CanControl || (!input.RightHeld && input.ActiveHead?.LassoInProgress != true))
                 return;
             string key = input.ActiveHead?.LassoHint(player, input.AimWorld) ?? "NoTarget";
             Color color = key == "Bound" ? Color.LightGreen

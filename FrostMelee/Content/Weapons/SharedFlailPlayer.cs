@@ -76,9 +76,9 @@ namespace FrostMelee.Content.Weapons
             LeftHeld = CanControl && Main.mouseLeft;
             RightHeld = CanControl && Main.mouseRight;
             LeftPressed = LeftHeld && !previousLeft;
-            if (RightHeld && LeftPressed)
+            if (LeftPressed && (RightHeld || ActiveHead?.LassoInProgress == true))
                 pendingLassoPress = true;
-            if (!CanControl || !RightHeld)
+            if (!CanControl)
                 pendingLassoPress = false;
             previousLeft = Main.mouseLeft; // UI suppression must not manufacture a new click.
 
@@ -97,11 +97,11 @@ namespace FrostMelee.Content.Weapons
             }
             if (repeatCooldown > 0)
                 repeatCooldown--;
-            if (repeatCooldown > 0 || (!LeftHeld && !RightHeld))
+            if (repeatCooldown > 0 || (!LeftHeld && !RightHeld && !pendingLassoPress))
                 return;
 
             Item held = Player.HeldItem;
-            var mode = RightHeld ? SharedFlailProjectile.FlailMode.Spin : SharedFlailProjectile.FlailMode.Flight;
+            var mode = RightHeld || pendingLassoPress ? SharedFlailProjectile.FlailMode.Spin : SharedFlailProjectile.FlailMode.Flight;
             float meleeSpeed = MathHelper.Clamp(Player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
             Vector2 velocity = mode == SharedFlailProjectile.FlailMode.Flight
                 ? Aim * held.shootSpeed * meleeSpeed + Player.velocity : Vector2.Zero;

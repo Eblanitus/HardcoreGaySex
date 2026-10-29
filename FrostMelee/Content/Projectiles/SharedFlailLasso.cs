@@ -16,7 +16,8 @@ namespace FrostMelee.Content.Projectiles
         private int orbitType;
         private uint yankRequest;
         private uint handledYank;
-        private bool lassoHeld;
+        private bool lassoActive;
+        public bool LassoInProgress => Mode == FlailMode.LassoCast || Mode == FlailMode.Wrap;
         private bool hadBinding;
         private int wrapTicks;
         private int trackedTarget = -1;
@@ -66,7 +67,7 @@ namespace FrostMelee.Content.Projectiles
 
         public bool CanMaintainLasso(NPC npc)
         {
-            if (Mode != FlailMode.Wrap || !lassoHeld || !FlailLassoNPC.Eligible(npc))
+            if (Mode != FlailMode.Wrap || !lassoActive || !FlailLassoNPC.Eligible(npc))
                 return false;
             Player player = Main.player[Projectile.owner];
             return player.active && !player.dead && !player.CCed && !player.noItems
@@ -80,15 +81,12 @@ namespace FrostMelee.Content.Projectiles
         // Called before the base drop-click handler, so yank has priority over drop.
         private bool HandleLassoInput(Player player, SharedFlailPlayer input)
         {
-            if (lassoHeld != input.RightHeld)
-            {
-                lassoHeld = input.RightHeld;
-                Projectile.netUpdate = true;
-            }
             bool comboPressed = input.ConsumeLassoPress();
             if (Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast)
             {
-                if (!input.RightHeld || (Mode == FlailMode.Wrap && OrbitNPC == null) || !input.CanControl)
+                // The click latches the whole cast/wrap. Releasing either mouse
+                // button must not abort an attack that is already in progress.
+                if ((Mode == FlailMode.Wrap && OrbitNPC == null) || !input.CanControl)
                     ChangeMode(FlailMode.Return);
                 else if (comboPressed && BoundNPC() != null)
                 {
@@ -97,10 +95,11 @@ namespace FrostMelee.Content.Projectiles
                 }
                 return true;
             }
-            if ((Mode != FlailMode.Spin && Mode != FlailMode.Flight) || !input.RightHeld || !comboPressed)
+            if ((Mode != FlailMode.Spin && Mode != FlailMode.Flight) || !comboPressed)
                 return false;
             // Always cast along the aim. Target acquisition happens on the swept
             // flight path, never from a mandatory cursor-hover precondition.
+            lassoActive = true;
             ChangeMode(FlailMode.LassoCast);
             float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
             Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed * MovementSpeedMultiplier + player.velocity;
@@ -229,11 +228,17 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 wanted = target.Center + OrbitOffset(target, StateTimer);
                 // Approach the orbit without teleportation; actual tile-resolved
                 // movement, not the desired angle, is what the server measures.
-                if (Vector2.DistanceSquared(Projectile.Center, wanted) < 12f * 12f)
-                    StateTimer += 0.12f * meleeSpeed * (Projectile.ai[2] < 0f ? -1f : 1f);
+                if (Vector2.DistanceSquared(Projectile.Center, wanted) < 8f * 8f)
+                {
+                    // A quick automatic orbit after one click, not a slow held
+                    // channel. Stay below TrackWinding's discontinuity threshold
+                    // even with extreme attack speed so real movement can bind.
+                    float angularStep = Math.Min(0.4f, 0.4f * meleeSpeed);
+                    StateTimer += angularStep * (Projectile.ai[2] < 0f ? -1f : 1f);
+                }
                 wanted = target.Center + OrbitOffset(target, StateTimer);
                 Vector2 delta = wanted - Projectile.Center;
-                Projectile.velocity = delta.SafeNormalize(Vector2.Zero) * Math.Min(12f * meleeSpeed, delta.Length());
+                Projectile.velocity = delta.SafeNormalize(Vector2.Zero) * Math.Min(32f * meleeSpeed, delta.Length());
                 // Clients predict only the visible growing chain. NPC binding
                 // remains strictly server-owned.
                 TrackWinding(target);
@@ -296,7 +301,7 @@ namespace FrostMelee.Content.Projectiles
             writer.Write((short)orbitTarget);
             writer.Write(orbitType);
             writer.Write(yankRequest);
-            writer.Write(lassoHeld);
+            writer.Write(lassoActive);
         }
 
         public override void ReceiveExtraAI(BinaryReader reader)
@@ -304,13 +309,13 @@ namespace FrostMelee.Content.Projectiles
             int target = reader.ReadInt16();
             int type = reader.ReadInt32();
             uint request = reader.ReadUInt32();
-            bool held = reader.ReadBoolean();
+            bool active = reader.ReadBoolean();
             if (IsAuthority)
                 return;
             orbitTarget = target >= 0 && target < Main.maxNPCs ? target : -1;
             orbitType = type;
             yankRequest = request;
-            lassoHeld = held;
+            lassoActive = active;
         }
 
         private void DrawLasso(Texture2D chain, Vector2 hand, NPC npc, bool bound)

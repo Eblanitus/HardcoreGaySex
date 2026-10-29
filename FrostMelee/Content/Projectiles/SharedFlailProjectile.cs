@@ -64,7 +64,10 @@ namespace FrostMelee.Content.Projectiles
                 return;
             Projectile.ai[0] = (float)next;
             if (next == FlailMode.Return)
+            {
+                lassoActive = false;
                 Projectile.velocity *= 0.3f; // ExampleMod's retraction brakes the outward throw first.
+            }
             StateTimer = 0f;
             Projectile.ResetLocalNPCHitImmunity();
             Projectile.netUpdate = true;
