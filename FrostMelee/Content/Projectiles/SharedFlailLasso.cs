@@ -14,8 +14,6 @@ namespace FrostMelee.Content.Projectiles
     {
         private int orbitTarget = -1;
         private int orbitType;
-        private uint yankRequest;
-        private uint handledYank;
         private bool lassoActive;
         public bool LassoInProgress => Mode == FlailMode.LassoCast || Mode == FlailMode.Wrap;
         private bool hadBinding;
@@ -78,7 +76,7 @@ namespace FrostMelee.Content.Projectiles
                 && Collision.CanHitLine(npc.Center, 1, 1, Projectile.Center, 1, 1);
         }
 
-        // Called before the base drop-click handler, so yank has priority over drop.
+        // A launched lasso owns the attack until the automatic yank/return finishes.
         private bool HandleLassoInput(Player player, SharedFlailPlayer input)
         {
             bool comboPressed = input.ConsumeLassoPress();
@@ -88,11 +86,6 @@ namespace FrostMelee.Content.Projectiles
                 // button must not abort an attack that is already in progress.
                 if ((Mode == FlailMode.Wrap && OrbitNPC == null) || !input.CanControl)
                     ChangeMode(FlailMode.Return);
-                else if (comboPressed && BoundNPC() != null)
-                {
-                    yankRequest++;
-                    Projectile.netUpdate = true;
-                }
                 return true;
             }
             if ((Mode != FlailMode.Spin && Mode != FlailMode.Flight) || !comboPressed)
@@ -215,7 +208,9 @@ namespace FrostMelee.Content.Projectiles
                 hadBinding = true;
                 Projectile.Center = bound.Center + bound.GetGlobalNPC<FlailLassoNPC>().HeadOffset;
                 Projectile.velocity = Vector2.Zero;
-                if (Main.netMode != NetmodeID.MultiplayerClient && yankRequest != handledYank)
+                // Normally started in TrackWinding on the binding tick. The
+                // server can safely retry here: TryYank is guarded by Yanking.
+                if (Main.netMode != NetmodeID.MultiplayerClient)
                     bound.GetGlobalNPC<FlailLassoNPC>().TryYank(bound, this);
             }
             else if (hadBinding || ++wrapTicks > 180)
@@ -243,8 +238,6 @@ namespace FrostMelee.Content.Projectiles
                 // remains strictly server-owned.
                 TrackWinding(target);
             }
-            if (Main.netMode != NetmodeID.MultiplayerClient)
-                handledYank = yankRequest; // No queued pre-capture yank can trigger later.
             Projectile.rotation += 0.15f;
         }
 
@@ -284,6 +277,9 @@ namespace FrostMelee.Content.Projectiles
                     {
                         hadBinding = true;
                         winding = Math.Sign(winding) * MathHelper.TwoPi;
+                        // Full physical wrap confirmed on the server: complete
+                        // the attack now, without another click or packet.
+                        target.GetGlobalNPC<FlailLassoNPC>().TryYank(target, this);
                     }
                     else
                     {
@@ -300,7 +296,6 @@ namespace FrostMelee.Content.Projectiles
         {
             writer.Write((short)orbitTarget);
             writer.Write(orbitType);
-            writer.Write(yankRequest);
             writer.Write(lassoActive);
         }
 
@@ -308,13 +303,11 @@ namespace FrostMelee.Content.Projectiles
         {
             int target = reader.ReadInt16();
             int type = reader.ReadInt32();
-            uint request = reader.ReadUInt32();
             bool active = reader.ReadBoolean();
             if (IsAuthority)
                 return;
             orbitTarget = target >= 0 && target < Main.maxNPCs ? target : -1;
             orbitType = type;
-            yankRequest = request;
             lassoActive = active;
         }
 

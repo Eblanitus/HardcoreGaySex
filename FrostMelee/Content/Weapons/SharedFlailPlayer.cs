@@ -76,7 +76,7 @@ namespace FrostMelee.Content.Weapons
             LeftHeld = CanControl && Main.mouseLeft;
             RightHeld = CanControl && Main.mouseRight;
             LeftPressed = LeftHeld && !previousLeft;
-            if (LeftPressed && (RightHeld || ActiveHead?.LassoInProgress == true))
+            if (LeftPressed && RightHeld && ActiveHead?.LassoInProgress != true)
                 pendingLassoPress = true;
             if (!CanControl)
                 pendingLassoPress = false;

@@ -102,7 +102,7 @@ namespace FrostMelee.Content.Projectiles
                     ChangeMode(FlailMode.Return);
                 else if (HandleLassoInput(player, input))
                 {
-                    // A bound-target yank takes priority over ordinary head dropping.
+                    // A latched lasso owns the attack; clicks must not drop its head.
                 }
                 else if (initialized)
                 {

@@ -66,12 +66,26 @@ class SnowballSourceContracts(unittest.TestCase):
         self.assertIn('lassoActive = true;', handler)
         self.assertNotIn('input.RightHeld', handler)
         self.assertNotIn('input.LeftHeld', handler)
-        self.assertIn('comboPressed && BoundNPC() != null', handler)
-        self.assertIn('LeftPressed && (RightHeld || ActiveHead?.LassoInProgress == true)', controls)
+        self.assertNotIn('TryYank', handler)
+        self.assertNotIn('yankRequest', lasso)
+        self.assertNotIn('handledYank', lasso)
+        self.assertIn('LeftPressed && RightHeld && ActiveHead?.LassoInProgress != true', controls)
         self.assertNotIn('if (!CanControl || !RightHeld)', controls)
         self.assertIn('!LeftHeld && !RightHeld && !pendingLassoPress', controls)
         base = source('Content/Projectiles/SharedFlailProjectile.cs')
         self.assertIn('lassoActive = false;', base)
+
+    def test_full_wrap_starts_yank_on_server_without_a_click(self):
+        lasso = source('Content/Projectiles/SharedFlailLasso.cs')
+        winding = lasso.split('private void TrackWinding', 1)[1].split('public override void SendExtraAI', 1)[0]
+        self.assertIn('Math.Abs(winding) >= MathHelper.TwoPi', winding)
+        bound = winding.split('else if (target.GetGlobalNPC<FlailLassoNPC>().TryBind(target, this))', 1)[1].split('else', 1)[0]
+        self.assertIn('TryYank(target, this)', bound)
+        self.assertNotIn('comboPressed', winding)
+        self.assertNotIn('LeftPressed', winding)
+        self.assertIn('Main.netMode == NetmodeID.MultiplayerClient', winding)
+        # TryYank itself is server-only and rejects retries after Yanking=true;
+        # covered by test_yank_is_single_server_action_with_weapon_hook.
 
     def test_quick_wrap_respects_winding_discontinuity_guard(self):
         lasso = source('Content/Projectiles/SharedFlailLasso.cs')

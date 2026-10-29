@@ -148,18 +148,18 @@ BaseSpearControlsTooltip:
 	Hold RMB: thrusts
 	RMB + LMB: throw; walk up to the spear to pick it up
 	'''
-SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. RMB + one LMB click casts along your aim and quickly wraps an enemy on its path automatically. Both buttons can be released after launch. Once bound, another LMB click yanks the target without holding RMB. Bosses and knockback-immune targets cannot be bound. Switch weapons to cancel the lasso.
+SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. RMB + one LMB click casts along your aim and quickly wraps an enemy on its path automatically. Both buttons can be released after launch. A full wrap immediately triggers an automatic yank — no second click needed. Bosses and knockback-immune targets cannot be bound. Switch weapons to cancel the lasso.
 
 LassoStatus: {
-    Casting: "Lasso v5: head cast — looking for an enemy on the flight path"
-	NoTarget: Lasso v5: hold RMB and CLICK LMB to cast along your aim
+    Casting: "Lasso v6: head cast — looking for an enemy on the flight path"
+	NoTarget: Lasso v6: hold RMB and CLICK LMB to cast along your aim
 	Ineligible: Lasso: this target cannot be bound (boss, dummy, immunity or segment)
 	Occupied: Lasso: target is already bound
 	TooShort: Lasso: not enough chain for the path and loop — move closer
 	Blocked: Lasso: obstacle blocks the wrap
 	Ready: Lasso: keep RMB held and CLICK LMB to cast and wrap
 	Wrapping: Lasso: quick automatic wrap — buttons can be released
-	Bound: Lasso: target bound — click LMB once more to yank
+	Bound: Lasso: target bound — automatic yank
 	Yanking: Lasso: yanking
 	Returning: Lasso: head returning
 	NeedSpin: Lasso: release LMB, wait for the head to return, then hold RMB
