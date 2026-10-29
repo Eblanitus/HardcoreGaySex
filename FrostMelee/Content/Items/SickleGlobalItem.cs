@@ -38,7 +38,8 @@ namespace FrostMelee.Content.Items
             if (IsSickle(item))
             {
                 // В игре предмет зовётся «Замороженное копьё», а не «Ледяная коса»
-                item.SetNameOverride(Language.GetTextValue("Mods.FrostMelee.FrozenSpearName"));
+                if (item.type == ItemID.IceSickle)
+                    item.SetNameOverride(Language.GetTextValue("Mods.FrostMelee.FrozenSpearName"));
                 item.useStyle = ItemUseStyleID.Swing;
                 item.UseSound = SoundID.Item1;
                 // shoot — любой наш снаряд, лишь бы > 0 (иначе ванилла не зовёт Shoot);
@@ -70,7 +71,8 @@ namespace FrostMelee.Content.Items
             if (!IsSickle(item) || !FrostMeleeConfigDefaults.ShowControlTooltips)
                 return;
             tooltips.Add(new TooltipLine(Mod, "SickleControls",
-                Language.GetTextValue("Mods.FrostMelee.ControlsTooltip")));
+                Language.GetTextValue(item.type == ItemID.NorthPole
+                    ? "Mods.FrostMelee.BaseSpearControlsTooltip" : "Mods.FrostMelee.ControlsTooltip")));
         }
 
         // ИНВЕНТАРЬ: короткий спрайт в слоте. В бою оружие = длинный
@@ -126,7 +128,7 @@ namespace FrostMelee.Content.Items
             if (!IsSickle(item))
                 return base.Shoot(item, player, source, position, velocity, type, damage, knockback);
 
-            if (player.itemAnimationMax <= 0)
+            if (player.whoAmI != Main.myPlayer || player.itemAnimationMax <= 0)
                 return false;
 
             int arcType = ModContent.ProjectileType<SickleArcProjectile>();
@@ -168,6 +170,7 @@ namespace FrostMelee.Content.Items
                 arc.ItemType = item.type;
                 arc.ItemScale = adjustedItemScale;
                 arc.SwingFace = player.direction >= 0 ? 1f : -1f;
+                Main.projectile[arcIndex].netUpdate = true;
             }
             return false;
         }

@@ -6,12 +6,14 @@ namespace FrostMelee.Content
     // Ледяной серп, переделанный под доктрину HardcoreMelee
     // (ФИЛОСОФИЯ.md): взмах (ЛКМ), тычки (ПКМ зажать), копьё (ПКМ тап — тумблер),
     // бросок (ПКМ+ЛКМ, серп остаётся в земле/цели, без автовозврата).
-    // Один источник правды: SicklePlayer, SickleGlobalItem, SickleUI берут отсюда.
+    // Реестр общей базы длинного оружия: SicklePlayer, SickleGlobalItem и UI.
+    // North Pole переиспользует приёмы, но не ресурс/эффекты Ice Sickle.
     public static class SickleTypes
     {
         public static readonly int[] Sickles = new int[]
         {
             ItemID.IceSickle,    // Ледяной серп
+            ItemID.NorthPole,    // Общая копейная база; без уникальной механики
         };
 
         public static bool IsSickle(Item item)

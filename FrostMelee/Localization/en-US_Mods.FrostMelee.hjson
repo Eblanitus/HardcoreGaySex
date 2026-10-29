@@ -1,16 +1,46 @@
 Items: {
+	FlinxYoyo: {
+		DisplayName: Flinx Yoyo
+		Tooltip: A fluffy yoyo; temporary vanilla-style flight
+	}
+
+	YetiYoyo: {
+		DisplayName: Yeti Foot
+		Tooltip: A heavy fur-covered yoyo; unique mechanics are not implemented yet
+	}
+
+	YetiPaw: {
+		DisplayName: Yeti Paw
+		Tooltip: Prototype crafting material for the Yeti Foot
+	}
+
+	SnowballFlail: {
+		DisplayName: Snowball
+		Tooltip: A pre-Hardmode flail; snow accumulation is not implemented yet
+	}
+
+	PolarStar: {
+		DisplayName: Polar Star
+		Tooltip: A Hardmode flail; unique mechanics are not implemented yet
+	}
+
+	SnowBoomerang: {
+		DisplayName: Snow Boomerang
+		Tooltip: A post-Golem boomerang; temporary vanilla-style flight
+	}
+
 	Aisberg: {
 		DisplayName: Aisberg
 		Tooltip: Ice chunks explode when they crack and inflict Frostbite
 	}
-
-	GlacialFlail: {
-		DisplayName: Glacial Flail
-		Tooltip: Two flails in one: a spun throw and a straight launched shot
-	}
 }
 
 Projectiles: {
+	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
+	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
+	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
+	PolarStarProjectile.DisplayName: "{$Mods.FrostMelee.Items.PolarStar.DisplayName}"
+	SnowBoomerangProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowBoomerang.DisplayName}"
 	SickleArcProjectile.DisplayName: Sickle Arc Projectile
 	SickleStabProjectile.DisplayName: Sickle Stab Projectile
 	SickleBraceProjectile.DisplayName: Sickle Brace Projectile
@@ -31,7 +61,6 @@ Projectiles: {
 	AisbergChunk.DisplayName: Aisberg Chunk
 	BoomerangHeavyProjectile.DisplayName: Boomerang Heavy Projectile
 	BoomerangLightProjectile.DisplayName: Boomerang Light Projectile
-	GlacialFlailProjectile.DisplayName: Glacial Flail
 }
 
 Stance: {
@@ -81,13 +110,6 @@ BoomerangControlsTooltip:
 	RMB (hold): charge with an aim line, release — heavy throw (slides like a puck, floats in water, go pick it up)
 	Nothing flies through walls
 	'''
-GlacialFlailControlsTooltip:
-	'''
-	LMB (hold): the boulder spins around you and gains momentum — damage and knockback grow
-	Release LMB: an arcing throw on the chain; hold LMB in flight to drop the boulder, release to reel it back
-	RMB: a straight launched shot with no gravity; from a spin it keeps some momentum and returns to spinning
-	It does not hit through walls
-	'''
 
 Configs: {
 	FrostMeleeConfig: {
@@ -113,4 +135,32 @@ Configs: {
 			Tooltip: Временная настройка для подбора длины струи Frostbrand во встрече. 100 — прежняя длина, сейчас стоит 60 — примерно на 40% короче.
 		}
 	}
+}
+
+PrototypeNotice: Prototype: temporary stats and artwork, unique mechanics pending
+NorthPolePrototypeNotice: Rework scaffold: shared spear moves, unique mechanics pending
+TreeSwordPrototypeNotice: Rework scaffold: shared sword moves, unique mechanics pending
+ThrownTooltipSpear: Spear thrown — walk up to it to pick it up
+BaseSpearControlsTooltip:
+	'''
+	LMB: circular swing
+	Tap RMB: toggle braced spear
+	Hold RMB: thrusts
+	RMB + LMB: throw; walk up to the spear to pick it up
+	'''
+SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. While holding RMB, CLICK LMB to cast the head along your aim and wrap an enemy on its path. Hovering alone does nothing. Keep RMB held; after the full wrap, another LMB click yanks the target. Bosses and knockback-immune targets cannot be bound. Release RMB to recall.
+
+LassoStatus: {
+    Casting: "Lasso v4: head cast — looking for an enemy on the flight path"
+	NoTarget: Lasso v4: hold RMB and CLICK LMB to cast along your aim
+	Ineligible: Lasso: this target cannot be bound (boss, dummy, immunity or segment)
+	Occupied: Lasso: target is already bound
+	TooShort: Lasso: not enough chain for the path and loop — move closer
+	Blocked: Lasso: obstacle blocks the wrap
+	Ready: Lasso: keep RMB held and CLICK LMB to cast and wrap
+	Wrapping: Lasso: wrapping — hold RMB for one full orbit
+	Bound: Lasso: target bound — keep RMB held and click LMB to yank
+	Yanking: Lasso: yanking
+	Returning: Lasso: head returning
+	NeedSpin: Lasso: release LMB, wait for the head to return, then hold RMB
 }
