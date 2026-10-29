@@ -40,6 +40,13 @@ Items: {
 }
 
 Projectiles: {
+	NorthPoleTrail.DisplayName: North Pole Snowflake
+	NorthPoleSnowflake.DisplayName: Growing Snowflake
+	NorthPoleShard.DisplayName: Icicle
+	NorthPolePickup.DisplayName: Blessed Snowflake
+	NorthPoleSnowCoat.DisplayName: Snow Coat
+	NorthPoleBraceSpike.DisplayName: Piercing Icicle
+
 	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
@@ -142,7 +149,6 @@ Configs: {
 }
 
 PrototypeNotice: Prototype: temporary stats and artwork, unique mechanics pending
-NorthPolePrototypeNotice: Rework scaffold: shared spear moves, unique mechanics pending
 TreeSwordPrototypeNotice: Rework scaffold: shared sword moves, unique mechanics pending
 ThrownTooltipSpear: Spear thrown — walk up to it to pick it up
 BaseSpearControlsTooltip:
@@ -177,3 +183,29 @@ SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
 
 FlailRamp: "Spin power: {0}%"
+
+Buffs: {
+	NorthPoleBlessing: {
+		DisplayName: North Pole Blessing
+		Description: Increased movement speed, life regeneration and critical hit damage
+	}
+}
+
+NorthPoleMechanicsTooltip:
+    '''
+    Successful swings grow a snowflake; full charge or two misses release it
+    On impact it bursts into icicles
+    Thrusts call snowflakes: collect them for speed, regeneration and critical damage
+    Bracing grows a piercing icicle behind the enemy; running faster makes it larger
+    Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
+    '''
+
+Configs.NorthPoleTuning: {
+	DisplayName: North Pole — provisional balance
+	GrowthHits.Label: Successful swings to full charge
+	BlessingSeconds.Label: Blessing duration (seconds)
+	MoveSpeedPercent.Label: Movement speed bonus (%)
+	RegenPerSecond.Label: Regeneration (HP/second)
+	CritDamagePercent.Label: Critical multiplier bonus (%)
+	WeakShotPercent.Label: Weak shot damage (%)
+}

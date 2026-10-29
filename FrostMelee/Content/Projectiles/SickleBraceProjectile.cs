@@ -487,6 +487,8 @@ namespace FrostMelee.Content.Projectiles
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             int braceItem = (int)Projectile.ai[2];
+            if (braceItem == ItemID.NorthPole)
+                NorthPoleEffects.BraceSpike(Projectile, target);
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }

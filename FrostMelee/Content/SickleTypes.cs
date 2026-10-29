@@ -13,7 +13,7 @@ namespace FrostMelee.Content
         public static readonly int[] Sickles = new int[]
         {
             ItemID.IceSickle,    // Ледяной серп
-            ItemID.NorthPole,    // Общая копейная база; без уникальной механики
+            ItemID.NorthPole,    // Общие приёмы + уникальные эффекты NorthPolePlayer/NorthPoleEffects
         };
 
         public static bool IsSickle(Item item)

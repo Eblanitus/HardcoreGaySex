@@ -249,6 +249,7 @@ namespace FrostMelee.Content.Projectiles
             TryPickup();
         }
 
+        private int northPoleSnowTicks;
         private void FlyingAI()
         {
             Projectile.tileCollide = true;
@@ -272,6 +273,12 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.rotation += Math.Min(speed * SpinPerSpeed, MaxSpin) * spinScale * spinDir;
 
             Projectile.friendly = !harmless && speed >= MinDamageSpeed;
+            if ((int)Projectile.ai[2] == ItemID.NorthPole && Projectile.friendly
+                && ++northPoleSnowTicks >= NorthPoleBalance.TrailInterval)
+            {
+                northPoleSnowTicks = 0;
+                NorthPoleEffects.Trail(Projectile);
+            }
 
             if (IsIce)
                 RecordFrostTrail(speed);
@@ -903,6 +910,8 @@ namespace FrostMelee.Content.Projectiles
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             int thrownItem = (int)Projectile.ai[2];
+            if (thrownItem == ItemID.NorthPole)
+                NorthPoleEffects.Coat(Projectile, target);
             if (Weapons.SwordTypes.IsSwordId(thrownItem)) {
                 if (thrownItem == ItemID.IceBlade)
                     Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(thrownItem);
