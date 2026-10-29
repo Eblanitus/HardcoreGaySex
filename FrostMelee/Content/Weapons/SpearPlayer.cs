@@ -4,62 +4,31 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Weapons
 {
-    // Приёмы копья (КОПЬЯ.md). Каркас для Северного полюса.
-    // Замороженное копьё сюда НЕ входит — у него своя система (SicklePlayer).
-    // Сейчас только состояния и входы — ванилла 1:1, механики впишем в методы приёмов.
+    // Read-only spear view of the shared controller. Do not maintain two input
+    // machines: SicklePlayer already handles timings, cancellation and projectiles.
+    // This is an extension point for future North Pole mechanics, not a second AI.
     public class SpearPlayer : ModPlayer
     {
         public enum SpearMove { None, Swing, Thrust, Meet, Throw }
 
-        public SpearMove CurrentMove = SpearMove.None;
-        public int MoveTimer;
+        public bool HoldingSpear => !Player.HeldItem.IsAir && Player.HeldItem.type == ItemID.NorthPole;
 
-        private static bool IsSpear(Item item) =>
-            item.type == ItemID.NorthPole;
-
-        public bool HoldingSpear =>
-            !Player.HeldItem.IsAir && IsSpear(Player.HeldItem);
-
-        public override void ResetEffects()
+        public SpearMove CurrentMove
         {
-            // Состояние сбрасывается здесь, приёмы выставляют своё каждый тик
-        }
-
-        public override void PreUpdate()
-        {
-            if (Player.whoAmI != Main.myPlayer)
-                return;
-            if (!HoldingSpear || Player.dead)
+            get
             {
-                CurrentMove = SpearMove.None;
-                return;
+                if (!HoldingSpear || Player.dead)
+                    return SpearMove.None;
+                var shared = Player.GetModPlayer<SicklePlayer>();
+                if (shared.HeldThrown)
+                    return SpearMove.Throw;
+                return shared.CurrentMode switch
+                {
+                    SicklePlayer.Mode.Stab => SpearMove.Thrust,
+                    SicklePlayer.Mode.Spear => SpearMove.Meet,
+                    _ => SpearMove.Swing
+                };
             }
-            // TODO(КОПЬЯ.md): разбор кнопок по приёмам (взмах/тычки/встреча/бросок).
-            // TODO: вызвать StartSwing/StartThrust/StartMeet/StartThrow по вводу.
-        }
-
-        // Взмах: круг маленького радиуса, держит толпу вплотную
-        public void StartSwing()
-        {
-            // TODO: круговой взмах
-        }
-
-        // Тычки: частые и точные, главный урон в одну цель
-        public void StartThrust()
-        {
-            // TODO: серия уколов
-        }
-
-        // Встреча: копьё выставлено, враг натыкается сам, урон от скорости сближения
-        public void StartMeet()
-        {
-            // TODO: стойка + урон от сближения
-        }
-
-        // Бросок: летит строго остриём, втыкается и остаётся, идти забирать
-        public void StartThrow()
-        {
-            // TODO: бросок копья
         }
     }
 }

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'FrostMelee/Content/WeaponCollisionMasks.Generated.cs'
 SPRITES = (
     ('IceSickle', 'FrostMelee/Items/IceSpearHeld.png'),
+    ('NorthPole', 'ReferenceSprites/FrostMelee/North_Pole.png'),
     ('IceBlade', 'FrostMelee/Items/Ice_Blade.png'),
     ('Frostbrand', 'FrostMelee/Items/Frostbrand.png'),
     ('Frozen', 'FrostMelee/Items/IceSpearFrozen.png'),
@@ -78,6 +79,7 @@ namespace FrostMelee.Content
             ? Aisberg : itemType switch
         {
             ItemID.IceSickle => IceSickle,
+            ItemID.NorthPole => NorthPole,
             ItemID.IceBlade => IceBlade,
             ItemID.Frostbrand => Frostbrand,
             ItemID.CandyCaneSword => CandyCaneSword,
