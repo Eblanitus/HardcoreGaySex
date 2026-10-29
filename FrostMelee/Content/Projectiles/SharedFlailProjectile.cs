@@ -255,10 +255,23 @@ namespace FrostMelee.Content.Projectiles
             bool hitX = oldVelocity.X != Projectile.velocity.X;
             bool hitY = oldVelocity.Y != Projectile.velocity.Y;
             bool impact = (hitX && Math.Abs(oldVelocity.X) > 4f) || (hitY && Math.Abs(oldVelocity.Y) > 4f);
-            if (Mode == FlailMode.Flight || Mode == FlailMode.Wrap || Mode == FlailMode.LassoCast)
+            if (Mode == FlailMode.Wrap)
             {
-                if (Mode == FlailMode.Wrap)
-                    lassoFailure = "Blocked";
+                // TileCollision already removed the blocked velocity component.
+                // A floor graze may slide; only a sustained full stop aborts.
+                if (Projectile.velocity.LengthSquared() <= 0.25f)
+                {
+                    if (++blockedWrapTicks >= 12)
+                    {
+                        lassoFailure = "Blocked";
+                        ChangeMode(FlailMode.Return);
+                    }
+                }
+                else
+                    blockedWrapTicks = 0;
+            }
+            else if (Mode == FlailMode.Flight || Mode == FlailMode.LassoCast)
+            {
                 // One transition to an intangible return: cannot stick to a corner.
                 ChangeMode(FlailMode.Return);
             }

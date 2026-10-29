@@ -18,6 +18,9 @@ namespace FrostMelee.Content.Projectiles
         public bool LassoInProgress => Mode == FlailMode.LassoCast || Mode == FlailMode.Wrap;
         private bool hadBinding;
         private int wrapTicks;
+        private int blockedWrapTicks;
+        private Vector2 previousTargetCenter;
+        private bool followingTarget;
         private int trackedTarget = -1;
         private float previousAngle;
         private float wrapStartAngle;
@@ -33,11 +36,17 @@ namespace FrostMelee.Content.Projectiles
             return MathHelper.Pi * (3f * (a + b) - MathF.Sqrt((3f * a + b) * (a + 3f * b)));
         }
 
+        private Vector2 OrbitCenter(NPC npc)
+        {
+            // A large head beside a short NPC otherwise already intersects the
+            // floor at the SIDE of the ellipse, before reaching its lower half.
+            float lift = Math.Max(0f, (Projectile.height - npc.height) * 0.5f + 4f);
+            return npc.Center - Vector2.UnitY * lift;
+        }
+
         private Vector2 OrbitAxes(NPC npc, float y)
         {
-            // Like the player spin, flatten the lower half so a ground enemy
-            // can be encircled without sending the head deep into the floor.
-            float lower = Math.Max(2f, npc.height * 0.5f - Projectile.height * 0.5f - 2f);
+            float lower = Math.Max(2f, npc.Bottom.Y - OrbitCenter(npc).Y - Projectile.height * 0.5f - 2f);
             return new Vector2(npc.width * 0.5f + Projectile.width * 0.5f + 4f,
                 y >= 0f ? lower : npc.height * 0.5f + Projectile.height * 0.5f + 4f);
         }
@@ -48,7 +57,31 @@ namespace FrostMelee.Content.Projectiles
             return unit * OrbitAxes(npc, unit.Y);
         }
 
-        private float TargetOrbitRadius(NPC npc) => npc.Size.Length() * 0.5f + Projectile.width * 0.5f + 4f;
+        private float TargetOrbitRadius(NPC npc)
+        {
+            Vector2 axes = OrbitAxes(npc, -1f);
+            return Math.Max(axes.X, axes.Y + npc.Center.Y - OrbitCenter(npc).Y);
+        }
+
+        private void FollowLassoTarget(NPC target)
+        {
+            if (followingTarget)
+            {
+                Vector2 movement = target.Center - previousTargetCenter;
+                // Follow target translation without counting it as angular travel.
+                // Still tile-resolved: this cannot pull the head through a wall.
+                if (movement.LengthSquared() <= 128f * 128f)
+                    Projectile.position += Collision.TileCollision(Projectile.position, movement,
+                        Projectile.width, Projectile.height, false, false);
+                else
+                {
+                    trackingAngle = false;
+                    winding = 0f; // Teleports cannot complete an orbit.
+                }
+            }
+            previousTargetCenter = target.Center;
+            followingTarget = true;
+        }
         private NPC OrbitNPC => orbitTarget >= 0 && orbitTarget < Main.maxNPCs
             && Main.npc[orbitTarget].active && Main.npc[orbitTarget].type == orbitType ? Main.npc[orbitTarget] : null;
 
@@ -68,12 +101,14 @@ namespace FrostMelee.Content.Projectiles
             if (Mode != FlailMode.Wrap || !lassoActive || !FlailLassoNPC.Eligible(npc))
                 return false;
             Player player = Main.player[Projectile.owner];
+            FlailLassoNPC binding = npc.GetGlobalNPC<FlailLassoNPC>();
+            Vector2 headCenter = binding.Matches(Projectile) ? npc.Center + binding.HeadOffset : Projectile.Center;
             return player.active && !player.dead && !player.CCed && !player.noItems
                 && player.HeldItem.type == SourceItemType
                 && Vector2.Distance(player.MountedCenter, npc.Center) + LoopLength(npc)
-                    + Vector2.Distance(npc.Center, Projectile.Center) <= ChainLength
+                    + Vector2.Distance(npc.Center, headCenter) <= ChainLength
                 && Collision.CanHitLine(player.MountedCenter, 1, 1, npc.Center, 1, 1)
-                && Collision.CanHitLine(npc.Center, 1, 1, Projectile.Center, 1, 1);
+                && Collision.CanHitLine(npc.Center, 1, 1, headCenter, 1, 1);
         }
 
         // A launched lasso owns the attack until the automatic yank/return finishes.
@@ -133,6 +168,8 @@ namespace FrostMelee.Content.Projectiles
             orbitType = chosen.type;
             ChangeMode(FlailMode.Wrap);
             StateTimer = -MathHelper.PiOver2;
+            previousTargetCenter = chosen.Center;
+            followingTarget = true;
             Projectile.velocity = Vector2.Zero;
             Projectile.netUpdate = true;
         }
@@ -195,6 +232,8 @@ namespace FrostMelee.Content.Projectiles
         {
             NPC target = OrbitNPC;
             NPC bound = BoundNPC();
+            if (Projectile.velocity.LengthSquared() > 0.25f)
+                blockedWrapTicks = 0;
             if (target == null || !FlailLassoNPC.Eligible(target)
                 || Vector2.Distance(player.MountedCenter, target.Center) + LoopLength(target) + TargetOrbitRadius(target) > ChainLength
                 || !Collision.CanHitLine(player.MountedCenter, 1, 1, target.Center, 1, 1))
@@ -220,7 +259,8 @@ namespace FrostMelee.Content.Projectiles
             }
             else
             {
-                Vector2 wanted = target.Center + OrbitOffset(target, StateTimer);
+                FollowLassoTarget(target);
+                Vector2 wanted = OrbitCenter(target) + OrbitOffset(target, StateTimer);
                 // Approach the orbit without teleportation; actual tile-resolved
                 // movement, not the desired angle, is what the server measures.
                 if (Vector2.DistanceSquared(Projectile.Center, wanted) < 8f * 8f)
@@ -231,7 +271,7 @@ namespace FrostMelee.Content.Projectiles
                     float angularStep = Math.Min(0.4f, 0.4f * meleeSpeed);
                     StateTimer += angularStep * (Projectile.ai[2] < 0f ? -1f : 1f);
                 }
-                wanted = target.Center + OrbitOffset(target, StateTimer);
+                wanted = OrbitCenter(target) + OrbitOffset(target, StateTimer);
                 Vector2 delta = wanted - Projectile.Center;
                 Projectile.velocity = delta.SafeNormalize(Vector2.Zero) * Math.Min(32f * meleeSpeed, delta.Length());
                 // Clients predict only the visible growing chain. NPC binding
@@ -243,7 +283,7 @@ namespace FrostMelee.Content.Projectiles
 
         private void TrackWinding(NPC target)
         {
-            Vector2 relative = Projectile.Center - target.Center;
+            Vector2 relative = Projectile.Center - OrbitCenter(target);
             Vector2 axes = OrbitAxes(target, relative.Y);
             Vector2 normalized = new Vector2(relative.X / axes.X, relative.Y / axes.Y);
             bool valid = CanMaintainLasso(target) && normalized.Length() >= 0.7f
@@ -309,6 +349,7 @@ namespace FrostMelee.Content.Projectiles
             orbitTarget = target >= 0 && target < Main.maxNPCs ? target : -1;
             orbitType = type;
             lassoActive = active;
+            followingTarget = false; // Incoming projectile position already includes target motion.
         }
 
         private void DrawLasso(Texture2D chain, Vector2 hand, NPC npc, bool bound)

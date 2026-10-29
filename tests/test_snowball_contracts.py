@@ -107,6 +107,44 @@ class SnowballSourceContracts(unittest.TestCase):
         self.assertIn('untilNextLink -= length;', sampler)
         self.assertIn('untilNextLink += spacing;', sampler)
 
+    def test_floor_contact_slides_instead_of_immediate_release(self):
+        base = source('Content/Projectiles/SharedFlailProjectile.cs')
+        collision = base.split('public override bool OnTileCollide', 1)[1].split('public override void OnHitNPC', 1)[0]
+        wrap = collision.split('if (Mode == FlailMode.Wrap)', 1)[1].split('else if (Mode == FlailMode.Flight', 1)[0]
+        self.assertIn('Projectile.velocity.LengthSquared() <= 0.25f', wrap)
+        self.assertIn('++blockedWrapTicks >= 12', wrap)
+        npc = source('Content/Weapons/FlailLassoNPC.cs')
+        self.assertIn('step.LengthSquared() <= 0.01f', npc)
+        self.assertNotIn('(step - wanted).LengthSquared()', npc)
+        self.assertIn('Collision.SolidCollision(npc.position + step', npc)
+
+    def test_orbit_and_winding_share_lifted_center_and_follow_target(self):
+        lasso = source('Content/Projectiles/SharedFlailLasso.cs')
+        self.assertIn('(Projectile.height - npc.height) * 0.5f + 4f', lasso)
+        self.assertIn('npc.Bottom.Y - OrbitCenter(npc).Y - Projectile.height * 0.5f - 2f', lasso)
+        self.assertIn('FollowLassoTarget(target);', lasso)
+        self.assertIn('OrbitCenter(target) + OrbitOffset(target, StateTimer)', lasso)
+        self.assertIn('Projectile.Center - OrbitCenter(target)', lasso)
+        self.assertIn('Projectile.position += Collision.TileCollision', lasso)
+        self.assertIn('binding.Matches(Projectile) ? npc.Center + binding.HeadOffset', lasso)
+
+    def test_reference_orbit_floor_clearance_for_short_targets(self):
+        # Mathematical model of the declared orbit, NOT execution of C# or tiles.
+        # Floor is y=0. The old ellipse had a 2px lower radius even when a
+        # large head centred beside a small NPC was already inside the floor.
+        import math
+        for height in (12, 16, 24, 32, 48, 96):
+            for head in (28, 36, 44):
+                center_y = -height * 0.5
+                lift = max(0, (head - height) * 0.5 + 4)
+                orbit_y = center_y - lift
+                lower = max(2, -orbit_y - head * 0.5 - 2)
+                upper = height * 0.5 + head * 0.5 + 4
+                for i in range(361):
+                    sine = math.sin(math.radians(i))
+                    bottom = orbit_y + sine * (lower if sine >= 0 else upper) + head * 0.5
+                    self.assertLessEqual(bottom, -2 + 1e-6, (height, head, i))
+
     def test_both_locales_describe_implemented_growth(self):
         for locale in ('en-US', 'ru-RU'):
             text = source(f'Localization/{locale}_Mods.FrostMelee.hjson')

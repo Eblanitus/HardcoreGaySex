@@ -52,7 +52,7 @@ namespace FrostMelee
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261029-flail-lasso-auto-yank-v6";
+        public const string BuildTag = "20261029-flail-lasso-stability-v7";
 
         public override void Load()
         {

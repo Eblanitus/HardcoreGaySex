@@ -101,7 +101,9 @@ namespace FrostMelee.Content.Weapons
                     // Short swept steps, never teleport the target through a wall.
                     Vector2 wanted = delta.SafeNormalize(Vector2.Zero) * head.LassoPullSpeed;
                     Vector2 step = Collision.TileCollision(npc.position, wanted, npc.width, npc.height, false, false);
-                    if ((step - wanted).LengthSquared() > 0.01f
+                    // The floor may cancel Y while X still pulls the target.
+                    // Do not release merely because one component was clipped.
+                    if (step.LengthSquared() <= 0.01f
                         || Collision.SolidCollision(npc.position + step, npc.width, npc.height))
                     {
                         Release(npc);
