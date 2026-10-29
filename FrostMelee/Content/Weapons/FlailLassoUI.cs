@@ -15,6 +15,17 @@ namespace FrostMelee.Content.Weapons
             Player player = Main.LocalPlayer;
             if (Main.gameMenu || !player.active || player.dead || player.HeldItem.ModItem is not PrototypeFlail)
                 return;
+            if (player.HeldItem.ModItem is SnowballFlail && FrostMeleeConfigDefaults.ShowStanceIndicator)
+            {
+                float mass = player.GetModPlayer<SnowballFlailPlayer>().Mass;
+                Vector2 bar = new Vector2(24f, Main.screenHeight - 130f);
+                Utils.DrawBorderString(spriteBatch,
+                    Language.GetTextValue("Mods.FrostMelee.SnowballMass", (int)System.Math.Round(mass * 100f)),
+                    bar, Color.LightCyan, 0.85f);
+                Texture2D pixel = Terraria.GameContent.TextureAssets.MagicPixel.Value;
+                spriteBatch.Draw(pixel, new Rectangle(24, Main.screenHeight - 106, 100, 4), Color.DarkSlateGray);
+                spriteBatch.Draw(pixel, new Rectangle(24, Main.screenHeight - 106, (int)(100f * mass), 4), Color.LightCyan);
+            }
             SharedFlailPlayer input = player.GetModPlayer<SharedFlailPlayer>();
             if (!input.CanControl || !input.RightHeld)
                 return;

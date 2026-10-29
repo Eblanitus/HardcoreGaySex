@@ -13,10 +13,11 @@ namespace FrostMelee.Content.Items.Prototypes
     public abstract class PrototypeWeapon : ModItem
     {
         public override string Texture => $"FrostMelee/Content/Items/Prototypes/{Name}";
+        protected virtual string NoticeKey => "PrototypeNotice";
 
         public override void ModifyTooltips(List<TooltipLine> tooltips)
         {
-            tooltips.Add(new TooltipLine(Mod, "Prototype", Language.GetTextValue("Mods.FrostMelee.PrototypeNotice")));
+            tooltips.Add(new TooltipLine(Mod, "Prototype", Language.GetTextValue("Mods.FrostMelee." + NoticeKey)));
         }
 
         public override bool CanUseItem(Player player) => player.ownedProjectileCounts[Item.shoot] == 0;
@@ -105,13 +106,18 @@ namespace FrostMelee.Content.Items.Prototypes
 
     public class SnowballFlail : PrototypeFlail
     {
+        protected override string NoticeKey => "PrototypeArtworkNotice";
         protected override int ProjectileType => ModContent.ProjectileType<SnowballFlailProjectile>();
         protected override int BaseDamage => 18;
         protected override int Rarity => ItemRarityID.Blue;
 
-        public override void AddRecipes() => CreateRecipe()
-            .AddIngredient(ItemID.SnowBlock, 40).AddIngredient(ItemID.IceBlock, 10)
-            .AddIngredient(ItemID.Chain, 8).AddTile(TileID.Anvils).Register();
+        public override void AddRecipes()
+        {
+            foreach (int core in new[] { ItemID.BallOHurt, ItemID.TheMeatball })
+                CreateRecipe().AddIngredient(core).AddIngredient(ItemID.SnowBlock, 50)
+                    .AddIngredient(ItemID.Gel, 20).AddTile(TileID.Anvils)
+                    .AddCondition(Condition.DownedEowOrBoc).Register();
+        }
     }
 
     // Saved GlacialFlail items resolve to the replacement instead of UnloadedItem.
@@ -123,8 +129,8 @@ namespace FrostMelee.Content.Items.Prototypes
         protected override int Rarity => ItemRarityID.Pink;
 
         public override void AddRecipes() => CreateRecipe()
-            .AddIngredient(ItemID.FallenStar, 15).AddIngredient(ItemID.FrostCore)
-            .AddIngredient(ItemID.SoulofLight, 10).AddIngredient(ItemID.Chain, 10)
+            .AddIngredient(ItemID.FrostCore).AddIngredient(ItemID.Sunfury)
+            .AddIngredient(ItemID.FallenStar, 7).AddIngredient(ItemID.MeteoriteBar, 20)
             .AddTile(TileID.MythrilAnvil).Register();
     }
 

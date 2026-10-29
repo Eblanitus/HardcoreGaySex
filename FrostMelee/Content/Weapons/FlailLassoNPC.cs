@@ -53,8 +53,9 @@ namespace FrostMelee.Content.Weapons
             npc.netUpdate = true;
             Player player = Main.player[Owner];
             // Once per binding, on the server. No separate damaging chain hitbox.
-            player.ApplyDamageToNPC(npc, head.Projectile.damage, 0f,
+            player.ApplyDamageToNPC(npc, head.LassoDamage, 0f,
                 player.Center.X < npc.Center.X ? -1 : 1, false, DamageClass.MeleeNoSpeed);
+            head.OnLassoYank(npc);
         }
 
         private SharedFlailProjectile FindHead()
@@ -98,7 +99,7 @@ namespace FrostMelee.Content.Weapons
                         return true;
                     }
                     // Short swept steps, never teleport the target through a wall.
-                    Vector2 wanted = delta.SafeNormalize(Vector2.Zero) * 12f;
+                    Vector2 wanted = delta.SafeNormalize(Vector2.Zero) * head.LassoPullSpeed;
                     Vector2 step = Collision.TileCollision(npc.position, wanted, npc.width, npc.height, false, false);
                     if ((step - wanted).LengthSquared() > 0.01f
                         || Collision.SolidCollision(npc.position + step, npc.width, npc.height))

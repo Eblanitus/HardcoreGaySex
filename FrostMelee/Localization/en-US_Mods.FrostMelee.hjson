@@ -16,7 +16,7 @@ Items: {
 
 	SnowballFlail: {
 		DisplayName: Snowball
-		Tooltip: A pre-Hardmode flail; snow accumulation is not implemented yet
+		Tooltip: "Spinning grows the snowball: up to +80% damage and −25% speed\nAbove half size, a lasso yank shatters it and slows nearby enemies"
 	}
 
 	PolarStar: {
@@ -164,3 +164,7 @@ LassoStatus: {
 	Returning: Lasso: head returning
 	NeedSpin: Lasso: release LMB, wait for the head to return, then hold RMB
 }
+
+SnowballMass: "Snowball: {0}%"
+
+PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed

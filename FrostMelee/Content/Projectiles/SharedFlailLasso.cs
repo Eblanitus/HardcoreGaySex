@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -102,7 +103,7 @@ namespace FrostMelee.Content.Projectiles
             // flight path, never from a mandatory cursor-hover precondition.
             ChangeMode(FlailMode.LassoCast);
             float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
-            Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed + player.velocity;
+            Projectile.velocity = input.Aim * player.HeldItem.shootSpeed * speed * MovementSpeedMultiplier + player.velocity;
             Projectile.netUpdate = true;
             return true;
         }
@@ -327,34 +328,53 @@ namespace FrostMelee.Content.Projectiles
             Vector2 relative = Projectile.Center - npc.Center;
             float start = bound ? new Vector2(relative.X / radius.X, relative.Y / radius.Y).ToRotation() : wrapStartAngle;
             Vector2 entry = npc.Center + start.ToRotationVector2() * radius;
-            DrawChainSegment(chain, hand, entry);
+            // One continuous path: restarting the link phase at every tiny arc
+            // segment stacks whole sprites into the thick ring seen in-game.
+            var path = new List<Vector2> { hand, entry };
             int count = Math.Max(1, (int)Math.Ceiling(Math.Abs(turn) / MathHelper.TwoPi * 32f));
-            Vector2 last = entry;
             for (int i = 1; i <= count; i++)
             {
                 float angle = start + turn * i / count;
                 Vector2 next = npc.Center + angle.ToRotationVector2() * radius;
-                DrawChainSegment(chain, last, next);
-                last = next;
+                path.Add(next);
             }
-            DrawChainSegment(chain, last, Projectile.Center);
+            path.Add(Projectile.Center);
+            DrawChainPath(chain, path);
         }
 
         private static void DrawChainSegment(Texture2D chain, Vector2 from, Vector2 to)
         {
-            Vector2 delta = to - from;
-            float length = delta.Length();
-            if (!float.IsFinite(length) || length < 0.1f)
-                return;
+            DrawChainPath(chain, new[] { from, to });
+        }
+
+        private static void DrawChainPath(Texture2D chain, IReadOnlyList<Vector2> path)
+        {
             float spacing = Math.Max(1f, chain.Height - 2f);
-            int links = Math.Min(200, (int)Math.Ceiling(length / spacing));
-            Vector2 direction = delta / length;
-            for (int i = 0; i < links; i++)
+            // Centres sit half a step into the path; keep the remaining distance
+            // across vertices instead of creating a fresh link at each vertex.
+            float untilNextLink = spacing * 0.5f;
+            int links = 0;
+            for (int segment = 1; segment < path.Count; segment++)
             {
-                Vector2 at = from + direction * (i * spacing);
-                Point tile = at.ToTileCoordinates();
-                Main.EntitySpriteDraw(chain, at - Main.screenPosition, null, Lighting.GetColor(tile.X, tile.Y),
-                    direction.ToRotation() + MathHelper.PiOver2, chain.Size() * 0.5f, 1f, SpriteEffects.None, 0f);
+                Vector2 from = path[segment - 1];
+                Vector2 delta = path[segment] - from;
+                float length = delta.Length();
+                if (!float.IsFinite(length))
+                    return;
+                if (length <= 0f)
+                    continue;
+                Vector2 direction = delta / length;
+                while (untilNextLink < length)
+                {
+                    if (++links > 200)
+                        return; // One budget for the entire path, not per arc segment.
+                    Vector2 at = from + direction * untilNextLink;
+                    Point tile = at.ToTileCoordinates();
+                    Main.EntitySpriteDraw(chain, at - Main.screenPosition, null, Lighting.GetColor(tile.X, tile.Y),
+                        direction.ToRotation() + MathHelper.PiOver2, chain.Size() * 0.5f, 1f, SpriteEffects.None, 0f);
+                    untilNextLink += spacing;
+                }
+                untilNextLink -= length;
             }
         }
     }

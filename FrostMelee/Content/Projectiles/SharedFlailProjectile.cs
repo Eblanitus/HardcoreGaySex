@@ -23,6 +23,12 @@ namespace FrostMelee.Content.Projectiles
         protected virtual float OrbitSpeed => 0.24f;
         protected virtual float ReturnSpeed => 20f;
         protected virtual float Gravity => 0.8f;
+        protected virtual float MovementSpeedMultiplier => 1f;
+
+        // Called only by the authoritative NPC restraint, once per binding.
+        public virtual int LassoDamage => Projectile.damage;
+        public virtual float LassoPullSpeed => 12f * MovementSpeedMultiplier;
+        public virtual void OnLassoYank(NPC target) { }
 
         public FlailMode Mode => Projectile.ai[0] >= 0f && Projectile.ai[0] <= (float)FlailMode.LassoCast
             ? (FlailMode)(int)Projectile.ai[0] : FlailMode.Return;
@@ -132,7 +138,7 @@ namespace FrostMelee.Content.Projectiles
 
             float meleeSpeed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
             if (Mode != FlailMode.Wrap)
-                StateTimer += Mode == FlailMode.Spin ? meleeSpeed : 1f;
+                StateTimer += Mode == FlailMode.Spin ? meleeSpeed * MovementSpeedMultiplier : 1f;
             Projectile.ownerHitCheck = Mode == FlailMode.Spin;
             Projectile.localNPCHitCooldown = Mode == FlailMode.Spin ? 20 : 10;
             Projectile.friendly = Mode != FlailMode.Return && Mode != FlailMode.Wrap && Mode != FlailMode.LassoCast;
@@ -158,13 +164,14 @@ namespace FrostMelee.Content.Projectiles
                     UpdateLassoCast(player);
                     break;
                 case FlailMode.Wrap:
-                    LassoAI(player, meleeSpeed);
+                    LassoAI(player, meleeSpeed * MovementSpeedMultiplier);
                     break;
                 case FlailMode.Flight:
                     Projectile.rotation += 0.25f;
                     break;
                 case FlailMode.Drop:
-                    Projectile.velocity.Y = MathHelper.Clamp(Projectile.velocity.Y + Gravity * player.gravDir, -12f, 12f);
+                    Projectile.velocity.Y = MathHelper.Clamp(Projectile.velocity.Y + Gravity * player.gravDir * MovementSpeedMultiplier,
+                        -12f * MovementSpeedMultiplier, 12f * MovementSpeedMultiplier);
                     Projectile.velocity.X *= 0.96f;
                     if (Math.Abs(Projectile.velocity.X) < 0.05f)
                         Projectile.velocity.X = 0f;
@@ -173,9 +180,9 @@ namespace FrostMelee.Content.Projectiles
                 default:
                     Vector2 delta = player.MountedCenter - Projectile.Center;
                     float distance = delta.Length();
-                    float returnSpeed = ReturnSpeed * meleeSpeed;
+                    float returnSpeed = ReturnSpeed * meleeSpeed * MovementSpeedMultiplier;
                     Vector2 targetVelocity = player.velocity + delta.SafeNormalize(Vector2.Zero) * returnSpeed;
-                    Projectile.velocity = Projectile.velocity.MoveTowards(targetVelocity, 6f * meleeSpeed);
+                    Projectile.velocity = Projectile.velocity.MoveTowards(targetVelocity, 6f * meleeSpeed * MovementSpeedMultiplier);
                     // Catch using relative motion, not just a fixed radius. This also
                     // catches fast heads crossing a moving player between two ticks.
                     Vector2 step = Projectile.velocity - player.velocity;

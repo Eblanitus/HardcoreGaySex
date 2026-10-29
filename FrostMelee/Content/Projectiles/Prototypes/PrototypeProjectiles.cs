@@ -51,12 +51,6 @@ namespace FrostMelee.Content.Projectiles.Prototypes
         public override string Texture => $"FrostMelee/Content/Items/Prototypes/{SpriteName}";
     }
 
-    public class SnowballFlailProjectile : PrototypeFlailProjectile
-    {
-        protected override string SpriteName => "SnowballFlail";
-        public override int SourceItemType => ModContent.ItemType<global::FrostMelee.Content.Items.Prototypes.SnowballFlail>();
-    }
-
     public class PolarStarProjectile : PrototypeFlailProjectile
     {
         protected override string SpriteName => "PolarStar";
