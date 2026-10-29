@@ -16,7 +16,11 @@ Items: {
 
 	SnowballFlail: {
 		DisplayName: Snowball
-		Tooltip: "Spinning grows the snowball: up to +80% damage and −25% speed\nAbove half size, a lasso yank shatters it and slows nearby enemies"
+		Tooltip:
+			'''
+			Spinning grows the snowball: up to +80% damage and −25% speed
+			Above half size, a lasso yank shatters it and slows nearby enemies
+			'''
 	}
 
 	PolarStar: {
@@ -151,7 +155,7 @@ BaseSpearControlsTooltip:
 SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. RMB + one LMB click casts along your aim and quickly wraps an enemy on its path automatically. Both buttons can be released after launch. A full wrap immediately triggers an automatic yank — no second click needed. Bosses and knockback-immune targets cannot be bound. Switch weapons to cancel the lasso.
 
 LassoStatus: {
-    Casting: "Lasso v6: head cast — looking for an enemy on the flight path"
+	Casting: Lasso v6: head cast — looking for an enemy on the flight path
 	NoTarget: Lasso v6: hold RMB and CLICK LMB to cast along your aim
 	Ineligible: Lasso: this target cannot be bound (boss, dummy, immunity or segment)
 	Occupied: Lasso: target is already bound
@@ -165,6 +169,5 @@ LassoStatus: {
 	NeedSpin: Lasso: release LMB, wait for the head to return, then hold RMB
 }
 
-SnowballMass: "Snowball: {0}%"
-
+SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
