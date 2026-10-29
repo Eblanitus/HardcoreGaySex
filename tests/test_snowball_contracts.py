@@ -79,8 +79,28 @@ class FlailControllerContracts(unittest.TestCase):
         self.assertIn('damagePath[i - 1], damagePath[i]', self.base)
         self.assertIn('bool lengthLimited', self.base)
 
+    def test_spin_ignores_tiles_but_retains_hit_visibility_check(self):
+        frame = self.base.split('private void SpinFrame', 1)[1].split('private void Spin(', 1)[0]
+        spin = self.base.split('private void Spin(Player player)', 1)[1].split('private bool MoveHead', 1)[0]
+        for blocked in ('Collision.', 'GroundedAt(', 'floorProbe', 'MoveHead(wanted'):
+            self.assertNotIn(blocked, frame + spin)
+        self.assertIn('Projectile.Center = wanted;', spin)
+        self.assertIn('damagePath.Add(wanted);', spin)
+        self.assertIn('Projectile.ownerHitCheck = Mode == FlailMode.Spin;', self.base)
+        self.assertIn('Projectile.tileCollide = false;', self.base)
+        solver = self.base.split('private bool MoveHead', 1)[1].split('private void Return', 1)[0]
+        self.assertIn('Collision.TileCollision', solver)
+        self.assertIn('Collision.SolidCollision', solver)
+        self.assertIn('MoveHead(LoopPoint(target, angle)', self.lasso)
+
+    def test_cast_starts_at_player_not_inside_spinning_head_terrain(self):
+        launch = self.base.split('private void Launch', 1)[1].split('private void SpinFrame', 1)[0]
+        self.assertIn('Projectile.Center = player.MountedCenter', launch)
+        self.assertIn('damagePath.Clear();', launch)
+        self.assertIn('damagePath.Add(Projectile.Center);', launch)
+
     def test_platform_support_and_slot_changes_are_checked(self):
-        self.assertIn('GroundedAt(player.gravDir > 0 ? player.Bottom : player.Top, player.gravDir)', self.base)
+        self.assertNotIn('GroundedAt(player.gravDir > 0 ? player.Bottom : player.Top, player.gravDir)', self.base)
         self.assertIn('GroundedAt(target.Bottom, 1f)', self.lasso)
         self.assertIn('&& StillHeld(Main.player[Projectile.owner])', self.lasso)
         self.assertIn('ReferenceEquals(boundItem, player.HeldItem)', self.base)

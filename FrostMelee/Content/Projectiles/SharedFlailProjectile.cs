@@ -49,8 +49,8 @@ namespace FrostMelee.Content.Projectiles
             Projectile.DamageType = DamageClass.MeleeNoSpeed;
             Projectile.penetrate = -1;
             Projectile.ignoreWater = true;
-            // All states share the same swept movement solver, not engine
-            // movement plus a second, conflicting radial-position correction.
+            // Engine tile movement is disabled. Spin is purely kinematic;
+            // throws/lasso use our swept tile solver, Return ignores tiles.
             Projectile.tileCollide = false;
             Projectile.usesLocalNPCImmunity = true;
             Projectile.localNPCHitCooldown = 10;
@@ -201,6 +201,14 @@ namespace FrostMelee.Content.Projectiles
         {
             float speed = MathHelper.Clamp(player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
             facing = aim.X < 0 ? -1 : 1;
+            // A spinning head can be inside terrain. Launch from the player,
+            // as vanilla does, never from that embedded point of the spin arc.
+            float footRoom = player.gravDir > 0 ? player.Bottom.Y - player.MountedCenter.Y
+                : player.MountedCenter.Y - player.Top.Y;
+            float lift = Math.Max(0, Projectile.height * 0.5f + 2f - footRoom);
+            Projectile.Center = player.MountedCenter - Vector2.UnitY * lift * player.gravDir;
+            damagePath.Clear();
+            damagePath.Add(Projectile.Center);
             Projectile.velocity = aim * player.HeldItem.shootSpeed * speed * MovementSpeedMultiplier + player.velocity;
         }
 
@@ -211,15 +219,6 @@ namespace FrostMelee.Content.Projectiles
             upper = x * 0.8f;
             lower = upper * 0.5f;
             anchor = player.MountedCenter + Vector2.UnitY * player.gfxOffY;
-            Vector2 floorProbe = anchor + Vector2.UnitY * lower * player.gravDir;
-            if (Collision.SolidCollision(floorProbe - Projectile.Size * 0.5f, Projectile.width, Projectile.height)
-                || GroundedAt(player.gravDir > 0 ? player.Bottom : player.Top, player.gravDir))
-            {
-                float footRoom = player.gravDir > 0 ? player.Bottom.Y - anchor.Y : anchor.Y - player.Top.Y;
-                float lift = Math.Max(0, Projectile.height * 0.5f + 4f - footRoom);
-                anchor.Y -= lift * player.gravDir;
-                lower = Math.Max(2f, Math.Min(lower, footRoom + lift - Projectile.height * 0.5f - 2f));
-            }
         }
 
         private void Spin(Player player)
@@ -235,7 +234,10 @@ namespace FrostMelee.Content.Projectiles
                 Vector2 unit = angle.ToRotationVector2();
                 float vertical = unit.Y * player.gravDir > 0 ? lower : upper;
                 Vector2 wanted = anchor + new Vector2(unit.X * x, unit.Y * vertical);
-                if (!MoveHead(wanted, true)) break;
+                // Vanilla spin is kinematic and ignores tiles. Keep the arc
+                // samples for physical-head hits, NOT for terrain collision.
+                Projectile.Center = wanted;
+                damagePath.Add(wanted);
                 Phase = MathHelper.WrapAngle(angle);
                 SpinningThisTick = true;
             }
@@ -243,7 +245,8 @@ namespace FrostMelee.Content.Projectiles
             Projectile.rotation = Phase;
         }
 
-        // Swept head motion in <=4px steps, shared by spin, throw and wrapping.
+        // Tile-resolved motion in <=4px steps for throws and lasso only.
+        // Ordinary Spin intentionally bypasses this solver, like vanilla.
         // Never test a radial ray from the player or teleport through a corner.
         private bool MoveHead(Vector2 wanted, bool recordDamage)
         {
