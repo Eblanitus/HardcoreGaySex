@@ -19,13 +19,51 @@ namespace FrostMelee
     public class FrostMelee : Mod
     {
         internal const byte FrostSyncMessage = 1;
+        internal const byte FlailInputMessage = 2;
+        internal const byte SnowballMassMessage = 3;
+        internal const byte FlailShatterMessage = 4;
+        internal const byte FlailFailureMessage = 5;
 
         public override void HandlePacket(BinaryReader reader, int whoAmI)
         {
-            // This protocol has one fixed-size message (type + player + float).
-            if (reader.BaseStream.Length - reader.BaseStream.Position != 6)
-                return;
+            long length = reader.BaseStream.Length - reader.BaseStream.Position;
+            if (length < 1) return;
             byte message = reader.ReadByte();
+            if (message == FlailInputMessage)
+            {
+                if (length == 19 && Main.netMode == NetmodeID.Server && whoAmI >= 0 && whoAmI < Main.maxPlayers)
+                    Main.player[whoAmI].GetModPlayer<Content.Weapons.SharedFlailPlayer>().ReceiveInput(reader);
+                return;
+            }
+            if (message == SnowballMassMessage)
+            {
+                if (length == 3 && Main.netMode == NetmodeID.MultiplayerClient)
+                {
+                    int owner = reader.ReadByte();
+                    int ticks = reader.ReadByte();
+                    if (owner < Main.maxPlayers)
+                        Main.player[owner].GetModPlayer<Content.Weapons.SnowballFlailPlayer>().ReceiveGrowth(ticks);
+                }
+                return;
+            }
+            if (message == FlailShatterMessage)
+            {
+                if (length == 9 && Main.netMode == NetmodeID.MultiplayerClient)
+                {
+                    float x = reader.ReadSingle(), y = reader.ReadSingle();
+                    if (float.IsFinite(x) && float.IsFinite(y))
+                        Content.Projectiles.Prototypes.SnowballFlailProjectile.ShatterFx(new Microsoft.Xna.Framework.Vector2(x, y));
+                }
+                return;
+            }
+            if (message == FlailFailureMessage)
+            {
+                if (length == 2 && Main.netMode == NetmodeID.MultiplayerClient)
+                    Main.LocalPlayer.GetModPlayer<Content.Weapons.SharedFlailPlayer>().ReportFailure(
+                        Content.Projectiles.SharedFlailProjectile.FailureName(reader.ReadByte()));
+                return;
+            }
+            if (length != 6) return;
             if (message != FrostSyncMessage)
             {
                 Logger.Warn($"Unknown FrostMelee packet: {message}");
@@ -52,7 +90,7 @@ namespace FrostMelee
 
         // Отпечаток сборки: пишется в client.log при каждой загрузке мода.
         // По нему видно, дошли ли правки до игры: сверяй тег с последним коммитом.
-        public const string BuildTag = "20261029-flail-lasso-stability-v7";
+        public const string BuildTag = "20261029-flail-controller-v8";
 
         public override void Load()
         {

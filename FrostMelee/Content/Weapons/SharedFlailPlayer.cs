@@ -1,6 +1,6 @@
+using System.IO;
 using Microsoft.Xna.Framework;
 using Terraria;
-using Terraria.Audio;
 using Terraria.ID;
 using Terraria.ModLoader;
 using FrostMelee.Content.Items.Prototypes;
@@ -8,109 +8,146 @@ using FrostMelee.Content.Projectiles;
 
 namespace FrostMelee.Content.Weapons
 {
-    // One input owner for Snowball and Polar Star. The item never fires
-    // through vanilla Shoot as well. Polar Star replaces the retired GlacialFlail; there is no second controller.
+    // Clients send input, not projectile state. Only the server/SP creates heads.
     public class SharedFlailPlayer : ModPlayer
     {
         public const int RepeatDelay = 10;
+        public bool CanContinueAttack => Player.active && !Player.dead && !Player.ghost
+            && !Player.noItems && !Player.CCed && Player.HeldItem.ModItem is PrototypeFlail;
         public bool CanControl { get; private set; }
         public bool LeftHeld { get; private set; }
         public bool RightHeld { get; private set; }
-        public bool LeftPressed { get; private set; }
-        public Vector2 AimWorld { get; private set; }
         public Vector2 Aim { get; private set; } = Vector2.UnitX;
+        public Vector2 AimWorld => Player.MountedCenter + Aim * 240f;
+        private bool previousLeft, pendingLassoPress;
+        private int repeatCooldown, sendTicks, inputAge, inputSlot = -1, inputItem;
+        private uint sequence, receivedSequence;
+        private bool receivedInput;
 
-        private bool previousLeft;
-        private bool pendingLassoPress;
+        public SharedFlailProjectile ActiveHead
+        {
+            get
+            {
+                for (int i = 0; i < Main.maxProjectiles; i++)
+                {
+                    Projectile p = Main.projectile[i];
+                    if (p.active && p.owner == Player.whoAmI && p.ModProjectile is SharedFlailProjectile head)
+                        return head;
+                }
+                return null;
+            }
+        }
+
+        public string LastFailure { get; private set; } = "Returning";
+        public int FailureDisplayTicks { get; private set; }
+        public void ReportFailure(string reason) { LastFailure = reason; FailureDisplayTicks = 180; }
 
         public bool ConsumeLassoPress()
         {
-            bool pressed = pendingLassoPress;
+            bool result = pendingLassoPress;
             pendingLassoPress = false;
-            return pressed;
-        }
-        private int repeatCooldown;
-        private int activeIndex = -1;
-
-        private bool IsActiveFlail(int index) => index >= 0 && index < Main.maxProjectiles
-            && Main.projectile[index].active && Main.projectile[index].owner == Player.whoAmI
-            && Main.projectile[index].ModProjectile is SharedFlailProjectile;
-
-        public SharedFlailProjectile ActiveHead => IsActiveFlail(activeIndex)
-            ? Main.projectile[activeIndex].ModProjectile as SharedFlailProjectile : null;
-
-        private bool HasActiveFlail()
-        {
-            if (IsActiveFlail(activeIndex))
-                return true;
-            activeIndex = -1;
-            for (int i = 0; i < Main.maxProjectiles; i++)
-            {
-                if (!IsActiveFlail(i))
-                    continue;
-                activeIndex = i;
-                return true;
-            }
-            return false;
+            return result;
         }
 
         public override void SetControls()
         {
-            // RMB is a weapon input here, not open-door/chest/smart-interact input.
             if (Player.whoAmI == Main.myPlayer && Player.HeldItem.ModItem is PrototypeFlail
-                && Main.mouseRight && !Player.mouseInterface && !Main.drawingPlayerChat
-                && !Main.blockMouse && !Main.mapFullscreen)
+                && Main.mouseRight && !Player.mouseInterface && !Main.drawingPlayerChat && !Main.blockMouse && !Main.mapFullscreen)
                 Player.controlUseTile = false;
         }
 
-        // Run after vanilla has refreshed noItems/CC and processed normal item use.
         public override void PostUpdate()
         {
-            if (Player.whoAmI != Main.myPlayer)
-                return;
-
-            bool blocked = Player.mouseInterface || Main.drawingPlayerChat || Main.blockMouse
-                || Main.mapFullscreen || Main.gamePaused;
-            CanControl = Player.active && !Player.dead && !Player.ghost && !Player.noItems && !Player.CCed
-                && Player.HeldItem.ModItem is PrototypeFlail && !blocked;
-            LeftHeld = CanControl && Main.mouseLeft;
-            RightHeld = CanControl && Main.mouseRight;
-            LeftPressed = LeftHeld && !previousLeft;
-            if (LeftPressed && RightHeld && ActiveHead?.LassoInProgress != true)
-                pendingLassoPress = true;
-            if (!CanControl)
-                pendingLassoPress = false;
-            previousLeft = Main.mouseLeft; // UI suppression must not manufacture a new click.
-
-            if (!CanControl)
+            if (FailureDisplayTicks > 0) FailureDisplayTicks--;
+            if (Player.whoAmI == Main.myPlayer)
             {
-                repeatCooldown = 0;
-                return; // The active head sees CanControl=false and returns.
+                bool allowed = CanContinueAttack && !Player.mouseInterface && !Main.drawingPlayerChat
+                    && !Main.blockMouse && !Main.mapFullscreen && !Main.gamePaused;
+                bool left = allowed && Main.mouseLeft, right = allowed && Main.mouseRight;
+                bool cast = right && left && !previousLeft && ActiveHead?.LassoInProgress != true;
+                previousLeft = Main.mouseLeft; // Leaving UI cannot manufacture a press.
+                Vector2 aim = (Main.MouseWorld - Player.MountedCenter).SafeNormalize(new Vector2(Player.direction, 0f));
+                if (inputSlot != Player.selectedItem || inputItem != Player.HeldItem.type) pendingLassoPress = false;
+                bool changed = left != LeftHeld || right != RightHeld || cast || allowed != CanControl
+                    || inputSlot != Player.selectedItem || inputItem != Player.HeldItem.type;
+                CanControl = allowed;
+                LeftHeld = left;
+                RightHeld = right;
+                Aim = aim;
+                inputSlot = Player.selectedItem;
+                inputItem = Player.HeldItem.type;
+                if (Main.netMode == NetmodeID.MultiplayerClient)
+                {
+                    if (changed || (++sendTicks >= 6 && Player.HeldItem.ModItem is PrototypeFlail))
+                    {
+                        sendTicks = 0;
+                        ModPacket packet = Mod.GetPacket();
+                        packet.Write(global::FrostMelee.FrostMelee.FlailInputMessage);
+                        packet.Write(++sequence);
+                        packet.Write((byte)((left ? 1 : 0) | (right ? 2 : 0) | (cast ? 4 : 0) | (allowed ? 8 : 0)));
+                        packet.Write((byte)inputSlot);
+                        packet.Write(inputItem);
+                        packet.Write(aim.X);
+                        packet.Write(aim.Y);
+                        packet.Send();
+                    }
+                    return;
+                }
+                if (!allowed) pendingLassoPress = false;
+                if (cast) pendingLassoPress = true;
             }
-
-            AimWorld = Main.MouseWorld;
-            Aim = (AimWorld - Player.MountedCenter).SafeNormalize(new Vector2(Player.direction, 0f));
-            if (HasActiveFlail())
+            if (Main.netMode == NetmodeID.MultiplayerClient)
+                return;
+            if (Main.netMode == NetmodeID.Server && ++inputAge > 60)
+            {
+                LeftHeld = RightHeld = CanControl = false;
+                pendingLassoPress = false;
+            }
+            if (!CanContinueAttack || inputSlot != Player.selectedItem || inputItem != Player.HeldItem.type)
+            {
+                LeftHeld = RightHeld = CanControl = false;
+                pendingLassoPress = false;
+            }
+            SharedFlailProjectile active = ActiveHead;
+            if (active != null)
             {
                 repeatCooldown = RepeatDelay;
-                return; // Existing heads consume click edges; never spawn a second head.
-            }
-            if (repeatCooldown > 0)
-                repeatCooldown--;
-            if (repeatCooldown > 0 || (!LeftHeld && !RightHeld && !pendingLassoPress))
                 return;
-
+            }
+            if (repeatCooldown > 0) repeatCooldown--;
+            if (!CanControl || repeatCooldown > 0 || (!LeftHeld && !RightHeld && !pendingLassoPress))
+                return;
             Item held = Player.HeldItem;
             var mode = RightHeld || pendingLassoPress ? SharedFlailProjectile.FlailMode.Spin : SharedFlailProjectile.FlailMode.Flight;
-            float meleeSpeed = MathHelper.Clamp(Player.GetTotalAttackSpeed(DamageClass.Melee), 0.1f, 10f);
-            Vector2 velocity = mode == SharedFlailProjectile.FlailMode.Flight
-                ? Aim * held.shootSpeed * meleeSpeed + Player.velocity : Vector2.Zero;
-            activeIndex = Projectile.NewProjectile(Player.GetSource_ItemUse(held), Player.MountedCenter,
-                velocity, held.shoot, Player.GetWeaponDamage(held), Player.GetWeaponKnockback(held),
-                Player.whoAmI, (float)mode, 0f, Aim.X >= 0f ? 1f : -1f);
-            if (IsActiveFlail(activeIndex))
-                SoundEngine.PlaySound(SoundID.Item1, Player.Center);
+            Projectile.NewProjectile(Player.GetSource_ItemUse(held), Player.MountedCenter, Vector2.Zero,
+                held.shoot, Player.GetWeaponDamage(held), Player.GetWeaponKnockback(held), Player.whoAmI, (float)mode);
             repeatCooldown = RepeatDelay;
+        }
+
+        public void ReceiveInput(BinaryReader reader)
+        {
+            uint serial = reader.ReadUInt32();
+            byte flags = reader.ReadByte();
+            int slot = reader.ReadByte(), item = reader.ReadInt32();
+            Vector2 aim = new Vector2(reader.ReadSingle(), reader.ReadSingle());
+            if (Main.netMode != NetmodeID.Server || !Player.active || (flags & ~15) != 0
+                || slot >= Player.inventory.Length || !float.IsFinite(aim.X) || !float.IsFinite(aim.Y)
+                || aim.LengthSquared() < 0.25f || aim.LengthSquared() > 4f
+                || (receivedInput && unchecked((int)(serial - receivedSequence)) <= 0))
+                return;
+            receivedInput = true;
+            receivedSequence = serial;
+            inputAge = 0;
+            if (inputSlot != slot || inputItem != item) pendingLassoPress = false;
+            inputSlot = slot;
+            inputItem = item;
+            CanControl = (flags & 8) != 0;
+            if (!CanControl) pendingLassoPress = false;
+            LeftHeld = CanControl && (flags & 1) != 0;
+            RightHeld = CanControl && (flags & 2) != 0;
+            Aim = Vector2.Normalize(aim);
+            if (CanControl && LeftHeld && RightHeld && (flags & 4) != 0 && ActiveHead?.LassoInProgress != true)
+                pendingLassoPress = true;
         }
     }
 }

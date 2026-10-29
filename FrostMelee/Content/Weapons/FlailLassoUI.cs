@@ -27,9 +27,19 @@ namespace FrostMelee.Content.Weapons
                 spriteBatch.Draw(pixel, new Rectangle(24, Main.screenHeight - 106, (int)(100f * mass), 4), Color.LightCyan);
             }
             SharedFlailPlayer input = player.GetModPlayer<SharedFlailPlayer>();
-            if (!input.CanControl || (!input.RightHeld && input.ActiveHead?.LassoInProgress != true))
+            var head = input.ActiveHead;
+            if (head?.Mode == Projectiles.SharedFlailProjectile.FlailMode.Spin && FrostMeleeConfigDefaults.ShowStanceIndicator)
+                Utils.DrawBorderString(spriteBatch, Language.GetTextValue("Mods.FrostMelee.FlailRamp",
+                    (int)System.Math.Round(head.RampTicks / 90f * 100f)), new Vector2(24f, Main.screenHeight - 155f), Color.LightGray, 0.8f);
+            if (head == null && input.FailureDisplayTicks > 0)
+            {
+                Utils.DrawBorderString(spriteBatch, Language.GetTextValue("Mods.FrostMelee.LassoStatus." + input.LastFailure),
+                    new Vector2(24f, Main.screenHeight - 100f), Color.Orange, 0.85f);
                 return;
-            string key = input.ActiveHead?.LassoHint(player, input.AimWorld) ?? "NoTarget";
+            }
+            if (!input.RightHeld && input.ActiveHead?.LassoInProgress != true && input.ActiveHead?.Mode != Projectiles.SharedFlailProjectile.FlailMode.Return)
+                return;
+            string key = input.ActiveHead?.LassoHint(player, Main.MouseWorld) ?? "NoTarget";
             Color color = key == "Bound" ? Color.LightGreen
                 : key == "Casting" || key == "Wrapping" || key == "Yanking" ? Color.Gold : Color.LightGray;
             Vector2 position = new Vector2(24f, Main.screenHeight - 100f);

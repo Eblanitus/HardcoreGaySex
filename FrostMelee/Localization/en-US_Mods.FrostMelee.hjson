@@ -152,11 +152,15 @@ BaseSpearControlsTooltip:
 	Hold RMB: thrusts
 	RMB + LMB: throw; walk up to the spear to pick it up
 	'''
-SharedFlailControlsTooltip: LMB: straight throw; hold to repeat. RMB: spin. RMB + one LMB click casts along your aim and quickly wraps an enemy on its path automatically. Both buttons can be released after launch. A full wrap immediately triggers an automatic yank — no second click needed. Bosses and knockback-immune targets cannot be bound. Switch weapons to cancel the lasso.
+SharedFlailControlsTooltip: LMB: piercing throw, stronger up close; hold to repeat. RMB: spin with a 1.5-second wind-up. No head drop. RMB + one LMB click casts along your aim and quickly wraps an enemy on its path automatically. Both buttons can be released after launch. A full wrap immediately triggers an automatic yank — no second click needed. Bosses and knockback-immune targets cannot be bound. Switch weapons to cancel the lasso.
 
 LassoStatus: {
-	Casting: Lasso v6: head cast — looking for an enemy on the flight path
-	NoTarget: Lasso v6: hold RMB and CLICK LMB to cast along your aim
+    Approaching: Lasso: approaching the target orbit
+    Interrupted: Lasso: cancelled by weapon switch or incapacitation
+    LostTarget: Lasso: target lost
+    Timeout: Lasso: attempt timed out
+	Casting: Lasso v8: head cast — looking for an enemy on the flight path
+	NoTarget: Lasso v8: hold RMB and CLICK LMB to cast along your aim
 	Ineligible: Lasso: this target cannot be bound (boss, dummy, immunity or segment)
 	Occupied: Lasso: target is already bound
 	TooShort: Lasso: not enough chain for the path and loop — move closer
@@ -171,3 +175,5 @@ LassoStatus: {
 
 SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
+
+FlailRamp: "Spin power: {0}%"
