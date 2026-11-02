@@ -214,7 +214,7 @@ LassoStatus: {
 
 SnowballMass: Снежный ком: {0}%
 PrototypeArtworkNotice: Механика реализована; характеристики и графика предварительные, нужны игровые тесты
-FlailRamp: "Разгон: {0}%"
+FlailRamp: Разгон: {0}%
 
 Buffs: {
 	NorthPoleBlessing: {

@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Локализацию tModLoader переписывает сам при сборке и пишет с CRLF.
+# В рабочей копии держим тот же перевод строк, чтобы сборка не давала лишних изменений.
+*.hjson text eol=crlf
+
+# Картинки и сборки никогда не сливаются построчно
+*.png binary
+*.tmod binary
