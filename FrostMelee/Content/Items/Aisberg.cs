@@ -10,6 +10,9 @@ namespace FrostMelee.Content.Items
     // при расколе взрываются и дают Frostbite (AisbergChunk).
     public class Aisberg : ModItem
     {
+        // Спрайт меча — Iceberg.png (02.11.2026). Старый Aisberg.png не используется.
+        public override string Texture => "FrostMelee/Content/Items/Iceberg";
+
         public override void SetStaticDefaults()
         {
             Weapons.SwordTypes.AisbergType = Type;
@@ -23,8 +26,8 @@ namespace FrostMelee.Content.Items
 
             Item.damage = 165;
             Item.DamageType = DamageClass.Melee;
-            Item.width = 64;
-            Item.height = 64;
+            Item.width = 70;
+            Item.height = 76;
             Item.useStyle = ItemUseStyleID.Swing;
             Item.useTime = 34;
             Item.useAnimation = 34;
