@@ -157,6 +157,26 @@ class NorthPoleVisualContracts(unittest.TestCase):
         self.assertIn('ModContent.RequestIfExists', self.effects)
 
 
+class NorthPoleEffectStyleContracts(unittest.TestCase):
+    def test_shared_moves_switch_to_aurora_style_only_for_north_pole(self):
+        arc = read('Content/Projectiles/SickleArcProjectile.cs')
+        stab = read('Content/Projectiles/SickleStabProjectile.cs')
+        brace = read('Content/Projectiles/SickleBraceProjectile.cs')
+        self.assertIn('if (ItemType == ItemID.NorthPole)\n            {\n                NorthPoleFx.Palette(out core, out tail, out edge);', arc)
+        self.assertIn('NorthPoleFx.Curtain(', arc)
+        self.assertIn('NorthPoleFx.ShakeSnow(pos', arc)
+        self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
+        self.assertIn('DrawSkyCall(', stab)
+        self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
+
+    def test_vertex_ribbons_reopen_the_sprite_batch(self):
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        fx = effects.split('internal static class NorthPoleFx', 1)[1]
+        self.assertIn('Main.spriteBatch.End();', fx)
+        self.assertIn('finally', fx)
+        self.assertIn('FlameRibbon.Draw(device, pts, widths, colors, n);', fx)
+
+
 class NorthPoleReferenceModels(unittest.TestCase):
     """Independent models of the stated rules, not execution of Terraria/C#."""
     @staticmethod

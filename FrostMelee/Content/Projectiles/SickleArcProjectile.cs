@@ -511,6 +511,12 @@ namespace FrostMelee.Content.Projectiles
 
         private void GlowColors(out Color core, out Color tail, out Color edge)
         {
+            // Северный полюс: своя палитра — полярное сияние (мята/бирюза → фиолет)
+            if (ItemType == ItemID.NorthPole)
+            {
+                NorthPoleFx.Palette(out core, out tail, out edge);
+                return;
+            }
             core = IceCore;
             tail = IceTail;
             edge = IceEdge;
@@ -616,6 +622,15 @@ namespace FrostMelee.Content.Projectiles
         {
             float back = Main.rand.NextFloat() * CometTicks / max;
             Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.75f, 1f));
+            if (ItemType == ItemID.NorthPole)
+            {
+                // с ленты сияния осыпается снег (падает, а не висит), в воздухе остаются огоньки сияния
+                NorthPoleFx.ShakeSnow(pos, 0.9f * env);
+                NorthPoleFx.ShakeSnow(EndPoint(player, progress - back * 0.5f, true, Main.rand.NextFloat(0.6f, 1f)), 0.6f * env);
+                if (Main.rand.NextFloat() < 0.5f * env)
+                    NorthPoleFx.AuroraDust(pos, Main.rand.NextVector2Circular(0.6f, 0.6f) + new Vector2(0f, -0.3f), Main.rand.NextFloat(1f, 1.5f));
+                return;
+            }
             if (Main.rand.NextFloat() < IceCrystalChance * env)
             {
                 Dust c = Dust.NewDustPerfect(pos, Main.rand.NextBool() ? DustID.Ice : DustID.SnowflakeIce,
@@ -947,6 +962,18 @@ namespace FrostMelee.Content.Projectiles
         private void DrawMagicDetails(Player player, Texture2D glow, float progress, float max, float env)
         {
             GlowColors(out Color core, out Color tail, out Color edge);
+            if (ItemType == ItemID.NorthPole)
+            {
+                // занавесы сияния свисают с ленты вниз и колышутся
+                const int Curtains = 7;
+                for (int i = 0; i < Curtains; i++)
+                {
+                    float t = (i + 0.5f) / Curtains * 0.9f;
+                    Vector2 top = EndPoint(player, progress - t * HaloTicks / max, true, 0.85f + 0.12f * (float)Math.Sin(i * 2.7f));
+                    float fade = (1f - t) * env;
+                    NorthPoleFx.Curtain(top, 34f + 22f * (float)Math.Abs(Math.Sin(i * 1.9f)), 10f, 0.32f * fade, i * 1.1f);
+                }
+            }
             float time = Projectile.localAI[0] * TwinkleSpeed;
             int specialCount = IceSnowflakeCount;
             float specialSize = IceSnowflakeSize;
