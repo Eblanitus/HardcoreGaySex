@@ -63,7 +63,8 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('Projectile.CloneDefaults(ProjectileID.NorthPoleSnowflake)', self.effects)
         self.assertIn('AIType = ProjectileID.NorthPoleSnowflake', self.effects)
         trail = self.effects.split('public class NorthPoleTrail', 1)[1].split('public class NorthPoleSnowflake', 1)[0]
-        self.assertIn('Projectile.tileCollide = true;', trail)
+        # Like vanilla: the trail snow falls through blocks.
+        self.assertIn('Projectile.tileCollide = false;', trail)
 
     def test_coat_refreshes_without_stacking_damage_or_wrong_frostburn(self):
         self.assertIn('target.AddBuff(BuffID.Frostburn2, NorthPoleBalance.FrostbiteTicks)', self.effects)
@@ -75,30 +76,33 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('writer.Write((ushort)Projectile.timeLeft)', coat)
         self.assertIn('p.timeLeft = NorthPoleBalance.FrostbiteTicks', self.effects)
 
-    def test_spike_excludes_primary_target_and_clips_visible_growth(self):
+    def test_spike_excludes_primary_target_and_grows_through_blocks(self):
         spike = self.effects.split('public class NorthPoleBraceSpike', 1)[1]
         self.assertIn('target.whoAmI == (int)Projectile.ai[2]', spike)
-        self.assertIn('Collision.SolidCollision(point - new Vector2(width * 0.5f)', spike)
+        self.assertNotIn('SolidCollision', spike)
+        self.assertNotIn('CanHitLine', spike)
         self.assertIn('Projectile.Center + Direction * length, Width', spike)
-        self.assertIn('length / t.Height', spike)
         self.assertIn('Main.player[brace.owner].velocity.Length()', self.effects)
-        self.assertIn('target.Center + direction * (extent + 4)', self.effects)
+        self.assertIn('target.Center + direction * (extent * 0.6f)', self.effects)
         self.assertIn('Projectile.localNPCHitCooldown = -1', spike)
         self.assertNotIn('++Projectile.ai[2]', spike)
 
-    def test_sky_spawn_stays_below_first_ceiling(self):
-        self.assertIn('dy <= 280; dy += 4', self.player)
-        self.assertIn('Collision.SolidCollision(test - new Vector2(9), 18, 18)) break', self.player)
-        self.assertIn('spawn = test;', self.player)
-        self.assertIn('start.X < 32', self.player)
+    def test_sky_snow_falls_from_screen_top_through_blocks(self):
+        self.assertIn('Main.screenPosition.Y - 24', self.player)
+        self.assertIn('Player.Center.Y - 360', self.player)
+        self.assertIn('Main.maxTilesX * 16 - 32', self.player)
         pickup = self.effects.split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
         self.assertIn('CanDamage() => false', pickup)
-        self.assertIn('Projectile.tileCollide = true', pickup)
-        self.assertIn('Projectile.velocity = Vector2.Zero; return false;', pickup)
+        self.assertIn('Projectile.tileCollide = false', pickup)
+        self.assertNotIn('OnTileCollide', pickup)
+        self.assertIn('if (below > 360) { Projectile.Kill(); return; }', pickup)
 
     def test_impact_burst_is_once_owner_only_not_on_cancel(self):
         snow = self.effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleShard', 1)[0]
-        self.assertIn('!impacted || Charging || !NorthPoleEffects.Owned(Projectile)', snow)
+        self.assertIn('if (!impacted || Charging) return;', snow)
+        self.assertIn('if (!NorthPoleEffects.Owned(Projectile)) return;', snow)
+        self.assertIn('Projectile.tileCollide = false;', snow)
+        self.assertNotIn('OnTileCollide', snow)
         self.assertIn('Projectile.penetrate = 1;', snow)
         self.assertIn('i < NorthPoleBalance.Shards', snow)
         self.assertIn('Projectile.ai[0] = 1', snow)
@@ -131,6 +135,26 @@ class NorthPoleContracts(unittest.TestCase):
                 self.assertRegex(text, rf'{key}(\.Label:|: \{{\s*Label:)')
         unfinished = read('Content/Items/Prototypes/PrototypeWeapons.cs').split('public class UnfinishedVanillaReworks', 1)[1]
         self.assertNotIn('ItemID.NorthPole', unfinished)
+
+
+class NorthPoleVisualContracts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.effects = read('Content/Projectiles/NorthPoleEffects.cs')
+
+    def test_magic_pixel_only_with_one_pixel_source(self):
+        self.assertIn('new Rectangle(0, 0, 1, 1)', self.effects)
+        self.assertNotRegex(self.effects, r'MagicPixel\.Value, [^,]+, null')
+
+    def test_every_effect_draws_itself_and_accepts_owner_texture(self):
+        for cls, name in (('NorthPoleTrail', 'TrailFlake'), ('NorthPoleSnowflake', 'Snowflake'),
+                          ('NorthPoleShard', 'Shard'), ('NorthPolePickup', 'Pickup'),
+                          ('NorthPoleSnowCoat', 'SnowCoat'), ('NorthPoleBraceSpike', 'Spike')):
+            body = self.effects.split(f'public class {cls}', 1)[1].split('public class ', 1)[0]
+            self.assertIn('PreDraw', body, cls)
+            self.assertIn(f'"{name}"', body, cls)
+        self.assertIn('FrostMelee/Textures/NorthPole/', self.effects)
+        self.assertIn('ModContent.RequestIfExists', self.effects)
 
 
 class NorthPoleReferenceModels(unittest.TestCase):

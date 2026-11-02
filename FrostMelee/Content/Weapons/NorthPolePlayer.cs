@@ -29,6 +29,7 @@ namespace FrostMelee.Content.Weapons
         public const int FrostbiteTicks = 240;
         public const int RainCooldown = 20;
         public const int MaxPickups = 6;
+        public const int PickupLife = 480; // long enough to fall from the screen top past the player
         public static int BlessingTicks => Math.Clamp(Tuning.BlessingSeconds, 1, 20) * 60;
         public static float MoveSpeed => Math.Clamp(Tuning.MoveSpeedPercent, 0, 50) / 100f;
         public static int LifeRegen => Math.Clamp(Tuning.RegenPerSecond, 0, 10) * 2;
@@ -114,26 +115,13 @@ namespace FrostMelee.Content.Weapons
             if (Player.whoAmI != Main.myPlayer || Player.dead || Player.HeldItem.type != ItemID.NorthPole
                 || rainCooldown > 0 || Player.ownedProjectileCounts[ModContent.ProjectileType<NorthPolePickup>()] >= NorthPoleBalance.MaxPickups)
                 return;
-            // Outdoors this is sky rain; indoors stop BELOW the first ceiling,
-            // rather than spawning on its far side and falling through solid tiles.
-            for (int attempt = 0; attempt < 8; attempt++)
-            {
-                Vector2 start = Player.Center + new Vector2(Main.rand.NextFloat(-112, 112), -40);
-                if (start.X < 32 || start.X > Main.maxTilesX * 16 - 32) continue;
-                if (!Collision.CanHitLine(Player.Center, 1, 1, start, 1, 1)
-                    || Collision.SolidCollision(start - new Vector2(9), 18, 18)) continue;
-                Vector2 spawn = start;
-                for (int dy = 4; dy <= 280; dy += 4)
-                {
-                    Vector2 test = start - Vector2.UnitY * dy;
-                    if (test.Y < 32 || Collision.SolidCollision(test - new Vector2(9), 18, 18)) break;
-                    spawn = test;
-                }
-                Projectile.NewProjectile(stab.GetSource_FromThis(), spawn, new Vector2(0, 0.6f),
-                    ModContent.ProjectileType<NorthPolePickup>(), 0, 0, Player.whoAmI, 0, Main.rand.Next(3));
-                rainCooldown = NorthPoleBalance.RainCooldown;
-                return;
-            }
+            // Snow really comes from the sky: from above the top edge of the screen,
+            // straight through any roof. It slows down while passing the player.
+            float x = MathHelper.Clamp(Player.Center.X + Main.rand.NextFloat(-128, 128), 32, Main.maxTilesX * 16 - 32);
+            float y = Math.Max(32, Math.Min(Main.screenPosition.Y - 24, Player.Center.Y - 360));
+            Projectile.NewProjectile(stab.GetSource_FromThis(), new Vector2(x, y), new Vector2(0, 5f),
+                ModContent.ProjectileType<NorthPolePickup>(), 0, 0, Player.whoAmI, 0, Main.rand.Next(3));
+            rainCooldown = NorthPoleBalance.RainCooldown;
         }
 
         public override void ModifyHitNPCWithItem(Item item, NPC target, ref NPC.HitModifiers modifiers)

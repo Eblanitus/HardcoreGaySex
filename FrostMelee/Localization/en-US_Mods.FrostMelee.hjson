@@ -227,7 +227,7 @@ NorthPoleMechanicsTooltip:
 	'''
 	Successful swings grow a snowflake; full charge or two misses release it
 	On impact it bursts into icicles
-	Thrusts call snowflakes: collect them for speed, regeneration and critical damage
+	Thrusts call snowflakes from the sky: catch them for speed, regeneration and critical damage
 	Bracing grows a piercing icicle behind the enemy; running faster makes it larger
 	Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
 	'''
