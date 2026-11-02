@@ -181,22 +181,26 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         stab = read('Content/Projectiles/SickleStabProjectile.cs')
         brace = read('Content/Projectiles/SickleBraceProjectile.cs')
         self.assertIn('if (ItemType == ItemID.NorthPole)\n            {\n                NorthPoleFx.Palette(out core, out tail, out edge);', arc)
-        self.assertIn('DrawAuroraTrail(player, glow, progress, max, env);', arc)
-        self.assertIn('auroraRayMask = MakeAuroraRayMask();', arc)
-        self.assertIn('AuroraSwell(progress)', arc)
-        self.assertIn('AddAuroraHit(target);', arc)
+        # Swing = 'Polar compass' (owner 02.11.2026): no shared sickle arc at all
+        compass = read('Content/Projectiles/PolarCompassFx.cs')
+        self.assertNotIn('Aurora', arc)
         self.assertNotIn('NorthPoleFx.Curtain(', arc)
-        # third arc: dark night underlay (normal blend) under the additive ribbon,
-        # no vanilla white line, halos or ice sparks for North Pole
-        trail = arc.split('private void DrawAuroraTrail', 1)[1].split('private void AddAuroraHit', 1)[0]
-        self.assertIn('device.BlendState = BlendState.AlphaBlend;', trail)
-        self.assertLess(trail.index('BlendState.AlphaBlend;'), trail.index('device.BlendState = trailBlend;'))
-        self.assertIn('AuroraNight * alpha', arc)
-        self.assertIn('if (ItemType != ItemID.NorthPole)\n                Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3)', arc)
-        glow = arc.split('private void DrawBladeGlow', 1)[1].split('public override bool PreDraw', 1)[0]
-        self.assertLess(glow.index('DrawAuroraTrail('), glow.index('DrawHalo('))
-        fx = arc.split('private void SwingGlowEffects', 1)[1].split('private void DrawSparkle', 1)[0] if 'private void DrawSparkle' in arc.split('private void SwingGlowEffects', 1)[1] else arc.split('private void SwingGlowEffects', 1)[1]
-        self.assertLess(fx.index('if (ItemType == ItemID.NorthPole)'), fx.index('SpawnSpark('))
+        pre = arc.split('public override bool PreDraw', 1)[1]
+        self.assertLess(pre.index('if (ItemType == ItemID.NorthPole)\n                return false;'),
+                        pre.index('texture.Frame(1, 4, 0, 3)'))
+        self.assertIn('PolarCompassFx.Begin(Projectile.owner, BladeAngleAt(0f), SwingFace)', arc)
+        self.assertIn('compass?.Track(BladeAngleAt(progress), TipRadius(), progress >= PeakAt);', arc)
+        self.assertIn('compass?.Close();', arc)
+        self.assertIn('PolarCompassFx.AddHit(point);', arc)
+        self.assertIn('On_Main.DrawDust += DrawAfterDust;', compass)
+        self.assertIn('MeridianStep = MathHelper.Pi / 18f', compass)
+        self.assertIn('new Rectangle(0, 0, 1, 1)', compass)
+        # dark underlay pass first, then light; star/rings carry the aurora accent
+        self.assertIn('DrawSwing(s, pass == 0);', compass)
+        self.assertIn('Night * (UnderAlpha * alpha)', compass)
+        body = compass.split('public class PolarCompassFx', 1)[1]
+        for word in ('Crystal', 'Needle', 'Shard', 'Rime', 'Frozen'):
+            self.assertNotIn(word, body)   # not the frozen Ice Spear look
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
