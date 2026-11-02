@@ -46,7 +46,6 @@ Projectiles: {
 	NorthPolePickup.DisplayName: Благословенная снежинка
 	NorthPoleSnowCoat.DisplayName: Снежный покров
 	NorthPoleBraceSpike.DisplayName: Пронзающая сосулька
-
 	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
@@ -146,6 +145,40 @@ Configs: {
 			// Tooltip: Временная настройка для подбора длины струи Frostbrand во встрече. 100 — прежняя длина, сейчас стоит 60 — примерно на 40% короче.
 		}
 	}
+
+	NorthPoleTuning: {
+		DisplayName: Северный полюс — временный баланс
+
+		GrowthHits: {
+			Label: Попаданий до полного заряда
+			// Tooltip: ""
+		}
+
+		BlessingSeconds: {
+			Label: Длительность благословения (сек.)
+			// Tooltip: ""
+		}
+
+		MoveSpeedPercent: {
+			Label: Прибавка скорости (%)
+			// Tooltip: ""
+		}
+
+		RegenPerSecond: {
+			Label: Регенерация (HP/сек.)
+			// Tooltip: ""
+		}
+
+		CritDamagePercent: {
+			Label: Прибавка множителя крита (%)
+			// Tooltip: ""
+		}
+
+		WeakShotPercent: {
+			Label: Урон ослабленного выстрела (%)
+			// Tooltip: ""
+		}
+	}
 }
 
 PrototypeNotice: Заготовка: временные характеристики и графика, без уникальной механики
@@ -181,7 +214,7 @@ LassoStatus: {
 
 SnowballMass: Снежный ком: {0}%
 PrototypeArtworkNotice: Механика реализована; характеристики и графика предварительные, нужны игровые тесты
-FlailRamp: "Разгон: {0}%"
+FlailRamp: Разгон: {0}%
 
 Buffs: {
 	NorthPoleBlessing: {
@@ -191,20 +224,10 @@ Buffs: {
 }
 
 NorthPoleMechanicsTooltip:
-    '''
-    Взмахи с попаданием растят снежинку; полный заряд или два промаха выпускают её
-    После удара снежинка разлетается на сосульки
-    Тычки вызывают снежинки: собери телом для скорости, регенерации и критического урона
-    Встреча выращивает за врагом сосульку: чем быстрее бежишь, тем она больше
-    За броском падают снежинки; попадание покрывает врага снегом с Frostbite
-    '''
-
-Configs.NorthPoleTuning: {
-	DisplayName: Северный полюс — временный баланс
-	GrowthHits.Label: Попаданий до полного заряда
-	BlessingSeconds.Label: Длительность благословения (сек.)
-	MoveSpeedPercent.Label: Прибавка скорости (%)
-	RegenPerSecond.Label: Регенерация (HP/сек.)
-	CritDamagePercent.Label: Прибавка множителя крита (%)
-	WeakShotPercent.Label: Урон ослабленного выстрела (%)
-}
+	'''
+	Взмахи с попаданием растят снежинку; полный заряд или два промаха выпускают её
+	После удара снежинка разлетается на сосульки
+	Тычки вызывают снежинки: собери телом для скорости, регенерации и критического урона
+	Встреча выращивает за врагом сосульку: чем быстрее бежишь, тем она больше
+	За броском падают снежинки; попадание покрывает врага снегом с Frostbite
+	'''

@@ -46,7 +46,6 @@ Projectiles: {
 	NorthPolePickup.DisplayName: Blessed Snowflake
 	NorthPoleSnowCoat.DisplayName: Snow Coat
 	NorthPoleBraceSpike.DisplayName: Piercing Icicle
-
 	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
@@ -146,6 +145,40 @@ Configs: {
 			Tooltip: Временная настройка для подбора длины струи Frostbrand во встрече. 100 — прежняя длина, сейчас стоит 60 — примерно на 40% короче.
 		}
 	}
+
+	NorthPoleTuning: {
+		DisplayName: North Pole — provisional balance
+
+		GrowthHits: {
+			Label: Successful swings to full charge
+			Tooltip: ""
+		}
+
+		BlessingSeconds: {
+			Label: Blessing duration (seconds)
+			Tooltip: ""
+		}
+
+		MoveSpeedPercent: {
+			Label: Movement speed bonus (%)
+			Tooltip: ""
+		}
+
+		RegenPerSecond: {
+			Label: Regeneration (HP/second)
+			Tooltip: ""
+		}
+
+		CritDamagePercent: {
+			Label: Critical multiplier bonus (%)
+			Tooltip: ""
+		}
+
+		WeakShotPercent: {
+			Label: Weak shot damage (%)
+			Tooltip: ""
+		}
+	}
 }
 
 PrototypeNotice: Prototype: temporary stats and artwork, unique mechanics pending
@@ -181,7 +214,7 @@ LassoStatus: {
 
 SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
-FlailRamp: "Spin power: {0}%"
+FlailRamp: Spin power: {0}%
 
 Buffs: {
 	NorthPoleBlessing: {
@@ -191,20 +224,10 @@ Buffs: {
 }
 
 NorthPoleMechanicsTooltip:
-    '''
-    Successful swings grow a snowflake; full charge or two misses release it
-    On impact it bursts into icicles
-    Thrusts call snowflakes: collect them for speed, regeneration and critical damage
-    Bracing grows a piercing icicle behind the enemy; running faster makes it larger
-    Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
-    '''
-
-Configs.NorthPoleTuning: {
-	DisplayName: North Pole — provisional balance
-	GrowthHits.Label: Successful swings to full charge
-	BlessingSeconds.Label: Blessing duration (seconds)
-	MoveSpeedPercent.Label: Movement speed bonus (%)
-	RegenPerSecond.Label: Regeneration (HP/second)
-	CritDamagePercent.Label: Critical multiplier bonus (%)
-	WeakShotPercent.Label: Weak shot damage (%)
-}
+	'''
+	Successful swings grow a snowflake; full charge or two misses release it
+	On impact it bursts into icicles
+	Thrusts call snowflakes: collect them for speed, regeneration and critical damage
+	Bracing grows a piercing icicle behind the enemy; running faster makes it larger
+	Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
+	'''
