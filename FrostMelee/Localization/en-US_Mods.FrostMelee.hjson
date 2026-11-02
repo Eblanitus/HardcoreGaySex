@@ -214,11 +214,7 @@ LassoStatus: {
 
 SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
-<<<<<<< HEAD
-FlailRamp: Spin power: {0}%
-=======
 FlailRamp: "Spin power: {0}%"
->>>>>>> 76e520606734a2dee74f3d29f753c5be137672f0
 
 Buffs: {
 	NorthPoleBlessing: {
@@ -228,7 +224,6 @@ Buffs: {
 }
 
 NorthPoleMechanicsTooltip:
-<<<<<<< HEAD
 	'''
 	Successful swings grow a snowflake; full charge or two misses release it
 	On impact it bursts into icicles
@@ -236,22 +231,3 @@ NorthPoleMechanicsTooltip:
 	Bracing grows a piercing icicle behind the enemy; running faster makes it larger
 	Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
 	'''
-=======
-    '''
-    Successful swings grow a snowflake; full charge or two misses release it
-    On impact it bursts into icicles
-    Thrusts call snowflakes: collect them for speed, regeneration and critical damage
-    Bracing grows a piercing icicle behind the enemy; running faster makes it larger
-    Throws shed snowflakes; hits coat enemies in snow that inflicts Frostbite
-    '''
-
-Configs.NorthPoleTuning: {
-	DisplayName: North Pole — provisional balance
-	GrowthHits.Label: Successful swings to full charge
-	BlessingSeconds.Label: Blessing duration (seconds)
-	MoveSpeedPercent.Label: Movement speed bonus (%)
-	RegenPerSecond.Label: Regeneration (HP/second)
-	CritDamagePercent.Label: Critical multiplier bonus (%)
-	WeakShotPercent.Label: Weak shot damage (%)
-}
->>>>>>> 76e520606734a2dee74f3d29f753c5be137672f0
