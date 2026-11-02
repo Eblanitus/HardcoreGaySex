@@ -477,9 +477,12 @@ namespace FrostMelee.Content.Projectiles
     public class NorthPolePickup : ModProjectile
     {
         // Not a hazard to dodge but a pickup: drifts down from the sky and, once
-        // near its owner, is pulled to them like hearts and mana stars.
-        public const float MagnetRange = 260f;
-        public const float MagnetSpeed = 13f;
+        // near its owner, is pulled to them like hearts and mana stars. The pull is
+        // short and weak on purpose (owner 02.11.2026: "not so casual"): it only
+        // finishes the catch, the player still has to run to the snowflake.
+        public const float MagnetRange = 110f;
+        public const float MagnetSpeed = 6.5f;
+        public const float MagnetAccel = 0.25f;
         private static readonly Color Warm = new Color(255, 214, 120);   // pickup gold, unlike any attack colour
 
         public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.NorthPoleSnowflake;
@@ -507,8 +510,8 @@ namespace FrostMelee.Content.Projectiles
             if (Pulled)
             {
                 // like vanilla item grab: accelerate straight into the player
-                float speed = Math.Min(MagnetSpeed, Projectile.velocity.Length() + 0.6f);
-                Projectile.velocity = Vector2.Lerp(Projectile.velocity, to.SafeNormalize(Vector2.UnitY) * speed, 0.25f);
+                float speed = Math.Min(MagnetSpeed, Projectile.velocity.Length() + MagnetAccel);
+                Projectile.velocity = Vector2.Lerp(Projectile.velocity, to.SafeNormalize(Vector2.UnitY) * speed, 0.12f);
                 Projectile.timeLeft = Math.Max(Projectile.timeLeft, 30);
             }
             else

@@ -116,8 +116,12 @@ namespace FrostMelee.Content.Weapons
                 || rainCooldown > 0 || Player.ownedProjectileCounts[ModContent.ProjectileType<NorthPolePickup>()] >= NorthPoleBalance.MaxPickups)
                 return;
             // Snow really comes from the sky: from above the top edge of the screen,
-            // straight through any roof. It slows down while passing the player.
-            float x = MathHelper.Clamp(Player.Center.X + Main.rand.NextFloat(-128, 128), 32, Main.maxTilesX * 16 - 32);
+            // straight through any roof, anywhere across the whole visible width
+            // (screen edges included), not only over the player's head.
+            // CallSnow runs only on the owner's client, so its screen is the right one.
+            float viewWidth = Main.screenWidth / Math.Max(1f, Main.GameViewMatrix.Zoom.X);
+            float viewCenter = Main.screenPosition.X + Main.screenWidth * 0.5f;
+            float x = MathHelper.Clamp(viewCenter + Main.rand.NextFloat(-0.5f, 0.5f) * (viewWidth - 24f), 32, Main.maxTilesX * 16 - 32);
             float y = Math.Max(32, Math.Min(Main.screenPosition.Y - 24, Player.Center.Y - 360));
             Projectile.NewProjectile(stab.GetSource_FromThis(), new Vector2(x, y), new Vector2(0, 3f),
                 ModContent.ProjectileType<NorthPolePickup>(), 0, 0, Player.whoAmI, 0, Main.rand.Next(3));
