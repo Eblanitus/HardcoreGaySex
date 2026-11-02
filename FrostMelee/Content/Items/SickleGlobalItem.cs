@@ -115,7 +115,7 @@ namespace FrostMelee.Content.Items
         private static string InventoryTexturePath(int itemType)
         {
             if (itemType == ItemID.IceSickle) return "FrostMelee/Items/IceSpear";
-            if (itemType == ItemID.NorthPole) return "Terraria/Images/Item_" + ItemID.NorthPole;
+            if (itemType == ItemID.NorthPole) return "FrostMelee/Items/NorthPole";   // aurora reskin (02.11.2026)
             return null;
         }
 
