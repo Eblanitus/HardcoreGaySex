@@ -126,61 +126,92 @@ namespace FrostMelee.Content.Projectiles
             Main.EntitySpriteDraw(TextureAssets.MagicPixel.Value, at - Main.screenPosition, Px, color, rotation,
                 new Vector2(0.5f), new Vector2(Math.Max(1, size)), SpriteEffects.None, 0);
 
+        // === Aurora style (owner 02.11.2026: "все снежинки и сосульки в стиле северного сияния") ===
+        // Same palette as the swing arc: mint -> teal -> violet. The colour flows along each arm /
+        // icicle over time (shimmer), every stroke has a dark night underlay so it reads on snow,
+        // and a soft additive glow in the palette sits around it.
+        public static readonly Color AMint = new Color(60, 255, 140);
+        public static readonly Color ATeal = new Color(20, 200, 220);
+        public static readonly Color AViolet = new Color(185, 90, 255);
+        public static readonly Color ANight = new Color(4, 8, 30);
+        public const float UnderAlpha = 0.45f;   // dark underlay strength
+        public const float UnderPad = 2.5f;      // underlay is this much thicker than the stroke
+
+        // t 0..1 along the shape; phase drifts with time so the colours flow (shimmer)
+        public static Color AuroraAt(float t, float phase)
+        {
+            float s = MathHelper.Clamp(t + 0.22f * MathF.Sin(phase), 0f, 1f);
+            return s < 0.5f ? Color.Lerp(AMint, ATeal, s * 2f) : Color.Lerp(ATeal, AViolet, (s - 0.5f) * 2f);
+        }
+
+        public static float Phase(Vector2 at) => (float)Main.GlobalTimeWrappedHourly * 2.4f + at.X * 0.013f + at.Y * 0.007f;
+
+        // Arm/icicle segment: dark underlay, then colour (normal blend, so it stays saturated on snow)
+        private static void AuroraLine(Vector2 a, Vector2 b, float w, Color c, float alpha)
+        {
+            Line(a, b, w + UnderPad, ANight * (UnderAlpha * alpha));
+            Line(a, b, w, c * alpha);
+        }
+
         // Six-armed snowflake. detail 0..1 adds side branches; that is how the
-        // growing flake shows its charge level.
+        // growing flake shows its charge level. Arms run mint at the heart -> teal -> violet at the tips.
         public static void Snowflake(Vector2 center, float radius, float rotation, float detail, float alpha)
         {
             float thick = Math.Max(1f, radius * 0.09f);
+            float phase = Phase(center);
             // tiny flakes turn to mush with branches; big ones get up to three pairs
             int branches = radius < 8 ? 0 : radius < 12 ? 1 : 1 + (int)Math.Round(MathHelper.Clamp(detail, 0, 1) * 2);
-            for (int pass = 0; pass < 2; pass++)
+            // soft aurora glow behind the arms
+            for (int i = 0; i < 6; i++)
             {
-                bool glow = pass == 0;
-                Color color = glow ? Additive(Ice, 0.3f * alpha) : Core * alpha;
-                float w = glow ? thick * 2f : thick;
-                for (int i = 0; i < 6; i++)
-                {
-                    Vector2 dir = (rotation + MathHelper.TwoPi * i / 6).ToRotationVector2();
-                    Vector2 tip = center + dir * radius;
-                    if (glow)
-                    {
-                        NorthPoleFx.Stroke(center, tip, thick * 5f, NorthPoleFx.Add(Ice, 0.35f * alpha));
-                        continue;
-                    }
-                    Line(center, tip, w, color);
-                    for (int b = 0; b < branches; b++)
-                    {
-                        float t = 0.45f + b * 0.18f;
-                        Vector2 at = center + dir * radius * t;
-                        float len = radius * (0.3f - b * 0.07f);
-                        Line(at, at + dir.RotatedBy(1.05f) * len, w * 0.75f, color);
-                        Line(at, at + dir.RotatedBy(-1.05f) * len, w * 0.75f, color);
-                    }
-                    if (!glow) Dot(tip, thick * 1.4f, Additive(Core, alpha));
-                }
+                Vector2 dir = (rotation + MathHelper.TwoPi * i / 6).ToRotationVector2();
+                NorthPoleFx.Stroke(center, center + dir * radius, thick * 5f, NorthPoleFx.Add(AuroraAt(0.45f, phase + i), 0.35f * alpha));
             }
-            Dot(center, thick * 2.2f, Additive(Ice, 0.5f * alpha));
-            Dot(center, thick * 1.2f, Core * alpha);
+            for (int i = 0; i < 6; i++)
+            {
+                Vector2 dir = (rotation + MathHelper.TwoPi * i / 6).ToRotationVector2();
+                const int segs = 3;
+                for (int k = 0; k < segs; k++)
+                {
+                    float t0 = k / (float)segs, t1 = (k + 1) / (float)segs;
+                    Color c = Color.Lerp(AuroraAt((t0 + t1) * 0.5f, phase), Color.White, 0.2f);
+                    AuroraLine(center + dir * radius * t0, center + dir * radius * t1, thick, c, alpha);
+                }
+                for (int b = 0; b < branches; b++)
+                {
+                    float t = 0.45f + b * 0.18f;
+                    Vector2 at = center + dir * radius * t;
+                    float len = radius * (0.3f - b * 0.07f);
+                    Color c = Color.Lerp(AuroraAt(t + 0.15f, phase), Color.White, 0.15f);
+                    AuroraLine(at, at + dir.RotatedBy(1.05f) * len, thick * 0.75f, c, alpha);
+                    AuroraLine(at, at + dir.RotatedBy(-1.05f) * len, thick * 0.75f, c, alpha);
+                }
+                Dot(center + dir * radius, thick * 1.6f, Additive(Color.Lerp(AViolet, Color.White, 0.35f), alpha));
+            }
+            Dot(center, thick * 2.6f, Additive(AMint, 0.6f * alpha));
+            Dot(center, thick * 1.3f, Color.Lerp(AMint, Color.White, 0.7f) * alpha);
         }
 
-        // Tapered icicle from base to tip, with a lit edge and a cold core.
+        // Tapered icicle from base to tip: violet base -> teal -> mint tip, lit edge, glow in the palette.
         public static void Icicle(Vector2 baseCenter, Vector2 tip, float width, float alpha)
         {
             Vector2 d = tip - baseCenter;
             float length = d.Length();
             if (length < 1) return;
             Vector2 dir = d / length, side = dir.RotatedBy(MathHelper.PiOver2);
+            float phase = Phase(baseCenter);
             const int steps = 10;
             for (int k = 0; k < steps; k++)
             {
                 float t0 = k / (float)steps, t1 = (k + 1) / (float)steps;
                 float w = width * (1 - t0 * 0.92f);
                 Vector2 a = baseCenter + dir * length * t0, b = baseCenter + dir * length * t1;
-                Line(a, b, w * 1.7f, Additive(Ice, 0.22f * alpha));
-                Line(a, b, w, Color.Lerp(Deep, Ice, t0) * (0.9f * alpha));
-                Line(a + side * w * 0.22f, b + side * w * 0.22f, Math.Max(1, w * 0.28f), Core * alpha);
+                Color body = AuroraAt(1f - (t0 + t1) * 0.5f, phase);       // violet at the base, mint at the tip
+                Line(a, b, w * 1.9f, Additive(body, 0.3f * alpha));
+                AuroraLine(a, b, w, body * 0.95f, alpha);
+                Line(a + side * w * 0.22f, b + side * w * 0.22f, Math.Max(1, w * 0.28f), Color.Lerp(body, Color.White, 0.65f) * alpha);
             }
-            Dot(tip, Math.Max(2, width * 0.3f), Additive(Core, alpha));
+            Dot(tip, Math.Max(2, width * 0.3f), Additive(Color.Lerp(AMint, Color.White, 0.5f), alpha));
         }
 
         public static void Afterimages(Projectile p, float radius, float detail)
@@ -215,7 +246,7 @@ namespace FrostMelee.Content.Projectiles
         public override bool PreDraw(ref Color lightColor)
         {
             float fade = Math.Min(1, Projectile.timeLeft / 20f) * Projectile.Opacity;
-            NorthPoleFx.CometTail(Projectile, 5f, fade * 0.7f, aurora: false);
+            NorthPoleFx.CometTail(Projectile, 5f, fade * 0.7f);
             if (!NorthPoleArt.DrawCustom("TrailFlake", Projectile.Center, Projectile.rotation, 14, Color.White * fade))
                 NorthPoleArt.Snowflake(Projectile.Center, 6.5f, Projectile.rotation, 0.3f + Projectile.ai[1] * 0.2f, fade);
             return false;
@@ -415,7 +446,7 @@ namespace FrostMelee.Content.Projectiles
             if (NorthPoleArt.DrawCustom("Snowflake", Projectile.Center, Projectile.rotation, radius * 2, Color.White * alpha))
                 return false;
             // halo, flake, then one orbiting mote per charge step
-            NorthPoleArt.Dot(Projectile.Center, radius * (1.1f + pulse * 0.6f), NorthPoleArt.Additive(NorthPoleArt.Deep, 0.18f + pulse * 0.25f), 0);
+            NorthPoleArt.Dot(Projectile.Center, radius * (1.1f + pulse * 0.6f), NorthPoleArt.Additive(NorthPoleArt.AViolet, 0.18f + pulse * 0.25f), 0);
             NorthPoleArt.Snowflake(Projectile.Center, radius * (1 + pulse * 0.15f), Projectile.rotation, Level, alpha);
             if (Charging)
             {
@@ -423,7 +454,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < steps; i++)
                 {
                     float a = -Projectile.rotation * 1.6f + MathHelper.TwoPi * i / Math.Max(1, NorthPoleBalance.FullCharge);
-                    NorthPoleArt.Dot(Projectile.Center + a.ToRotationVector2() * (radius + 7), 3, NorthPoleArt.Additive(NorthPoleArt.Core, 0.9f));
+                    NorthPoleArt.Dot(Projectile.Center + a.ToRotationVector2() * (radius + 7), 3, NorthPoleArt.Additive(NorthPoleArt.AuroraAt(i / (float)Math.Max(1, NorthPoleBalance.FullCharge), 0f), 0.9f));
                 }
             }
             return false;

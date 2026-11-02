@@ -206,6 +206,19 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('NorthPoleFx.ShakeSnow(', snow)
         self.assertIn('NorthPoleFx.AuroraDust(', snow)
         self.assertIn('AuroraSnow(player, progress);', arc)
+        # snowflakes and icicles in the arc's aurora palette (owner 02.11.2026)
+        art = read('Content/Projectiles/NorthPoleEffects.cs').split('internal static class NorthPoleArt', 1)[1].split('public class NorthPoleTrail', 1)[0]
+        self.assertIn('AMint = new Color(60, 255, 140)', art)
+        self.assertIn('ATeal = new Color(20, 200, 220)', art)
+        self.assertIn('AViolet = new Color(185, 90, 255)', art)
+        flake = art.split('public static void Snowflake', 1)[1].split('public static void Icicle', 1)[0]
+        icicle = art.split('public static void Icicle', 1)[1]
+        for body in (flake, icicle):
+            self.assertIn('AuroraAt(', body)
+            self.assertIn('AuroraLine(', body)   # dark underlay + colour
+        pickup = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
+        self.assertIn('Warm', pickup)          # pickup keeps its gold halo/ring: unlike combat flakes
+        self.assertNotIn('CometTail', pickup)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
