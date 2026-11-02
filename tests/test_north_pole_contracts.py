@@ -213,27 +213,40 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('AViolet = new Color(185, 90, 255)', art)
         flake = art.split('public static void Snowflake', 1)[1].split('public static void Icicle', 1)[0]
         icicle = art.split('public static void Icicle', 1)[1]
+        # strictly Terraria-style 2x2 pixel sprites, snapped to the 2-px grid (owner 02.11.2026)
+        self.assertIn('PixelFolder = "FrostMelee/Textures/NorthPolePixel/"', art)
+        self.assertIn('"SwingFlake"', flake)
+        self.assertIn('"ThrowFlake"', flake)
+        self.assertIn('"BuffFlake"', flake)
+        self.assertIn('Snap(', art)
+        self.assertIn('Pixel($"Spike', icicle)
         for body in (flake, icicle):
-            self.assertIn('AuroraAt(', body)
-            self.assertIn('AuroraLine(', body)   # dark underlay + colour
+            self.assertNotIn('Line(', body)      # no smooth strokes any more
         pickup = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
         # every kind of snow has its own look (owner 02.11.2026)
         self.assertIn('NorthPoleArt.StyleBuff', pickup)   # rose, round soft flake
         self.assertNotIn('Ring(', pickup)                 # no gold outline
         self.assertNotIn('CometTail', pickup)
         trail = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPoleTrail', 1)[1].split('public class NorthPoleSnowflake', 1)[0]
-        self.assertIn('style: NorthPoleArt.StyleThrow', trail)
+        self.assertIn('NorthPoleArt.PixelTrail(Projectile, "ThrowFlake"', trail)
         self.assertIn('NorthPoleArt.StyleThrow);', trail)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
 
-    def test_vertex_ribbons_reopen_the_sprite_batch(self):
-        effects = read('Content/Projectiles/NorthPoleEffects.cs')
-        fx = effects.split('internal static class NorthPoleFx', 1)[1]
-        self.assertIn('Main.spriteBatch.End();', fx)
-        self.assertIn('finally', fx)
-        self.assertIn('FlameRibbon.Draw(device, pts, widths, colors, n);', fx)
+    def test_pixel_sprites_are_2x2_blocks(self):
+        from PIL import Image
+        folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
+        names = [f'SwingFlake{r}' for r in range(3, 12)] + ['ThrowFlake', 'BuffFlake', 'Shard', 'Glint',
+                 'Sparkle0', 'Sparkle1', 'Sparkle2'] + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
+        for name in names:
+            im = Image.open(folder / f'{name}.png').convert('RGBA')
+            w, h = im.size
+            self.assertEqual((w % 2, h % 2), (0, 0), name)
+            px = im.load()
+            for y in range(0, h, 2):
+                for x in range(0, w, 2):
+                    self.assertTrue(px[x, y] == px[x + 1, y] == px[x, y + 1] == px[x + 1, y + 1], name)
 
 
 class NorthPoleReferenceModels(unittest.TestCase):
