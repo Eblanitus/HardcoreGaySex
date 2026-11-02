@@ -193,7 +193,17 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('compass?.Close();', arc)
         self.assertIn('PolarCompassFx.AddHit(point);', arc)
         self.assertIn('On_Main.DrawDust += DrawAfterDust;', compass)
-        self.assertIn('MeridianStep = MathHelper.Pi / 18f', compass)
+        self.assertIn('MeridianStep = MathHelper.Pi / 12f', compass)
+        # in-game feedback: inside the spear's length, short-lived, aurora on leading marks,
+        # star rides the tip and its rays do not cross the centre (no sniper crosshair)
+        num = lambda name: float(re.search(name + r' = ([\d.]+)f?;', compass).group(1))
+        self.assertLess(num('MeridianOuter'), 1.0)
+        self.assertLess(num('LatitudeRadius'), 1.0)
+        self.assertLessEqual(num('MeridianLife'), 12)
+        self.assertIn('return Mint;', compass)
+        self.assertIn('DrawStar(tip, Now - s.PeakTick, under);', compass)
+        self.assertGreater(num('StarNorth'), num('StarSouth'))
+        self.assertGreater(num('StarGap'), 0)
         self.assertIn('new Rectangle(0, 0, 1, 1)', compass)
         # dark underlay pass first, then light; star/rings carry the aurora accent
         self.assertIn('DrawSwing(s, pass == 0);', compass)
