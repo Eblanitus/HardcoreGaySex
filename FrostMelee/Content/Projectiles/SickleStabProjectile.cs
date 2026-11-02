@@ -542,8 +542,36 @@ namespace FrostMelee.Content.Projectiles
                 f.noGravity = true;
                 f.fadeIn = 0.4f;
             }
+            if (IsNorthPole)
+                for (int i = 0; i < 6; i++)
+                {
+                    NorthPoleFx.ShakeSnow(point, 1f, 10f);
+                    NorthPoleFx.AuroraDust(point, Main.rand.NextVector2Unit() * Main.rand.NextFloat(1f, 3f), 1.2f);
+                }
             Vector3 light = new Vector3(0.4f, 1f, 1.5f);
             Lighting.AddLight(point, light * HitLightBoost * LightMult);
+        }
+
+        // Северный полюс: тычок «зовёт снег» — от острия в небо уходит луч сияния,
+        // тает к концу выпада. Снежинки при этом падают с неба (NorthPolePickup).
+        private void DrawSkyCall(Vector2 tip, float env)
+        {
+            if (!StabGlow || Main.dedServ || env <= 0.02f)
+                return;
+            NorthPoleFx.Palette(out Color core, out Color tail, out Color edge, Projectile.whoAmI);
+            float rise = 60f + 260f * MathHelper.Clamp(Life * 1.6f, 0f, 1f);
+            Vector2 top = tip - new Vector2(0f, rise);
+            const int Steps = 8;
+            for (int i = 0; i < Steps; i++)
+            {
+                float t0 = i / (float)Steps, t1 = (i + 1) / (float)Steps;
+                Vector2 a = Vector2.Lerp(tip, top, t0), b = Vector2.Lerp(tip, top, t1);
+                float fade = env * (1f - t0);
+                NorthPoleFx.Stroke(a, b, 26f * (1f - t0 * 0.7f), NorthPoleFx.Add(Color.Lerp(tail, edge, t0), 0.35f * fade));
+                NorthPoleFx.Stroke(a, b, 6f * (1f - t0 * 0.6f), NorthPoleFx.Add(core, 0.6f * fade));
+            }
+            NorthPoleFx.Sparkle(tip, 34f * env, Projectile.rotation, 3, NorthPoleFx.Add(tail, 0.8f * env), NorthPoleFx.Add(core, env));
+            Lighting.AddLight(top, 0.2f * env, 0.5f * env, 0.45f * env);
         }
 
         // Frostbite только от ледяного серпа (у смерти ничего не меняется). Накладывает владелец: у остальных клиентов
@@ -580,8 +608,15 @@ namespace FrostMelee.Content.Projectiles
         }
 
         // === Свечение ===
+        private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;
+
         private void GlowColors(out Color core, out Color tail, out Color edge)
         {
+            if (IsNorthPole)
+            {
+                NorthPoleFx.Palette(out core, out tail, out edge);
+                return;
+            }
             core = IceCore;
             tail = IceTail;
             edge = IceEdge;
@@ -744,6 +779,8 @@ namespace FrostMelee.Content.Projectiles
                 return;
             Vector2 anchor = Main.player[Projectile.owner].MountedCenter;
             Color tint = GhostIce;
+            if (IsNorthPole)
+                NorthPoleFx.Palette(out _, out tint, out _);
             Vector2 origin = geo.ButtFor(flipped);
             for (int k = GhostCount; k >= 1; k--)
             {
@@ -829,6 +866,8 @@ namespace FrostMelee.Content.Projectiles
                 FrozenSpear.Mix(Main.player[Projectile.owner], itemType));
 
             DrawHitFlashes();
+            if (IsNorthPole)
+                DrawSkyCall(poseCenter + dir * (geo.Length * 0.5f), GlowEnvelope(Life));
             return false;
         }
     }

@@ -22,6 +22,9 @@ namespace FrostMelee.Content.Projectiles
         // and falls through them.
         public static void Trail(Projectile spear)
         {
+            // on every client: the flying spear sheds snow and aurora motes
+            NorthPoleFx.ShakeSnow(spear.Center, 1f, 8f);
+            NorthPoleFx.AuroraDust(spear.Center, -spear.velocity * 0.1f, 1.1f);
             if (!Owned(spear)) return;
             Projectile.NewProjectile(spear.GetSource_FromThis(), spear.Center, Vector2.Zero,
                 ModContent.ProjectileType<NorthPoleTrail>(), Math.Max(1, (int)(spear.damage * NorthPoleBalance.TrailDamage)),
@@ -139,6 +142,11 @@ namespace FrostMelee.Content.Projectiles
                 {
                     Vector2 dir = (rotation + MathHelper.TwoPi * i / 6).ToRotationVector2();
                     Vector2 tip = center + dir * radius;
+                    if (glow)
+                    {
+                        NorthPoleFx.Stroke(center, tip, thick * 5f, NorthPoleFx.Add(Ice, 0.35f * alpha));
+                        continue;
+                    }
                     Line(center, tip, w, color);
                     for (int b = 0; b < branches; b++)
                     {
@@ -191,7 +199,12 @@ namespace FrostMelee.Content.Projectiles
     public class NorthPoleTrail : ModProjectile
     {
         public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.NorthPoleSnowflake;
-        public override void SetStaticDefaults() => Main.projFrames[Type] = 3;
+        public override void SetStaticDefaults()
+        {
+            Main.projFrames[Type] = 3;
+            ProjectileID.Sets.TrailCacheLength[Type] = 6;
+            ProjectileID.Sets.TrailingMode[Type] = 0;
+        }
         public override void SetDefaults()
         {
             Projectile.CloneDefaults(ProjectileID.NorthPoleSnowflake);
@@ -202,6 +215,7 @@ namespace FrostMelee.Content.Projectiles
         public override bool PreDraw(ref Color lightColor)
         {
             float fade = Math.Min(1, Projectile.timeLeft / 20f) * Projectile.Opacity;
+            NorthPoleFx.CometTail(Projectile, 5f, fade * 0.7f, aurora: false);
             if (!NorthPoleArt.DrawCustom("TrailFlake", Projectile.Center, Projectile.rotation, 14, Color.White * fade))
                 NorthPoleArt.Snowflake(Projectile.Center, 6.5f, Projectile.rotation, 0.3f + Projectile.ai[1] * 0.2f, fade);
             return false;
@@ -365,6 +379,11 @@ namespace FrostMelee.Content.Projectiles
         {
             NorthPoleEffects.SnowDust(Projectile.Center, 12 + (int)(Level * 14), 3 + Level * 3);
             if (!impacted || Charging) return;
+            // разрыв: кольцо огоньков сияния и снежный выброс (на всех клиентах)
+            for (int i = 0; i < 28; i++)
+                NorthPoleFx.AuroraDust(Projectile.Center, (MathHelper.TwoPi * i / 28).ToRotationVector2() * (4f + Level * 3f), 1.4f);
+            for (int i = 0; i < 10; i++)
+                NorthPoleFx.ShakeSnow(Projectile.Center, 1f, 16f);
             if (!Main.dedServ) SoundEngine.PlaySound(SoundID.Item27, Projectile.Center);
             if (!NorthPoleEffects.Owned(Projectile)) return;
             for (int i = 0; i < NorthPoleBalance.Shards; i++)
@@ -379,7 +398,20 @@ namespace FrostMelee.Content.Projectiles
         {
             float radius = Projectile.width * 0.5f + 2;
             float alpha = Charging ? 0.85f + pulse * 0.15f : 1f;
-            if (!Charging) NorthPoleArt.Afterimages(Projectile, radius, Level);
+            NorthPoleFx.Palette(out Color auroraCore, out Color auroraTail, out Color auroraEdge, Projectile.whoAmI);
+            if (Charging)
+            {
+                float breathe = 0.5f + 0.5f * MathF.Sin((float)Main.GameUpdateCount * 0.08f);
+                NorthPoleFx.Bloom(Projectile.Center, radius * (4.5f + Level * 2f), NorthPoleFx.Add(auroraEdge, 0.18f + 0.1f * breathe + pulse * 0.3f));
+                NorthPoleFx.Bloom(Projectile.Center, radius * 2.6f, NorthPoleFx.Add(auroraTail, 0.3f + pulse * 0.4f));
+                if (pulse > 0.05f)
+                    NorthPoleFx.Ring(Projectile.Center, radius * (1.2f + (1 - pulse) * 1.6f), 6f, NorthPoleFx.Add(auroraTail, pulse * 0.7f));
+            }
+            else
+            {
+                NorthPoleFx.CometTail(Projectile, radius * 1.4f, 1f);
+                NorthPoleFx.Bloom(Projectile.Center, radius * 4f, NorthPoleFx.Add(auroraTail, 0.35f));
+            }
             if (NorthPoleArt.DrawCustom("Snowflake", Projectile.Center, Projectile.rotation, radius * 2, Color.White * alpha))
                 return false;
             // halo, flake, then one orbiting mote per charge step
@@ -432,13 +464,7 @@ namespace FrostMelee.Content.Projectiles
         public override bool PreDraw(ref Color lightColor)
         {
             Vector2 dir = Projectile.rotation.ToRotationVector2();
-            for (int i = Projectile.oldPos.Length - 1; i >= 1; i--)
-            {
-                if (Projectile.oldPos[i] == Vector2.Zero) continue;
-                float fade = (1 - i / (float)Projectile.oldPos.Length) * 0.4f * Projectile.Opacity;
-                Vector2 c = Projectile.oldPos[i] + Projectile.Size / 2;
-                NorthPoleArt.Line(c - dir * 6, c + dir * 6, 3, NorthPoleArt.Additive(NorthPoleArt.Ice, fade));
-            }
+            NorthPoleFx.CometTail(Projectile, 7f, 0.8f * Projectile.Opacity);
             if (NorthPoleArt.DrawCustom("Shard", Projectile.Center, Projectile.rotation, 20, Color.White * Projectile.Opacity))
                 return false;
             NorthPoleArt.Icicle(Projectile.Center - dir * 9, Projectile.Center + dir * 10, 6, Projectile.Opacity);
@@ -451,7 +477,12 @@ namespace FrostMelee.Content.Projectiles
     public class NorthPolePickup : ModProjectile
     {
         public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.NorthPoleSnowflake;
-        public override void SetStaticDefaults() => Main.projFrames[Type] = 3;
+        public override void SetStaticDefaults()
+        {
+            Main.projFrames[Type] = 3;
+            ProjectileID.Sets.TrailCacheLength[Type] = 10;
+            ProjectileID.Sets.TrailingMode[Type] = 0;
+        }
         public override void SetDefaults()
         {
             Projectile.width = Projectile.height = 22;
@@ -492,6 +523,9 @@ namespace FrostMelee.Content.Projectiles
         {
             float twinkle = 0.75f + 0.25f * MathF.Sin(Projectile.ai[0] * 0.2f + Projectile.whoAmI);
             float fade = Math.Min(1, Projectile.timeLeft / 30f) * Math.Min(1, Projectile.ai[0] / 10f);
+            NorthPoleFx.CometTail(Projectile, 9f, fade * Math.Min(1f, Projectile.velocity.Length() / 3f));
+            NorthPoleFx.Palette(out _, out Color tail, out _, Projectile.whoAmI);
+            NorthPoleFx.Bloom(Projectile.Center, 46f, NorthPoleFx.Add(tail, 0.3f * twinkle * fade));
             if (NorthPoleArt.DrawCustom("Pickup", Projectile.Center, Projectile.rotation, 22, Color.White * fade))
                 return false;
             NorthPoleArt.Dot(Projectile.Center, 20, NorthPoleArt.Additive(new Color(255, 230, 160), 0.18f * twinkle * fade), 0);
@@ -539,6 +573,11 @@ namespace FrostMelee.Content.Projectiles
             NPC target = Main.npc[id];
             float fade = Math.Min(1, Projectile.timeLeft / 30f);
             Vector2 half = new Vector2(target.width, target.height) * 0.5f;
+            float age = NorthPoleBalance.FrostbiteTicks - Projectile.timeLeft;
+            float bulk = Math.Max(target.width, target.height);
+            NorthPoleFx.Bloom(target.Center, bulk * 2.2f, NorthPoleFx.Add(new Color(150, 210, 255), (0.16f + 0.06f * MathF.Sin(age * 0.12f)) * fade));
+            if (age < 16)
+                NorthPoleFx.Ring(target.Center, bulk * (0.5f + age / 16f * 0.8f), 5f, NorthPoleFx.Add(Color.White, (1f - age / 16f) * 0.8f));
             if (NorthPoleArt.Custom("SnowCoat") is Texture2D custom)
             {
                 Main.EntitySpriteDraw(custom, target.Center - Main.screenPosition, null, Color.White * fade, 0,
@@ -628,12 +667,159 @@ namespace FrostMelee.Content.Projectiles
                 return false;
             }
             Vector2 tip = Projectile.Center + Direction * length;
+            NorthPoleFx.Palette(out Color core, out Color tail, out Color edge, Projectile.whoAmI);
+            if (age < 14)
+                NorthPoleFx.Ring(Projectile.Center, Width * (1f + age * 0.25f), 5f, NorthPoleFx.Add(tail, (1f - age / 14f) * 0.8f));
+            NorthPoleFx.Stroke(Projectile.Center, tip, Width * 3f, NorthPoleFx.Add(edge, 0.25f * fade));
+            NorthPoleFx.Stroke(Projectile.Center, tip, Width * 1.6f, NorthPoleFx.Add(tail, 0.35f * fade));
             NorthPoleArt.Icicle(Projectile.Center, tip, Width, fade);
+            if (age < 24)
+                NorthPoleFx.Sparkle(tip, 40f * (1f - age / 24f), Direction.ToRotation(), 2, NorthPoleFx.Add(tail, fade), NorthPoleFx.Add(core, fade));
             // two smaller side spikes break out of the base
             Vector2 side = Direction.RotatedBy(MathHelper.PiOver2);
             NorthPoleArt.Icicle(Projectile.Center + side * Width * 0.4f, Projectile.Center + Direction.RotatedBy(0.45f) * length * 0.35f, Width * 0.45f, fade);
             NorthPoleArt.Icicle(Projectile.Center - side * Width * 0.4f, Projectile.Center + Direction.RotatedBy(-0.45f) * length * 0.35f, Width * 0.45f, fade);
             return false;
+        }
+    }
+    // North Pole's own effect style: "polar night" — aurora ribbons (mint/teal
+    // shifting to violet) with snow shaken off them. Same techniques as the
+    // other weapons: ThePerfectGlow strokes, additive A = 0 colours and the
+    // FlameRibbon vertex ribbon for comet tails.
+    internal static class NorthPoleFx
+    {
+        public static readonly Color AuroraCore = new Color(225, 255, 245);
+        private static readonly Color MintA = new Color(80, 240, 180), MintB = new Color(110, 200, 255);
+        private static readonly Color VioletA = new Color(150, 85, 255), VioletB = new Color(70, 120, 255);
+
+        // Slowly breathing aurora: the tail drifts teal<->sky, the edge violet<->blue
+        public static void Palette(out Color core, out Color tail, out Color edge, float phase = 0f)
+        {
+            float s = 0.5f + 0.5f * MathF.Sin((float)Main.GlobalTimeWrappedHourly * 1.7f + phase);
+            core = AuroraCore;
+            tail = Color.Lerp(MintA, MintB, s);
+            edge = Color.Lerp(VioletA, VioletB, s);
+        }
+
+        public static Texture2D Glow => Main.dedServ ? null : TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
+
+        public static Color Add(Color c, float alpha)
+        {
+            Color r = c * MathHelper.Clamp(alpha, 0f, 1f);
+            r.A = 0;
+            return r;
+        }
+
+        // Soft stroke a->b (world coordinates)
+        public static void Stroke(Vector2 a, Vector2 b, float width, Color color)
+        {
+            Texture2D glow = Glow;
+            if (glow == null || width < 0.5f) return;
+            Vector2 d = b - a;
+            Main.EntitySpriteDraw(glow, (a + b) * 0.5f - Main.screenPosition, null, color, d.ToRotation(),
+                glow.Size() / 2f, new Vector2((d.Length() + width) / glow.Width, width / glow.Height), SpriteEffects.None, 0f);
+        }
+
+        public static void Bloom(Vector2 at, float size, Color color)
+        {
+            Texture2D glow = Glow;
+            if (glow == null) return;
+            Main.EntitySpriteDraw(glow, at - Main.screenPosition, null, color, 0f, glow.Size() / 2f, size / glow.Width, SpriteEffects.None, 0f);
+        }
+
+        // Star of n thin rays, like DrawSparkle of the arcs
+        public static void Sparkle(Vector2 at, float size, float rotation, int rays, Color color, Color center)
+        {
+            Texture2D glow = Glow;
+            if (glow == null) return;
+            for (int i = 0; i < rays; i++)
+                Main.EntitySpriteDraw(glow, at - Main.screenPosition, null, color, rotation + MathHelper.Pi * i / rays,
+                    glow.Size() / 2f, new Vector2(size / glow.Width, size * 0.09f / glow.Height), SpriteEffects.None, 0f);
+            Bloom(at, size * 0.28f, center);
+        }
+
+        // Expanding frost ring of soft strokes
+        public static void Ring(Vector2 at, float radius, float width, Color color, int segments = 24)
+        {
+            Vector2 prev = at + new Vector2(radius, 0);
+            for (int i = 1; i <= segments; i++)
+            {
+                Vector2 next = at + (MathHelper.TwoPi * i / segments).ToRotationVector2() * radius;
+                Stroke(prev, next, width, color);
+                prev = next;
+            }
+        }
+
+        // Aurora curtain: faint vertical drapes hanging below a point
+        public static void Curtain(Vector2 top, float height, float width, float alpha, float phase)
+        {
+            Palette(out _, out Color tail, out Color edge, phase);
+            float sway = MathF.Sin((float)Main.GlobalTimeWrappedHourly * 2.3f + phase) * 4f;
+            Stroke(top, top + new Vector2(sway, height * 0.55f), width, Add(tail, alpha));
+            Stroke(top + new Vector2(sway, height * 0.45f), top + new Vector2(sway * 1.6f, height), width * 0.8f, Add(edge, alpha * 0.6f));
+        }
+
+        private static readonly Vector2[] pts = new Vector2[24];
+        private static readonly float[] widths = new float[24];
+        private static readonly Color[] colors = new Color[24];
+
+        // Comet tail from a projectile's oldPos: two FlameRibbon passes (wide
+        // aurora shell + narrow white core). Closes the sprite batch around
+        // the vertex draw and reopens it with the projectile settings.
+        public static void CometTail(Projectile p, float width, float alpha, bool aurora = true)
+        {
+            if (Main.dedServ || alpha <= 0.02f) return;
+            int n = 0;
+            pts[n++] = p.Center;
+            for (int i = 0; i < p.oldPos.Length && n < pts.Length; i++)
+            {
+                if (p.oldPos[i] == Vector2.Zero) break;
+                pts[n++] = p.oldPos[i] + p.Size / 2f;
+            }
+            if (n < 3) return;
+            Palette(out Color core, out Color tail, out Color edge, p.whoAmI);
+            if (!aurora) { tail = new Color(170, 225, 255); edge = new Color(80, 140, 235); }
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            Main.spriteBatch.End();
+            try
+            {
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    for (int k = 0; k < n; k++)
+                    {
+                        float f = k / (float)(n - 1);
+                        widths[k] = width * (pass == 0 ? 1.8f : 0.7f) * (1f - f * 0.75f);
+                        colors[k] = pass == 0
+                            ? Color.Lerp(tail, edge, f) * (0.45f * alpha)
+                            : Color.Lerp(core, tail, MathHelper.Clamp(f * 2f, 0f, 1f)) * (0.75f * alpha);
+                    }
+                    FlameRibbon.Draw(device, pts, widths, colors, n);
+                }
+            }
+            finally
+            {
+                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+            }
+        }
+
+        // Snow shaken off an effect: falls with gravity, unlike the floaty ice sparks of other weapons
+        public static void ShakeSnow(Vector2 at, float chance, float spread = 6f)
+        {
+            if (Main.dedServ || Main.rand.NextFloat() > chance) return;
+            Dust d = Dust.NewDustPerfect(at + Main.rand.NextVector2Circular(spread, spread), DustID.Snow,
+                new Vector2(Main.rand.NextFloat(-0.4f, 0.4f), Main.rand.NextFloat(0.2f, 1.2f)), 0, default, Main.rand.NextFloat(0.7f, 1.1f));
+            d.noGravity = false;
+        }
+
+        // Aurora-tinted sparkle dust that hangs in the air
+        public static void AuroraDust(Vector2 at, Vector2 velocity, float scale = 1f)
+        {
+            if (Main.dedServ) return;
+            Palette(out _, out Color tail, out Color edge, Main.rand.NextFloat(6f));
+            Dust d = Dust.NewDustPerfect(at, DustID.RainbowMk2, velocity, 0, Main.rand.NextBool() ? tail : edge, scale * 0.6f);
+            d.noGravity = true;
+            d.fadeIn = 0.6f;
         }
     }
 }

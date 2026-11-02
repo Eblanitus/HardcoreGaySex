@@ -501,6 +501,36 @@ namespace FrostMelee.Content.Projectiles
             // игрока: механика нигде не задумывалась, сосульки сыпались зря.
         }
 
+        // Северный полюс: остриё выставленного копья светится сиянием тем сильнее,
+        // чем быстрее бежит игрок, — это размер будущей сосульки из спины врага.
+        // Назад вдоль древка тянутся полосы ветра, с острия сдувает снег.
+        private void DrawPolarCharge(SickleSprite.Geometry geo)
+        {
+            if (Main.dedServ)
+                return;
+            Player player = Main.player[Projectile.owner];
+            float speed = MathHelper.Clamp(player.velocity.Length() / Content.Weapons.NorthPoleBalance.SpikeFullSpeed, 0f, 1f);
+            Vector2 dir = SpearDir;
+            Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
+            NorthPoleFx.Palette(out Color core, out Color tail, out Color edge, Projectile.whoAmI);
+            float pulse = 0.85f + 0.15f * (float)Math.Sin(Main.GameUpdateCount * 0.25f);
+            NorthPoleFx.Bloom(tip, 30f + 50f * speed, NorthPoleFx.Add(edge, (0.2f + 0.35f * speed) * pulse));
+            NorthPoleFx.Sparkle(tip, 18f + 46f * speed, dir.ToRotation(), 2, NorthPoleFx.Add(tail, 0.5f + 0.5f * speed), NorthPoleFx.Add(core, 0.7f + 0.3f * speed));
+            if (speed > 0.15f)
+            {
+                Vector2 normal = new Vector2(-dir.Y, dir.X);
+                for (int i = 0; i < 3; i++)
+                {
+                    float off = (i - 1) * 7f;
+                    float run = (Main.GameUpdateCount * 0.09f + i * 0.37f) % 1f;
+                    Vector2 a = tip - dir * (geo.Length * 0.15f + run * geo.Length * 0.7f) + normal * off;
+                    NorthPoleFx.Stroke(a, a - dir * 26f * speed, 3f, NorthPoleFx.Add(tail, 0.6f * speed * (1f - run)));
+                }
+                NorthPoleFx.ShakeSnow(tip, 0.5f * speed, 4f);
+            }
+            Lighting.AddLight(tip, 0.15f + 0.3f * speed, 0.4f + 0.4f * speed, 0.45f + 0.4f * speed);
+        }
+
         public override bool PreDraw(ref Color lightColor)
         {
             int itemType = (int)Projectile.ai[2];
@@ -532,6 +562,8 @@ namespace FrostMelee.Content.Projectiles
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);
             DrawIcicle(geo, drawPos, flipped, lightColor);
+            if (itemType == ItemID.NorthPole)
+                DrawPolarCharge(geo);
             // Фростбранд: поверх обычного клинка потихоньку проявляется длинный
             if (itemType == ItemID.Frostbrand)
                 DrawLongFrostbrand(drawPos, flipped, lightColor, effects);
