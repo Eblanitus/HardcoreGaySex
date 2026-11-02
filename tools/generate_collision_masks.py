@@ -16,7 +16,7 @@ SPRITES = (
     ('Frozen', 'FrostMelee/Items/IceSpearFrozen.png'),
     ('CandyCaneSword', 'FrostMelee/Items/CandyCaneSword.png'),
     ('ChristmasTreeSword', 'ReferenceSprites/FrostMelee/Christmas_Tree_Sword.png'),
-    ('Aisberg', 'FrostMelee/Content/Items/Aisberg.png'),
+    ('Aisberg', 'FrostMelee/Content/Items/Iceberg.png'),
     ('LongFrostbrand', 'FrostMelee/Items/frostbrand_long.png'),
     ('CandyGray', 'FrostMelee/Items/Candy Cane Sword gray.png'),
 )
