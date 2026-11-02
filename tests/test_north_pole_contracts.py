@@ -338,8 +338,16 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         for path in (ROOT / 'FrostMelee/Content').rglob('*.cs'):
             self.assertNotIn('NorthPolePixelFx', path.read_text(encoding='utf-8'), path.name)
         drift = read('Content/Projectiles/NorthPoleDrift.cs')
-        self.assertIn('DustID.SnowflakeIce', drift)
         self.assertNotIn('NorthPoleArt.Sprite', drift)
+        # throw burns with the frost fire of Frostbite-burning enemies (owner 02.11.2026)
+        self.assertIn('FrostJetFx.LooseBurnDust(', drift)
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        trail = effects.split('public static void Trail', 1)[1].split('public static void Coat', 1)[0]
+        self.assertIn('FrostJetFx.LooseBurnDust(', trail)
+        self.assertNotIn('AuroraDust', trail)
+        jet = read('Content/Projectiles/FrostJetFx.cs')
+        self.assertIn('DustID.IceTorch, velocity', jet)
+        self.assertIn('if (tag.Loose)', jet)
 
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image

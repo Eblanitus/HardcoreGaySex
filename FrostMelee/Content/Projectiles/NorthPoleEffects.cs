@@ -22,9 +22,12 @@ namespace FrostMelee.Content.Projectiles
         // and falls through them.
         public static void Trail(Projectile spear)
         {
-            // on every client: the flying spear sheds snow and aurora motes
+            // on every client: the flying spear sheds snow and burns with frost fire, the same
+            // vanilla Frostbite particles with our flame as on burning enemies (owner 02.11.2026:
+            // the icy glows did not fit the throw)
             NorthPoleFx.ShakeSnow(spear.Center, 1f, 8f);
-            NorthPoleFx.AuroraDust(spear.Center, -spear.velocity * 0.1f, 1.1f);
+            if (Main.GameUpdateCount % 2 == 0)
+                FrostJetFx.LooseBurnDust(spear.Center + Main.rand.NextVector2Circular(4f, 4f), -spear.velocity * 0.1f + new Vector2(0f, -0.6f), NorthPoleDrift.BurnGroup);
             if (!Owned(spear)) return;
             Projectile.NewProjectile(spear.GetSource_FromThis(), spear.Center, Vector2.Zero,
                 ModContent.ProjectileType<NorthPoleTrail>(), Math.Max(1, (int)(spear.damage * NorthPoleBalance.TrailDamage)),

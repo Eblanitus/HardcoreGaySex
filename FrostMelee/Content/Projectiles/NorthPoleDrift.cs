@@ -8,7 +8,7 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Projectiles
 {
     // Lingering snow trail of the thrown North Pole's snowflakes (owner 02.11.2026):
-    // each trail flake leaves snow that hangs for 3 seconds and gives
+    // each trail flake leaves frost fire that hangs for 3 seconds and gives
     // Frostbite to enemies passing through it. Only the owner applies the debuff.
     public class NorthPoleDrift : ModSystem
     {
@@ -53,17 +53,19 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        // Visual (owner 02.11.2026: the smooth pixel motes read as "Noita"): every point now and
-        // then lets go of a plain vanilla snow flake that hangs and drifts down, like vanilla dust.
+        public const int BurnGroup = 7;   // FrostJetFx flame group shared by the spear and its trail
+
+        // Visual: the Frostbite zone burns like a Frostbite-burning enemy (owner 02.11.2026):
+        // every point now and then gives off a vanilla Frostbite particle with our frost flame.
         public override void PostUpdateDusts()
         {
             if (Main.dedServ) return;
             foreach (Point p in points)
             {
-                if ((Main.GameUpdateCount + p.Seed) % 24 != 0) continue;
-                Dust d = Dust.NewDustPerfect(p.Pos + Main.rand.NextVector2Circular(6f, 6f), DustID.SnowflakeIce,
-                    new Vector2(Main.rand.NextFloat(-0.3f, 0.3f), Main.rand.NextFloat(0.2f, 0.6f)), 0, default, Main.rand.NextFloat(0.9f, 1.2f));
-                d.noGravity = true;
+                if ((Main.GameUpdateCount + p.Seed) % 20 != 0) continue;
+                float left = 1f - p.Age / (float)Life;
+                FrostJetFx.LooseBurnDust(p.Pos + Main.rand.NextVector2Circular(6f, 6f),
+                    new Vector2(Main.rand.NextFloat(-0.3f, 0.3f), Main.rand.NextFloat(-1.2f, -0.5f)), BurnGroup, 1.2f + 0.6f * left);
             }
         }
     }

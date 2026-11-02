@@ -84,6 +84,9 @@ namespace FrostMelee.Content.Projectiles
         private sealed class VanillaBurnTag
         {
             public int NpcIndex;
+            // Свободный огонь (не от горящего врага): North Pole's thrown spear and its
+            // lingering Frostbite trail burn this way. NpcIndex then holds a negative group
+            public bool Loose;
             public int NpcType;
             public float BirthScale;
             public float Phase;
@@ -502,6 +505,26 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
+        // Свободное ледяное горение (владелец 02.11.2026, бросок Северного полюса):
+        // обычная ванильная частица Frostbite (IceTorch), поверх которой рисуется
+        // то же наше пламя, что и на горящих врагах. Только картинка, без урона
+        public static void LooseBurnDust(Vector2 at, Vector2 velocity, int group, float scale = 1.8f)
+        {
+            if (Main.dedServ || FrostMeleeConfigDefaults.FireIntensityScale <= 0f)
+                return;
+            Dust dust = Dust.NewDustPerfect(at, DustID.IceTorch, velocity, 100, default, scale);
+            dust.noGravity = true;
+            dust.customData = new VanillaBurnTag
+            {
+                Loose = true,
+                NpcIndex = -1 - System.Math.Abs(group),
+                NpcType = 0,
+                BirthScale = MathHelper.Max(scale, 0.1f),
+                Phase = dust.dustIndex * 0.618034f + Main.GameUpdateCount % 360 * 0.37f,
+                SpawnTick = Main.GameUpdateCount
+            };
+        }
+
         // На горящих врагах наш огонь идёт из ВАНИЛЬНЫХ частиц Frostburn
         // (правка владельца): своих частиц для врагов мы не придумываем.
         // Ванильная пыль IceTorch и ванильный свет возвращены как есть,
@@ -625,6 +648,12 @@ namespace FrostMelee.Content.Projectiles
                 VanillaBurnTag tag = dust.customData as VanillaBurnTag;
                 if (tag == null)
                     continue;
+                if (tag.Loose)
+                {
+                    if (view.Contains(dust.position.ToPoint()))
+                        vanillaBurnDust.Add(new VanillaBurnDustRef { Particle = dust, Tag = tag, HardmodeBurn = true });
+                    continue;
+                }
                 if (tag.NpcIndex < 0 || tag.NpcIndex >= Main.maxNPCs)
                     continue;
                 NPC npc = Main.npc[tag.NpcIndex];
