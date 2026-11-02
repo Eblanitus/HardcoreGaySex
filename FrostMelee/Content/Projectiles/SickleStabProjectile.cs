@@ -349,6 +349,8 @@ namespace FrostMelee.Content.Projectiles
             if (Projectile.localAI[0] == 0f)
             {
                 Projectile.localAI[0] = 1f;
+                if ((int)Projectile.ai[2] == ItemID.NorthPole)
+                    player.GetModPlayer<Weapons.NorthPolePlayer>().CallSnow(Projectile);
                 SoundEngine.PlaySound(SoundID.Item1 with { Pitch = 0.5f, Volume = 0.6f }, player.Center);
             }
 

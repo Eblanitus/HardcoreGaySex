@@ -15,7 +15,7 @@
 | ![Ice Sickle](FrostMelee/Ice_Sickle.png) | `Ice_Sickle.png` | Ice Sickle (в моде — Замороженное копьё) | 1306 | 52×44 | `FrostMelee/Content/SickleTypes.cs` | [Файл](https://terraria.wiki.gg/wiki/File:Ice_Sickle.png) |
 | ![Amarok](FrostMelee/Amarok.png) | `Amarok.png` | Амарок / Amarok | 3289 | 30×26 | `FrostMelee/Content/Yoyo/AmarokGlobalItem.cs` | [Файл](https://terraria.wiki.gg/wiki/File:Amarok.png) |
 | ![Christmas Tree Sword](FrostMelee/Christmas_Tree_Sword.png) | `Christmas_Tree_Sword.png` | Меч из ёлки / Christmas Tree Sword | 1928 | 60×60 | `FrostMelee/Content/Weapons/SwordTypes.cs` | [Файл](https://terraria.wiki.gg/wiki/File:Christmas_Tree_Sword.png) |
-| ![North Pole](FrostMelee/North_Pole.png) | `North_Pole.png` | Северный полюс / North Pole (заглушка, переработка запланирована) | 1947 | 52×52 | `FrostMelee/Content/Weapons/NorthPoleGlobalItem.cs` | [Файл](https://terraria.wiki.gg/wiki/File:North_Pole.png) |
+| ![North Pole](FrostMelee/North_Pole.png) | `North_Pole.png` | Северный полюс / North Pole (уникальные эффекты реализованы, нужны сборка и игровой тест) | 1947 | 52×52 | `FrostMelee/Content/Weapons/NorthPoleGlobalItem.cs` | [Файл](https://terraria.wiki.gg/wiki/File:North_Pole.png) |
 
 ## WoodSwordsOverhaul
 

@@ -388,8 +388,22 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
+        private bool northPoleHit;
+        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
+        {
+            // One growth step per successful swing, not per target in a crowd.
+            if (ItemType == ItemID.NorthPole && !northPoleHit && Projectile.owner == Main.myPlayer)
+            {
+                northPoleHit = true;
+                Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().SwingHit(Projectile, target);
+            }
+        }
+
         public override void OnKill(int timeLeft)
         {
+            if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer
+                && Projectile.localAI[0] >= Math.Max(1f, Projectile.ai[1]))
+                Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().FinishSwing(northPoleHit);
             frostTrail?.Close();
             frostTrail = null;
         }

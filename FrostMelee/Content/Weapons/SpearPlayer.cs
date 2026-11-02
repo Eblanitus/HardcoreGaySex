@@ -6,7 +6,7 @@ namespace FrostMelee.Content.Weapons
 {
     // Read-only spear view of the shared controller. Do not maintain two input
     // machines: SicklePlayer already handles timings, cancellation and projectiles.
-    // This is an extension point for future North Pole mechanics, not a second AI.
+    // Unique North Pole effects live in NorthPolePlayer/NorthPoleEffects, not a second input AI.
     public class SpearPlayer : ModPlayer
     {
         public enum SpearMove { None, Swing, Thrust, Meet, Throw }
