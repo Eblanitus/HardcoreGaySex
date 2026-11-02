@@ -52,6 +52,8 @@ namespace FrostMelee.Content.Weapons
         public const int MiniBlastRadius = 40;
         // Brace icicle length follows the player's speed (owner 02.11.2026): standing still gives a stub,
         // a full sprint a long lance. Full length is reached at a normal top run speed.
+        public const int MaxSpikes = 3;           // live brace icicles per player (owner 02.11.2026)
+        public const float SpikeDamage = 0.5f;    // of the brace hit damage
         public const float SpikeMinLength = 32f;
         public const float SpikeMaxLength = 224f;
         public const float SpikeFullSpeed = 9f;

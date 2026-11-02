@@ -1136,7 +1136,7 @@ namespace FrostMelee.Content.Projectiles
         private const float AuroraSnowTipChance = 0.5f;   // снег с острия
         private const float AuroraDustChance = 0.15f;     // огонёк сияния в теле ленты
         private const int AuroraPeakBurst = 8;            // всплеск снега и огоньков на пике взмаха
-        private const float AuroraCalmSnowChance = 0.18f; // спокойная пиксельная снежинка с внешнего края, шанс за тик
+        private const int AuroraVeilSubsteps = 4;         // точек второго следа (завесы) за тик
         private const int AuroraLightPoints = 5;          // точки настоящего света, бегущего по ленте
         private const float AuroraShimmerAlpha = 0.45f;   // переливы: волны света вдоль ленты
         private const float AuroraShimmerWaves = 2.2f;    // сколько волн на ленте
@@ -1162,17 +1162,16 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.ShakeSnow(pos, AuroraSnowEdgeChance * env, 4f);
             }
             NorthPoleFx.ShakeSnow(tipPos, AuroraSnowTipChance * env, 3f);
-            // Owner 02.11.2026: the pixel stars looked like Noita confetti. Instead: a few calm
-            // pixel snowflakes (owner's sprite rules) drift down off the outer edge, and the
-            // aurora's light flows along the arc and lights the scene.
-            if (Main.rand.NextFloat() < AuroraCalmSnowChance * env)
+            // Второй след (владелец 02.11.2026: «у других оружий 2 следа одновременно», «не частицы»):
+            // по пути острия в мире остаётся завеса сияния — занавесы свисают вниз и тают (NorthPoleVeil).
+            if (env > 0.1f)
             {
-                float back = Main.rand.NextFloat() * TrailTicks * 0.8f / max;
-                Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.98f, 1.04f));
-                Vector2 outward = (pos - player.MountedCenter).SafeNormalize(Vector2.UnitY);
-                NorthPolePixelFx.Spawn(pos, outward * 0.35f + new Vector2(Main.rand.NextFloat(-0.2f, 0.2f), 0.3f),
-                    NorthPolePixelFx.Snow, 80, 0.008f, 0.985f);
+                float prev = progress - 1f / max;
+                for (int j = 1; j <= AuroraVeilSubsteps; j++)
+                    NorthPoleVeil.Add(EndPoint(player, MathHelper.Lerp(prev, progress, j / (float)AuroraVeilSubsteps), true, 0.97f),
+                        Projectile.identity);
             }
+            // свет сияния бежит по ленте и освещает сцену
             float lightTime = Projectile.localAI[0] * AuroraShimmerSpeed;
             for (int i = 0; i < AuroraLightPoints; i++)
             {

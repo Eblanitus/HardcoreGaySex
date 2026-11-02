@@ -55,12 +55,26 @@ namespace FrostMelee.Content.Projectiles
         public static void BraceSpike(Projectile brace, NPC target)
         {
             if (!Owned(brace) || target.friendly) return;
+            // Owner 02.11.2026: the icicles piled up endlessly and hit too hard. One live icicle
+            // per enemy, at most MaxSpikes per player (the oldest melts), half damage.
+            int type = ModContent.ProjectileType<NorthPoleBraceSpike>();
+            Projectile oldest = null;
+            int alive = 0;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (!p.active || p.owner != brace.owner || p.type != type) continue;
+                if ((int)p.ai[2] == target.whoAmI) return;
+                alive++;
+                if (oldest == null || p.timeLeft < oldest.timeLeft) oldest = p;
+            }
+            if (alive >= NorthPoleBalance.MaxSpikes) oldest?.Kill();
             Vector2 direction = brace.ai[1].ToRotationVector2();
             float extent = Math.Abs(direction.X) * target.width * 0.5f + Math.Abs(direction.Y) * target.height * 0.5f;
             Vector2 origin = target.Center + direction * (extent * 0.6f);
             float speed = MathHelper.Clamp(Main.player[brace.owner].velocity.Length() / NorthPoleBalance.SpikeFullSpeed, 0, 1);
             Projectile.NewProjectile(brace.GetSource_FromThis(), origin, Vector2.Zero,
-                ModContent.ProjectileType<NorthPoleBraceSpike>(), brace.damage, brace.knockBack,
+                type, Math.Max(1, (int)(brace.damage * NorthPoleBalance.SpikeDamage)), brace.knockBack,
                 brace.owner, brace.ai[1], speed, target.whoAmI);
         }
 
