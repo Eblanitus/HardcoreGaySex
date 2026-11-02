@@ -50,31 +50,23 @@ namespace FrostMelee.Content.Projectiles
                 ModContent.ProjectileType<NorthPoleSnowCoat>(), 0, 0, spear.owner, target.whoAmI, target.type);
         }
 
-        // The icicle grows out of the enemy's back. It is ice magic, not a solid
-        // body: walls and floors behind the enemy do not cut it off.
-        public static void BraceSpike(Projectile brace, NPC target)
+        // "Пурга" (owner 02.11.2026: the brace icicles did not work as a mechanic). Running into an
+        // enemy with the braced spear lets a blizzard gust burst out from behind it along the spear:
+        // a snow cone that blows the crowd behind the target away. Faster run = longer gust and
+        // a harder push. One gust per half second per player, so nothing piles up.
+        public static void BraceGust(Projectile brace, NPC target)
         {
             if (!Owned(brace) || target.friendly) return;
-            // Owner 02.11.2026: the icicles piled up endlessly and hit too hard. One live icicle
-            // per enemy, at most MaxSpikes per player (the oldest melts), half damage.
-            int type = ModContent.ProjectileType<NorthPoleBraceSpike>();
-            Projectile oldest = null;
-            int alive = 0;
-            for (int i = 0; i < Main.maxProjectiles; i++)
-            {
-                Projectile p = Main.projectile[i];
-                if (!p.active || p.owner != brace.owner || p.type != type) continue;
-                if ((int)p.ai[2] == target.whoAmI) return;
-                alive++;
-                if (oldest == null || p.timeLeft < oldest.timeLeft) oldest = p;
-            }
-            if (alive >= NorthPoleBalance.MaxSpikes) oldest?.Kill();
+            NorthPolePlayer modPlayer = Main.player[brace.owner].GetModPlayer<NorthPolePlayer>();
+            if (modPlayer.GustCooldown > 0) return;
+            modPlayer.GustCooldown = NorthPoleBalance.GustCooldown;
             Vector2 direction = brace.ai[1].ToRotationVector2();
             float extent = Math.Abs(direction.X) * target.width * 0.5f + Math.Abs(direction.Y) * target.height * 0.5f;
             Vector2 origin = target.Center + direction * (extent * 0.6f);
-            float speed = MathHelper.Clamp(Main.player[brace.owner].velocity.Length() / NorthPoleBalance.SpikeFullSpeed, 0, 1);
+            float speed = MathHelper.Clamp(Main.player[brace.owner].velocity.Length() / NorthPoleBalance.GustFullSpeed, 0, 1);
             Projectile.NewProjectile(brace.GetSource_FromThis(), origin, Vector2.Zero,
-                type, Math.Max(1, (int)(brace.damage * NorthPoleBalance.SpikeDamage)), brace.knockBack,
+                ModContent.ProjectileType<NorthPoleGust>(), Math.Max(1, (int)(brace.damage * NorthPoleBalance.GustDamage)),
+                MathHelper.Lerp(NorthPoleBalance.GustKnockMin, NorthPoleBalance.GustKnockMax, speed),
                 brace.owner, brace.ai[1], speed, target.whoAmI);
         }
 
@@ -194,8 +186,6 @@ namespace FrostMelee.Content.Projectiles
         // sprites are the reference (02.11.2026): opaque thin 1-px lines, no shadow, no outline.
         // Their canvas may be larger than the drawing, so sprites are centred on the opaque area.
         public const string PixelFolder = "FrostMelee/Textures/NorthPolePixel/";
-        public static readonly int[] SpikeWidths = { 4, 7, 10 };                     // art px
-        public static readonly int[] SpikeLengths = { 8, 16, 24, 36, 48, 64, 80, 96 }; // art px
         private static readonly Dictionary<string, Asset<Texture2D>> pixelCache = new();
 
         public static Texture2D Pixel(string name)
@@ -254,27 +244,6 @@ namespace FrostMelee.Content.Projectiles
                 : style == StyleDawn ? "DawnFlake"
                 : "SwingFlake" + Math.Clamp((int)Math.Round(radius / 2f), 3, 11);
             Sprite(name, center, Color.White * alpha);
-        }
-
-        // Icicle from base to tip: the closest pre-drawn width/length, cropped from the tip while
-        // it is shorter (it grows out tip first). fullLength — length it will reach (picks the sprite).
-        public static void Icicle(Vector2 baseCenter, Vector2 tip, float width, float alpha, float fullLength = 0f)
-        {
-            Vector2 d = tip - baseCenter;
-            float length = d.Length();
-            if (length < 2 || alpha <= 0.01f) return;
-            int wi = width < 11 ? 0 : width < 17 ? 1 : 2;              // thin / medium / wide ray
-            float want = Math.Max(length, fullLength) / 2f;           // art px
-            int li = SpikeLengths.Length - 1;
-            for (int i = 0; i < SpikeLengths.Length; i++)
-                if (SpikeLengths[i] >= want) { li = i; break; }
-            Texture2D t = Pixel($"Spike{wi}_{SpikeLengths[li]}");
-            if (t == null) return;
-            int show = Math.Clamp((int)(length / 2f) * 2 + 2, 2, t.Height);   // even rows
-            Rectangle src = new Rectangle(0, 0, t.Width, show);
-            float rot = d.ToRotation() + MathHelper.PiOver2;              // sprite tip points up
-            Main.EntitySpriteDraw(t, Snap(baseCenter), src, Color.White * alpha, rot,
-                new Vector2(MathF.Floor(t.Width / 4f) * 2f, show), 1f, SpriteEffects.None, 0);
         }
 
         // Vanilla-style afterimages: the same sprite at old positions, fading
@@ -815,20 +784,25 @@ namespace FrostMelee.Content.Projectiles
         }
     }
 
-    // ai[0]: direction; ai[1]: player speed snapshot [0..1]; ai[2]: first NPC (excluded).
-    public class NorthPoleBraceSpike : ModProjectile
+    // Blizzard gust of the braced spear. ai[0]: direction; ai[1]: player speed [0..1];
+    // ai[2]: the braced enemy (it already took the spear, the gust blows past it).
+    // A cone of wind that reaches out over GrowTicks, hits each enemy once and pushes it along
+    // the spear. Drawn only with calm pixel snow streaming along the cone (owner's reference).
+    public class NorthPoleGust : ModProjectile
     {
+        public const int Life = 16, GrowTicks = 8, StreamTicks = 10;
         public override string Texture => "FrostMelee/Textures/Effects/IceSpike0";
-        private float length;
         private int age;
         public override void SendExtraAI(BinaryWriter writer) => writer.Write(age);
         public override void ReceiveExtraAI(BinaryReader reader)
         {
-            age = Math.Clamp(reader.ReadInt32(), 0, 42);
-            Projectile.timeLeft = Math.Max(1, 42 - age);
+            age = Math.Clamp(reader.ReadInt32(), 0, Life);
+            Projectile.timeLeft = Math.Max(1, Life - age);
         }
-        private float Width => MathHelper.Lerp(8, 20, MathHelper.Clamp(Projectile.ai[1], 0, 1));
         private Vector2 Direction => Projectile.ai[0].ToRotationVector2();
+        private float Power => MathHelper.Clamp(Projectile.ai[1], 0, 1);
+        private float FullLength => MathHelper.Lerp(NorthPoleBalance.GustMinLength, NorthPoleBalance.GustMaxLength, Power);
+        private float Reach => FullLength * (1 - MathF.Pow(1 - MathHelper.Clamp(age / (float)GrowTicks, 0, 1), 2));
         public override void SetDefaults()
         {
             Projectile.width = Projectile.height = 8;
@@ -837,69 +811,89 @@ namespace FrostMelee.Content.Projectiles
             Projectile.penetrate = -1;
             Projectile.usesLocalNPCImmunity = true;
             Projectile.localNPCHitCooldown = -1;
-            Projectile.tileCollide = false; // non-moving; ice grows through blocks
+            Projectile.tileCollide = false; // wind and snow blow over blocks
             Projectile.ignoreWater = true;
-            Projectile.timeLeft = 42;
+            Projectile.timeLeft = Life;
         }
         public override bool ShouldUpdatePosition() => false;
         public override void AI()
         {
-            float t = MathHelper.Clamp(++age / 18f, 0, 1);
-            float grow = 1 - (1 - t) * (1 - t);
-            float previous = length;
-            length = MathHelper.Lerp(NorthPoleBalance.SpikeMinLength, NorthPoleBalance.SpikeMaxLength,
-                MathHelper.Clamp(Projectile.ai[1], 0, 1)) * grow;
-            if (age == 1 && !Main.dedServ)
+            age++;
+            Vector2 dir = Direction;
+            if (!Main.dedServ)
             {
-                SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.6f }, Projectile.Center);
-                NorthPolePixelFx.Burst(Projectile.Center, 5, 2f, NorthPolePixelFx.Snow, 40);
-            }
-            // pixel snow shaken off the growing tip
-            if (!Main.dedServ && age <= 18 && age % 6 == 0)
-                NorthPolePixelFx.Spawn(Projectile.Center + Direction * length, Direction.RotatedByRandom(0.9f) * 1.2f, NorthPolePixelFx.Snow, 40, 0.01f, 0.98f);
-            if (!Main.dedServ && length > previous)
-                for (int i = 0; i < 2; i++)
+                if (age == 1)
                 {
-                    Dust d = Dust.NewDustPerfect(Projectile.Center + Direction * length, DustID.SnowflakeIce,
-                        Direction.RotatedByRandom(0.8f) * Main.rand.NextFloat(1, 3), 0, default, 1.1f);
-                    d.noGravity = true;
+                    SoundEngine.PlaySound(SoundID.Item28 with { Volume = 0.55f, Pitch = -0.35f }, Projectile.Center);
+                    NorthPolePixelFx.Burst(Projectile.Center, 6, 2f, NorthPolePixelFx.Snow, 36);
+                    if (Projectile.owner == Main.myPlayer)
+                        Main.instance.CameraModifiers.Add(new Terraria.Graphics.CameraModifiers.PunchCameraModifier(
+                            Projectile.Center, dir, 2f + 3f * Power, 8f, 10, 1000f, "NorthPoleGust"));
                 }
-            Lighting.AddLight(Projectile.Center + Direction * length * 0.5f, 0.2f, 0.4f, 0.6f);
+                // snow streams out along the cone: dense white snow, a few aurora motes
+                if (age <= StreamTicks)
+                {
+                    int count = 3 + (int)(4 * Power);
+                    for (int i = 0; i < count; i++)
+                    {
+                        float spread = Main.rand.NextFloat(-1f, 1f) * NorthPoleBalance.GustHalfAngle;
+                        Vector2 v = dir.RotatedBy(spread) * FullLength / 15f * Main.rand.NextFloat(0.55f, 1f);
+                        Vector2 at = Projectile.Center + new Vector2(-dir.Y, dir.X) * Main.rand.NextFloat(-6f, 6f);
+                        byte set = i % 4 == 3 ? NorthPolePixelFx.Swing : NorthPolePixelFx.Snow;
+                        NorthPolePixelFx.Spawn(at, v, set, Main.rand.Next(20, 30), 0.015f, 0.94f);
+                    }
+                }
+            }
+            float glow = 1f - age / (float)Life;
+            for (int k = 1; k <= 3; k++)
+                Lighting.AddLight(Projectile.Center + dir * Reach * k / 3f, 0.25f * glow, 0.45f * glow, 0.55f * glow);
         }
         public override bool? CanHitNPC(NPC target) => target.whoAmI == (int)Projectile.ai[2] ? false : null;
+        // Cone: the enemy's hitbox is within reach of the gust's mouth and inside the opening angle
         public override bool? Colliding(Rectangle projHitbox, Rectangle targetHitbox)
         {
-            float point = 0;
-            return length > 0 && Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
-                Projectile.Center, Projectile.Center + Direction * length, Width, ref point);
+            float reach = Reach;
+            if (reach <= 0) return false;
+            Vector2 origin = Projectile.Center;
+            Vector2 nearest = Vector2.Clamp(origin, targetHitbox.TopLeft(), targetHitbox.BottomRight());
+            Vector2 to = targetHitbox.Center.ToVector2() - origin;
+            float dist = to.Length();
+            if (Vector2.Distance(origin, nearest) > reach) return false;
+            if (dist < 1f) return true;
+            float margin = MathF.Atan2(Math.Max(targetHitbox.Width, targetHitbox.Height) * 0.5f, dist);
+            float off = Math.Abs(MathHelper.WrapAngle(to.ToRotation() - Projectile.ai[0]));
+            return off <= NorthPoleBalance.GustHalfAngle + margin;
         }
-        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) => target.AddBuff(BuffID.Frostburn2, NorthPoleBalance.FrostbiteTicks);
+        // the push always goes along the spear, not away from the gust's centre
+        public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
+        {
+            float dx = Direction.X;
+            modifiers.HitDirectionOverride = Math.Abs(dx) < 0.1f ? (target.Center.X >= Projectile.Center.X ? 1 : -1) : Math.Sign(dx);
+        }
+        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
+        {
+            target.AddBuff(BuffID.Frostburn2, NorthPoleBalance.FrostbiteTicks);
+            if (!Main.dedServ)
+                NorthPolePixelFx.Burst(target.Center, 4, 1.6f, NorthPolePixelFx.Snow, 30);
+        }
         public override bool PreDraw(ref Color lightColor)
         {
-            if (length <= 0) return false;
-            float fade = Math.Min(1, Projectile.timeLeft / 12f);
-            if (NorthPoleArt.Custom("Spike") is Texture2D t)
+            // owner texture: drawn along the cone, mouth at the bottom
+            if (NorthPoleArt.Custom("Gust") is Texture2D t && Reach > 0)
             {
+                float fade = Math.Min(1, Projectile.timeLeft / 6f);
+                float width = 2f * Reach * MathF.Tan(NorthPoleBalance.GustHalfAngle);
                 Main.EntitySpriteDraw(t, Projectile.Center - Main.screenPosition, null, Color.White * fade,
-                    Direction.ToRotation() + MathHelper.PiOver2, new Vector2(t.Width / 2f, t.Height),
-                    new Vector2(Width / t.Width, length / t.Height), SpriteEffects.None, 0);
-                return false;
+                    Projectile.ai[0] + MathHelper.PiOver2, new Vector2(t.Width / 2f, t.Height),
+                    new Vector2(width / t.Width, Reach / t.Height), SpriteEffects.None, 0);
             }
-            // Redone by the owner's sprite reference (02.11.2026): a giant pixel snowflake ray,
-            // no glow strokes or rings around it; the tip "plus" stays (the owner likes it).
-            Vector2 tip = Projectile.Center + Direction * length;
-            NorthPoleFx.Palette(out Color core, out Color tail, out _, Projectile.whoAmI);
-            NorthPoleArt.Icicle(Projectile.Center, tip, Width, fade,
-                MathHelper.Lerp(NorthPoleBalance.SpikeMinLength, NorthPoleBalance.SpikeMaxLength, MathHelper.Clamp(Projectile.ai[1], 0, 1)));
-            if (age < 24)
-                NorthPoleFx.Sparkle(tip, 40f * (1f - age / 24f), Direction.ToRotation(), 2, NorthPoleFx.Add(tail, fade), NorthPoleFx.Add(core, fade));
-            return false;
+            return false; // otherwise the pixel snow is the whole look
         }
     }
     // North Pole's own effect style: "polar night" — aurora ribbons (mint/teal
     // shifting to violet) with snow shaken off them. Same techniques as the
     // other weapons: ThePerfectGlow strokes and additive A = 0 colours; the
-    // flakes, icicles and sparkles themselves are 2x2 pixel sprites (NorthPoleArt).
+    // flakes and sparkles themselves are 2x2 pixel sprites (NorthPoleArt).
     internal static class NorthPoleFx
     {
         public static readonly Color AuroraCore = new Color(225, 255, 245);

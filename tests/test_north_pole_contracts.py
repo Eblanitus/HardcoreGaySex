@@ -23,7 +23,7 @@ class NorthPoleContracts(unittest.TestCase):
     def test_all_four_shared_moves_have_north_pole_only_hooks(self):
         for code, call in ((self.arc, '.SwingHit(Projectile, target)'),
                            (self.stab, '.CallSnow(Projectile)'),
-                           (self.brace, 'NorthPoleEffects.BraceSpike(Projectile, target)'),
+                           (self.brace, 'NorthPoleEffects.BraceGust(Projectile, target)'),
                            (self.throw, 'NorthPoleEffects.Coat(Projectile, target)')):
             self.assertIn('ItemID.NorthPole', code)
             self.assertIn(call, code)
@@ -78,23 +78,23 @@ class NorthPoleContracts(unittest.TestCase):
     def test_coat_refreshes_without_stacking_damage_or_wrong_frostburn(self):
         self.assertIn('target.AddBuff(BuffID.Frostburn2, NorthPoleBalance.FrostbiteTicks)', self.effects)
         self.assertNotIn('BuffID.Frostburn,', self.effects)
-        coat = self.effects.split('public class NorthPoleSnowCoat', 1)[1].split('public class NorthPoleBraceSpike', 1)[0]
+        coat = self.effects.split('public class NorthPoleSnowCoat', 1)[1].split('public class NorthPoleGust', 1)[0]
         self.assertIn('CanDamage() => false', coat)
         self.assertNotIn('target.AddBuff(', coat)
         self.assertIn('Main.npc[id].type != (int)Projectile.ai[1]', coat)
         self.assertIn('writer.Write((ushort)Projectile.timeLeft)', coat)
         self.assertIn('p.timeLeft = NorthPoleBalance.FrostbiteTicks', self.effects)
 
-    def test_spike_excludes_primary_target_and_grows_through_blocks(self):
-        spike = self.effects.split('public class NorthPoleBraceSpike', 1)[1]
-        self.assertIn('target.whoAmI == (int)Projectile.ai[2]', spike)
-        self.assertNotIn('SolidCollision', spike)
-        self.assertNotIn('CanHitLine', spike)
-        self.assertIn('Projectile.Center + Direction * length, Width', spike)
+    def test_gust_excludes_primary_target_and_blows_over_blocks(self):
+        gust = self.effects.split('public class NorthPoleGust', 1)[1].split('internal static class NorthPoleFx', 1)[0]
+        self.assertIn('target.whoAmI == (int)Projectile.ai[2]', gust)
+        self.assertNotIn('SolidCollision', gust)
+        self.assertNotIn('CanHitLine', gust)
+        self.assertIn('Projectile.tileCollide = false;', gust)
         self.assertIn('Main.player[brace.owner].velocity.Length()', self.effects)
         self.assertIn('target.Center + direction * (extent * 0.6f)', self.effects)
-        self.assertIn('Projectile.localNPCHitCooldown = -1', spike)
-        self.assertNotIn('++Projectile.ai[2]', spike)
+        self.assertIn('Projectile.localNPCHitCooldown = -1', gust)
+        self.assertNotIn('++Projectile.ai[2]', gust)
 
     def test_sky_snow_falls_from_screen_top_through_blocks(self):
         self.assertIn('Main.screenPosition.Y - 24', self.player)
@@ -185,7 +185,7 @@ class NorthPoleVisualContracts(unittest.TestCase):
     def test_every_effect_draws_itself_and_accepts_owner_texture(self):
         for cls, name in (('NorthPoleTrail', 'TrailFlake'), ('NorthPoleSnowflake', 'Snowflake'),
                           ('NorthPoleMiniFlake', 'MiniFlake'), ('NorthPolePickup', 'Pickup'),
-                          ('NorthPoleSnowCoat', 'SnowCoat'), ('NorthPoleBraceSpike', 'Spike')):
+                          ('NorthPoleSnowCoat', 'SnowCoat'), ('NorthPoleGust', 'Gust')):
             body = self.effects.split(f'public class {cls}', 1)[1].split('public class ', 1)[0]
             self.assertIn('PreDraw', body, cls)
             self.assertIn(f'"{name}"', body, cls)
@@ -229,17 +229,14 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('AMint = new Color(60, 255, 140)', art)
         self.assertIn('ATeal = new Color(20, 200, 220)', art)
         self.assertIn('AViolet = new Color(185, 90, 255)', art)
-        flake = art.split('public static void Snowflake', 1)[1].split('public static void Icicle', 1)[0]
-        icicle = art.split('public static void Icicle', 1)[1]
+        flake = art.split('public static void Snowflake', 1)[1].split('public static void Afterimages', 1)[0]
         # strictly Terraria-style 2x2 pixel sprites, snapped to the 2-px grid (owner 02.11.2026)
         self.assertIn('PixelFolder = "FrostMelee/Textures/NorthPolePixel/"', art)
         self.assertIn('"SwingFlake"', flake)
         self.assertIn('"ThrowFlake"', flake)
         self.assertIn('"BuffFlake"', flake)
         self.assertIn('Snap(', art)
-        self.assertIn('Pixel($"Spike', icicle)
-        for body in (flake, icicle):
-            self.assertNotIn('Line(', body)      # no smooth strokes any more
+        self.assertNotIn('Line(', flake)      # no smooth strokes any more
         pickup = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
         # every kind of snow has its own look (owner 02.11.2026)
         self.assertIn('NorthPoleArt.StyleBuff', pickup)   # rose, round soft flake
@@ -273,11 +270,6 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('NorthPoleDrift.Add(Projectile.Center, Projectile.owner);', effects)
         self.assertIn('npc.AddBuff(BuffID.Frostburn2, DebuffTicks);', fx)
         self.assertIn('modifiers.SourceDamage *= NorthPoleBalance.ThrowPower;', player)
-        # brace icicle: no glow strokes/rings, the tip plus stays
-        spike = effects.split('public class NorthPoleBraceSpike', 1)[1].split('internal static class NorthPoleFx', 1)[0]
-        self.assertNotIn('Stroke(', spike)
-        self.assertNotIn('Ring(', spike)
-        self.assertIn('NorthPoleFx.Sparkle(tip', spike)
         # sprites centred on their opaque area (owner's canvas can be larger)
         self.assertIn('Rectangle src = Bounds(t);', effects)
 
@@ -286,9 +278,6 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         player = read('Content/Weapons/NorthPolePlayer.cs')
         arc = read('Content/Projectiles/SickleArcProjectile.cs')
         throw = read('Content/Projectiles/SickleThrowProjectile.cs')
-        # plain icicle in brace mode: one Icicle call, no side spikes
-        spike = effects.split('public class NorthPoleBraceSpike', 1)[1].split('internal static class NorthPoleFx', 1)[0]
-        self.assertEqual(spike.count('NorthPoleArt.Icicle('), 1)
         # arc: no pixel confetti, flowing shimmer + light, calm snow only
         self.assertNotIn('NorthPolePixelFx.Flake', arc)
         self.assertNotIn('NorthPolePixelFx.Swing', arc)
@@ -307,12 +296,6 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         player = read('Content/Weapons/NorthPolePlayer.cs')
         arc = read('Content/Projectiles/SickleArcProjectile.cs')
         veil = read('Content/Projectiles/NorthPoleVeil.cs')
-        # brace icicles: one per enemy, capped, half damage
-        brace = effects.split('public static void BraceSpike', 1)[1].split('public static void SnowDust', 1)[0]
-        self.assertIn('if ((int)p.ai[2] == target.whoAmI) return;', brace)
-        self.assertIn('if (alive >= NorthPoleBalance.MaxSpikes) oldest?.Kill();', brace)
-        self.assertIn('brace.damage * NorthPoleBalance.SpikeDamage', brace)
-        self.assertIn('public const int MaxSpikes = 3;', player)
         # arc: second trail = aurora veil left in the world, drawn like the other ribbons
         self.assertIn('NorthPoleVeil.Add(', arc)
         self.assertLess(veil.index('BlendState.AlphaBlend'), veil.index(': additive'))
@@ -321,11 +304,35 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('sPos[n] = CatmullRom(', veil)
         self.assertIn('- player.velocity * (1f - f)', arc)
 
+    def test_owner_feedback_round_02_11_d_brace_gust(self):
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        player = read('Content/Weapons/NorthPolePlayer.cs')
+        brace = read('Content/Projectiles/SickleBraceProjectile.cs')
+        # icicles are gone as a mechanic and as sprites (owner 02.11.2026)
+        self.assertNotIn('NorthPoleBraceSpike', effects)
+        self.assertNotIn('Icicle(', effects)
+        self.assertNotIn('MaxSpikes', player)
+        self.assertFalse(list((ROOT / 'FrostMelee/Textures/NorthPolePixel').glob('Spike*_*.png')))
+        # one gust per half second per player, scaled by run speed, weaker than the brace hit
+        spawn = effects.split('public static void BraceGust', 1)[1].split('public static void ThrowImpact', 1)[0]
+        self.assertIn('if (modPlayer.GustCooldown > 0) return;', spawn)
+        self.assertIn('brace.damage * NorthPoleBalance.GustDamage', spawn)
+        self.assertIn('if (GustCooldown > 0) GustCooldown--;', player)
+        self.assertLess(float(re.search(r'GustDamage = ([\d.]+)f', player).group(1)), 1.0)
+        gust = effects.split('public class NorthPoleGust', 1)[1].split('internal static class NorthPoleFx', 1)[0]
+        self.assertIn('NorthPoleBalance.GustHalfAngle + margin', gust)
+        self.assertIn('modifiers.HitDirectionOverride', gust)
+        self.assertIn('NorthPolePixelFx.Snow', gust)
+        self.assertNotIn('Stroke(', gust)
+        self.assertNotIn('Bloom(', gust)
+        # the charged tip "plus" stays on the braced spear
+        self.assertIn('NorthPoleBalance.GustFullSpeed', brace)
+        self.assertIn('NorthPoleFx.Sparkle(tip', brace)
+
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
-        names = ['DawnFlake', 'MiniFlake', 'Snow0', 'Snow1', 'Snow2'] + [f'Mote{r}' for r in range(3)] + [f'TMote{r}' for r in range(3)] \
-            + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
+        names = ['DawnFlake', 'MiniFlake', 'Snow0', 'Snow1', 'Snow2'] + [f'Mote{r}' for r in range(3)] + [f'TMote{r}' for r in range(3)]
         for name in names:
             alphas = {a for *_, a in Image.open(folder / f'{name}.png').convert('RGBA').getdata()}
             self.assertLessEqual(alphas, {0, 255}, name)   # opaque only: no shadow, no soft edges
@@ -334,7 +341,7 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
         names = [f'SwingFlake{r}' for r in range(3, 12)] + ['ThrowFlake', 'BuffFlake', 'DawnFlake', 'MiniFlake', 'Glint',
-                 'Sparkle0', 'Sparkle1', 'Sparkle2', 'Mote0', 'Mote1', 'Mote2', 'TMote0', 'TMote1', 'TMote2'] + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
+                 'Sparkle0', 'Sparkle1', 'Sparkle2', 'Mote0', 'Mote1', 'Mote2', 'TMote0', 'TMote1', 'TMote2']
         for name in names:
             im = Image.open(folder / f'{name}.png').convert('RGBA')
             w, h = im.size

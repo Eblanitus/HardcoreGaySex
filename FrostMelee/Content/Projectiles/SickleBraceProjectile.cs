@@ -488,7 +488,7 @@ namespace FrostMelee.Content.Projectiles
         {
             int braceItem = (int)Projectile.ai[2];
             if (braceItem == ItemID.NorthPole)
-                NorthPoleEffects.BraceSpike(Projectile, target);
+                NorthPoleEffects.BraceGust(Projectile, target);
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
@@ -502,14 +502,14 @@ namespace FrostMelee.Content.Projectiles
         }
 
         // Северный полюс: остриё выставленного копья светится сиянием тем сильнее,
-        // чем быстрее бежит игрок, — это размер будущей сосульки из спины врага.
+        // чем быстрее бежит игрок, — это длина и сила будущей пурги из-за спины врага.
         // Назад вдоль древка тянутся полосы ветра, с острия сдувает снег.
         private void DrawPolarCharge(SickleSprite.Geometry geo)
         {
             if (Main.dedServ)
                 return;
             Player player = Main.player[Projectile.owner];
-            float speed = MathHelper.Clamp(player.velocity.Length() / Content.Weapons.NorthPoleBalance.SpikeFullSpeed, 0f, 1f);
+            float speed = MathHelper.Clamp(player.velocity.Length() / Content.Weapons.NorthPoleBalance.GustFullSpeed, 0f, 1f);
             Vector2 dir = SpearDir;
             Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
             NorthPoleFx.Palette(out Color core, out Color tail, out Color edge, Projectile.whoAmI);
