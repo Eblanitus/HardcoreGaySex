@@ -42,7 +42,7 @@ Items: {
 Projectiles: {
 	NorthPoleTrail.DisplayName: Снежинка Северного полюса
 	NorthPoleSnowflake.DisplayName: Растущая снежинка
-	NorthPoleShard.DisplayName: Сосулька
+	NorthPoleMiniFlake.DisplayName: Взрывная снежинка
 	NorthPolePickup.DisplayName: Благословенная снежинка
 	NorthPoleSnowCoat.DisplayName: Снежный покров
 	NorthPoleBraceSpike.DisplayName: Пронзающая сосулька
@@ -178,6 +178,16 @@ Configs: {
 			Label: Урон ослабленного выстрела (%)
 			// Tooltip: ""
 		}
+
+		AttackSpeedPercent: {
+			Label: Полярная заря: прибавка скорости атаки (%)
+			// Tooltip: ""
+		}
+
+		DawnRegenPerSecond: {
+			Label: Полярная заря: регенерация (HP/сек.)
+			// Tooltip: ""
+		}
 	}
 }
 
@@ -220,6 +230,11 @@ Buffs: {
 	NorthPoleBlessing: {
 		DisplayName: Благословение Северного полюса
 		Description: Повышены скорость, регенерация здоровья и критический урон
+	}
+
+	NorthPoleDawn: {
+		DisplayName: Полярная заря
+		Description: Повышены скорость ближних атак и регенерация здоровья
 	}
 }
 

@@ -30,13 +30,20 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('NorthPoleEffects.Trail(Projectile)', self.throw)
 
     def test_growth_once_per_arc_and_misses_only_at_natural_completion(self):
-        self.assertIn('&& !northPoleHit && Projectile.owner == Main.myPlayer', self.arc)
+        # one growth step per enemy per swing; one flake per enemy, up to five (owner 02.11.2026)
+        self.assertIn('Projectile.owner == Main.myPlayer && northPoleTargets.Add(target.whoAmI)', self.arc)
         self.assertIn('northPoleHit = true;', self.arc)
         self.assertIn('Projectile.localAI[0] >= Math.Max(1f, Projectile.ai[1])', self.arc)
-        self.assertIn('.FinishSwing(northPoleHit)', self.arc)
-        self.assertIn('if (hit) { missedSwings = 0; return; }', self.player)
+        self.assertIn('.FinishSwing(Projectile, northPoleHit)', self.arc)
+        self.assertIn('public const int MaxFlakes = 5;', self.player)
+        self.assertIn('if (f.Targets(target)) flake = f;', self.player)
+        self.assertIn('if (slot >= NorthPoleBalance.MaxFlakes) return;', self.player)
         self.assertIn('++missedSwings >= NorthPoleBalance.MissesToRelease', self.player)
-        self.assertIn('flake.Release(true)', self.player)
+        self.assertIn('foreach (NorthPoleSnowflake flake in flakes) flake.Release(true);', self.player)
+        # every swing shakes down buff snow; a hit adds Polar Dawn snow
+        finish = self.player.split('public void FinishSwing', 1)[1].split('private int PickupsOfKind', 1)[0]
+        self.assertLess(finish.index('CallSnow(arc, KindBlessing, false);'), finish.index('if (hit)'))
+        self.assertIn('if (hit) { missedSwings = 0; CallSnow(arc, KindDawn, false); return; }', finish)
         self.assertIn('if (Projectile.ai[1] >= NorthPoleBalance.FullCharge) Release(false)', self.effects)
 
     def test_growth_is_not_a_frost_resource_or_recursive_proc(self):
@@ -116,18 +123,23 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertNotIn('NextFloat(-128, 128)', call)
 
     def test_impact_burst_is_once_owner_only_not_on_cancel(self):
-        snow = self.effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleShard', 1)[0]
+        snow = self.effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleMiniFlake', 1)[0]
         self.assertIn('if (!impacted || Charging) return;', snow)
         self.assertIn('if (!NorthPoleEffects.Owned(Projectile)) return;', snow)
         self.assertIn('Projectile.tileCollide = false;', snow)
         self.assertNotIn('OnTileCollide', snow)
         self.assertIn('Projectile.penetrate = 1;', snow)
-        self.assertIn('i < NorthPoleBalance.Shards', snow)
+        self.assertIn('i < NorthPoleBalance.MiniFlakes', snow)
+        self.assertIn('ModContent.ProjectileType<NorthPoleMiniFlake>()', snow)
+        mini = self.effects.split('public class NorthPoleMiniFlake', 1)[1].split('public class ', 1)[0]
+        self.assertIn('Projectile.Resize(NorthPoleBalance.MiniBlastRadius * 2', mini)
+        self.assertIn('OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) => Explode();', mini)
+        self.assertIn('Projectile.localNPCHitCooldown = -1;', mini)
         self.assertIn('Projectile.ai[0] = 1', snow)
         self.assertIn('writer.Write((ushort)flightTicks)', snow)
         self.assertIn('writer.Write(lastTarget.X)', snow)
         self.assertIn('Projectile.timeLeft = 2', snow)
-        self.assertIn('ChargingFlake()?.Projectile.Kill()', self.player)
+        self.assertIn('KillChargingFlakes();', self.player)
 
     def test_buff_is_refreshable_regen_not_instant_heal_or_crit_chance(self):
         self.assertIn('player.moveSpeed += NorthPoleBalance.MoveSpeed', self.player)
@@ -135,11 +147,14 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertEqual(self.player.count('modifiers.CritDamage += NorthPoleBalance.CritDamage'), 2)
         self.assertNotIn('GetCritChance', self.player)
         self.assertNotIn('.Heal(', self.effects + self.player)
-        self.assertIn('player.AddBuff(ModContent.BuffType<NorthPoleBlessing>()', self.effects)
+        self.assertIn('player.AddBuff(Dawn ? ModContent.BuffType<NorthPoleDawn>() : ModContent.BuffType<NorthPoleBlessing>()', self.effects)
+        self.assertIn('player.GetAttackSpeed(DamageClass.Melee) += NorthPoleBalance.AttackSpeed', self.player)
+        self.assertIn('player.lifeRegen += NorthPoleBalance.DawnRegen', self.player)
 
     def test_tuning_defaults_and_all_effects_have_localized_names(self):
         expected = {'GrowthHits': 6, 'BlessingSeconds': 6, 'MoveSpeedPercent': 15,
-                    'RegenPerSecond': 2, 'CritDamagePercent': 25, 'WeakShotPercent': 55}
+                    'RegenPerSecond': 2, 'CritDamagePercent': 25, 'WeakShotPercent': 55,
+                    'AttackSpeedPercent': 12, 'DawnRegenPerSecond': 3}
         for key, value in expected.items():
             self.assertRegex(self.player, rf'\[DefaultValue\({value}\), Range\([^\]]+\)\] public int {key}')
         for lang in ('en-US', 'ru-RU'):
@@ -147,6 +162,7 @@ class NorthPoleContracts(unittest.TestCase):
             for name in re.findall(r'public class (NorthPole\w+) : ModProjectile', self.effects):
                 self.assertIn(f'{name}.DisplayName:', text)
             self.assertIn('NorthPoleBlessing:', text)
+            self.assertIn('NorthPoleDawn:', text)
             self.assertIn('NorthPoleMechanicsTooltip:', text)
             for key in expected:
                 # Плоская запись (Key.Label:) или вложенная, как её пишет tModLoader.
@@ -166,7 +182,7 @@ class NorthPoleVisualContracts(unittest.TestCase):
 
     def test_every_effect_draws_itself_and_accepts_owner_texture(self):
         for cls, name in (('NorthPoleTrail', 'TrailFlake'), ('NorthPoleSnowflake', 'Snowflake'),
-                          ('NorthPoleShard', 'Shard'), ('NorthPolePickup', 'Pickup'),
+                          ('NorthPoleMiniFlake', 'MiniFlake'), ('NorthPolePickup', 'Pickup'),
                           ('NorthPoleSnowCoat', 'SnowCoat'), ('NorthPoleBraceSpike', 'Spike')):
             body = self.effects.split(f'public class {cls}', 1)[1].split('public class ', 1)[0]
             self.assertIn('PreDraw', body, cls)
@@ -237,7 +253,7 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
     def test_pixel_sprites_are_2x2_blocks(self):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
-        names = [f'SwingFlake{r}' for r in range(3, 12)] + ['ThrowFlake', 'BuffFlake', 'Shard', 'Glint',
+        names = [f'SwingFlake{r}' for r in range(3, 12)] + ['ThrowFlake', 'BuffFlake', 'DawnFlake', 'MiniFlake', 'Glint',
                  'Sparkle0', 'Sparkle1', 'Sparkle2'] + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
         for name in names:
             im = Image.open(folder / f'{name}.png').convert('RGBA')
