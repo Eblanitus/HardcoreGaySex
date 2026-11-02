@@ -51,7 +51,7 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('if (!Owned(spear)', self.effects)
         self.assertIn('if (!Owned(brace)', self.effects)
         self.assertIn('Player.whoAmI != Main.myPlayer', self.player)
-        self.assertIn('NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 12', self.effects)
+        self.assertIn('NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 10', self.effects)
         self.assertIn('Projectile.Hitbox.Intersects(player.Hitbox)', self.effects)
         self.assertIn('MessageID.PlayerBuffs', self.effects)
         self.assertIn('NorthPoleBalance.MaxPickups', self.player)
@@ -95,7 +95,14 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('CanDamage() => false', pickup)
         self.assertIn('Projectile.tileCollide = false', pickup)
         self.assertNotIn('OnTileCollide', pickup)
-        self.assertIn('if (below > 360) { Projectile.Kill(); return; }', pickup)
+        self.assertIn('if (Projectile.Center.Y - player.Center.Y > 360) { Projectile.Kill(); return; }', pickup)
+
+    def test_buff_snow_is_pulled_to_owner_and_looks_like_a_pickup(self):
+        pickup = self.effects.split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
+        self.assertIn('to.Length() < MagnetRange', pickup)
+        self.assertIn('to.SafeNormalize(Vector2.UnitY) * speed', pickup)
+        self.assertNotIn('CometTail', pickup)   # a tail made it read as an incoming attack
+        self.assertIn('Warm', pickup)
 
     def test_impact_burst_is_once_owner_only_not_on_cancel(self):
         snow = self.effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleShard', 1)[0]
@@ -163,10 +170,13 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         stab = read('Content/Projectiles/SickleStabProjectile.cs')
         brace = read('Content/Projectiles/SickleBraceProjectile.cs')
         self.assertIn('if (ItemType == ItemID.NorthPole)\n            {\n                NorthPoleFx.Palette(out core, out tail, out edge);', arc)
-        self.assertIn('NorthPoleFx.Curtain(', arc)
-        self.assertIn('NorthPoleFx.ShakeSnow(pos', arc)
+        self.assertIn('DrawAuroraTrail(player, glow, progress, max, env);', arc)
+        self.assertIn('auroraRayMask = MakeAuroraRayMask();', arc)
+        self.assertIn('AuroraSwell(progress)', arc)
+        self.assertIn('AddAuroraHit(target);', arc)
+        self.assertNotIn('NorthPoleFx.Curtain(', arc)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
-        self.assertIn('DrawSkyCall(', stab)
+        self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
 
     def test_vertex_ribbons_reopen_the_sprite_batch(self):

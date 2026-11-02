@@ -476,13 +476,14 @@ namespace FrostMelee.Content.Projectiles
     // ai[0]: age, ai[1]: look variant. Falls from the sky THROUGH blocks.
     public class NorthPolePickup : ModProjectile
     {
+        // Not a hazard to dodge but a pickup: drifts down from the sky and, once
+        // near its owner, is pulled to them like hearts and mana stars.
+        public const float MagnetRange = 260f;
+        public const float MagnetSpeed = 13f;
+        private static readonly Color Warm = new Color(255, 214, 120);   // pickup gold, unlike any attack colour
+
         public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.NorthPoleSnowflake;
-        public override void SetStaticDefaults()
-        {
-            Main.projFrames[Type] = 3;
-            ProjectileID.Sets.TrailCacheLength[Type] = 10;
-            ProjectileID.Sets.TrailingMode[Type] = 0;
-        }
+        public override void SetStaticDefaults() => Main.projFrames[Type] = 3;
         public override void SetDefaults()
         {
             Projectile.width = Projectile.height = 22;
@@ -493,43 +494,64 @@ namespace FrostMelee.Content.Projectiles
             Projectile.netImportant = true;
         }
         public override bool? CanDamage() => false;
+        private bool Pulled => Projectile.localAI[0] > 0;
         public override void AI()
         {
             if (Projectile.owner < 0 || Projectile.owner >= Main.maxPlayers) { Projectile.Kill(); return; }
             Player player = Main.player[Projectile.owner];
             if (!player.active || player.dead) { Projectile.Kill(); return; }
             Projectile.ai[0]++;
-            // Falls fast from the top of the screen, drifts slowly while passing the
-            // player's height so it can be caught, then falls away and melts.
-            float below = Projectile.Center.Y - player.Center.Y;
-            float fall = Math.Abs(below) < 72 ? 1.2f : below < 0 ? 5f : 2.5f;
-            Projectile.velocity.Y = MathHelper.Lerp(Projectile.velocity.Y, fall, 0.12f);
-            Projectile.velocity.X = MathF.Sin((Projectile.ai[0] + Projectile.whoAmI * 13) * 0.05f) * 0.8f;
+            Vector2 to = player.Center - Projectile.Center;
+            if (!Pulled && Projectile.ai[0] >= 10 && to.Length() < MagnetRange)
+                Projectile.localAI[0] = 1;
+            if (Pulled)
+            {
+                // like vanilla item grab: accelerate straight into the player
+                float speed = Math.Min(MagnetSpeed, Projectile.velocity.Length() + 0.6f);
+                Projectile.velocity = Vector2.Lerp(Projectile.velocity, to.SafeNormalize(Vector2.UnitY) * speed, 0.25f);
+                Projectile.timeLeft = Math.Max(Projectile.timeLeft, 30);
+            }
+            else
+            {
+                // gentle snowfall from the top of the screen, through roofs
+                Projectile.velocity.Y = MathHelper.Lerp(Projectile.velocity.Y, 3f, 0.08f);
+                Projectile.velocity.X = MathF.Sin((Projectile.ai[0] + Projectile.whoAmI * 13) * 0.05f) * 0.8f;
+                if (Projectile.Center.Y - player.Center.Y > 360) { Projectile.Kill(); return; }
+            }
             Projectile.rotation += 0.03f;
-            if (below > 360) { Projectile.Kill(); return; }
-            Lighting.AddLight(Projectile.Center, 0.2f, 0.35f, 0.5f);
-            if (NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 12 && Projectile.Hitbox.Intersects(player.Hitbox))
+            Lighting.AddLight(Projectile.Center, 0.5f, 0.42f, 0.22f);
+            if (NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 10 && Projectile.Hitbox.Intersects(player.Hitbox))
             {
                 player.AddBuff(ModContent.BuffType<NorthPoleBlessing>(), NorthPoleBalance.BlessingTicks);
                 if (Main.netMode == NetmodeID.MultiplayerClient)
                     NetMessage.SendData(MessageID.PlayerBuffs, number: player.whoAmI);
-                SoundEngine.PlaySound(SoundID.Item4 with { Volume = 0.6f, Pitch = 0.4f }, player.Center);
-                NorthPoleEffects.SnowDust(Projectile.Center, 10, 2.5f);
+                SoundEngine.PlaySound(SoundID.Grab with { Pitch = 0.3f }, player.Center);
+                SoundEngine.PlaySound(SoundID.Item4 with { Volume = 0.4f, Pitch = 0.6f }, player.Center);
                 Projectile.Kill();
             }
         }
-        public override void OnKill(int timeLeft) => NorthPoleEffects.SnowDust(Projectile.Center, 4);
+        public override void OnKill(int timeLeft)
+        {
+            if (Main.dedServ) return;
+            for (int i = 0; i < 8; i++)
+            {
+                Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.GoldFlame, Main.rand.NextVector2Circular(2f, 2f), 0, default, 0.9f);
+                d.noGravity = true;
+            }
+        }
         public override bool PreDraw(ref Color lightColor)
         {
-            float twinkle = 0.75f + 0.25f * MathF.Sin(Projectile.ai[0] * 0.2f + Projectile.whoAmI);
+            // Item-like: soft warm halo that pulses, a slow ring, light bobbing.
+            float pulse = 0.5f + 0.5f * MathF.Sin(Projectile.ai[0] * 0.15f + Projectile.whoAmI);
             float fade = Math.Min(1, Projectile.timeLeft / 30f) * Math.Min(1, Projectile.ai[0] / 10f);
-            NorthPoleFx.CometTail(Projectile, 9f, fade * Math.Min(1f, Projectile.velocity.Length() / 3f));
-            NorthPoleFx.Palette(out _, out Color tail, out _, Projectile.whoAmI);
-            NorthPoleFx.Bloom(Projectile.Center, 46f, NorthPoleFx.Add(tail, 0.3f * twinkle * fade));
-            if (NorthPoleArt.DrawCustom("Pickup", Projectile.Center, Projectile.rotation, 22, Color.White * fade))
+            Vector2 at = Projectile.Center + new Vector2(0, Pulled ? 0 : MathF.Sin(Projectile.ai[0] * 0.08f) * 2f);
+            NorthPoleFx.Bloom(at, 54f + 10f * pulse, NorthPoleFx.Add(Warm, (0.22f + 0.18f * pulse) * fade));
+            NorthPoleFx.Bloom(at, 24f, NorthPoleFx.Add(Color.White, 0.35f * fade));
+            NorthPoleFx.Ring(at, 15f + 3f * pulse, 3f, NorthPoleFx.Add(Warm, (0.35f + 0.25f * pulse) * fade), 16);
+            if (NorthPoleArt.DrawCustom("Pickup", at, Projectile.rotation, 22, Color.White * fade))
                 return false;
-            NorthPoleArt.Dot(Projectile.Center, 20, NorthPoleArt.Additive(new Color(255, 230, 160), 0.18f * twinkle * fade), 0);
-            NorthPoleArt.Snowflake(Projectile.Center, 9, Projectile.rotation, 0.5f + Projectile.ai[1] * 0.25f, twinkle * fade);
+            NorthPoleArt.Snowflake(at, 9, Projectile.rotation, 0.5f + Projectile.ai[1] * 0.25f, (0.8f + 0.2f * pulse) * fade);
+            NorthPoleFx.Sparkle(at + new Vector2(6, -7), 14f * pulse, 0f, 2, NorthPoleFx.Add(Color.White, pulse * fade), NorthPoleFx.Add(Warm, pulse * fade));
             return false;
         }
     }
