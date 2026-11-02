@@ -126,11 +126,11 @@ namespace FrostMelee.Content.Weapons
             Projectile.NewProjectile(stab.GetSource_FromThis(), new Vector2(x, y), new Vector2(0, 3f),
                 ModContent.ProjectileType<NorthPolePickup>(), 0, 0, Player.whoAmI, 0, Main.rand.Next(3));
             rainCooldown = NorthPoleBalance.RainCooldown;
-            // Readable cue on the spear itself: a puff of warm snow motes rises off the tip
+            // Readable cue on the spear itself: a puff of rose snow motes (buff-snow colour) rises off the tip
             if (!Main.dedServ)
                 for (int i = 0; i < 6; i++)
                 {
-                    Dust d = Dust.NewDustPerfect(stab.Center + Main.rand.NextVector2Circular(6, 6), DustID.GoldFlame,
+                    Dust d = Dust.NewDustPerfect(stab.Center + Main.rand.NextVector2Circular(6, 6), DustID.PinkTorch,
                         new Vector2(Main.rand.NextFloat(-0.6f, 0.6f), -Main.rand.NextFloat(1.5f, 3.5f)), 0, default, 0.8f);
                     d.noGravity = true;
                 }
