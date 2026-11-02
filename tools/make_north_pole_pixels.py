@@ -18,6 +18,7 @@ OUT = Path(__file__).resolve().parents[1] / 'FrostMelee' / 'Textures' / 'NorthPo
 SWING = [(38, 18, 84), (128, 58, 222), (28, 168, 196), (70, 232, 156), (214, 255, 232)]
 THROW = [(10, 44, 84), (18, 112, 172), (44, 196, 246), (178, 242, 255), (255, 255, 255)]
 BUFF = [(86, 18, 70), (196, 54, 172), (250, 112, 186), (255, 196, 226), (255, 248, 252)]
+SNOW = [(60, 90, 140), (150, 190, 232), (196, 224, 250), (232, 244, 255), (255, 255, 255)]
 DAWN = [(92, 40, 8), (196, 96, 20), (248, 160, 40), (255, 214, 120), (255, 250, 225)]
 HEART = [(150, 20, 40), (230, 50, 60), (255, 120, 120)]
 
@@ -223,6 +224,17 @@ def mote(r, pal):
     return plain(cells, size, size)
 
 
+def snow_flake():
+    """Calm falling snow for the arc and bursts: tiny white 6-px flake (plus with dotted diagonals)."""
+    cells = {(2, 2): SNOW[4]}
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        cells[(2 + dx, 2 + dy)] = SNOW[3]
+        cells[(2 + 2 * dx, 2 + 2 * dy)] = SNOW[2]
+    for dx, dy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        cells[(2 + dx, 2 + dy)] = SNOW[1]
+    return plain(cells, 5, 5)
+
+
 def spike_arm(width_idx, length, pal):
     """Brace icicle redone by the owner's reference: a giant snowflake ray, tip at the top row.
     Shaft 1 px at the tip, 3 px further down for the wider ones (light core, teal sides);
@@ -276,6 +288,8 @@ EXTRA = {
     'MiniFlake': lambda: mini_flake(SWING),
     **{f'Mote{r}': (lambda r=r: mote(r, SWING)) for r in range(3)},
     **{f'TMote{r}': (lambda r=r: mote(r, THROW)) for r in range(3)},
+    'Snow2': lambda: snow_flake(),
+    **{f'Snow{r}': (lambda r=r: mote(r, SNOW)) for r in range(2)},
     **{f'Sparkle{i}': (lambda r=r: sparkle_opaque(r)) for i, r in enumerate((2, 4, 7))},
     **{f'Spike{i}_{n}': (lambda i=i, n=n: spike_arm(i, n, SWING)) for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)},
 }

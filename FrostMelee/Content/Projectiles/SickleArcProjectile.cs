@@ -402,7 +402,6 @@ namespace FrostMelee.Content.Projectiles
                     NorthPoleFx.ShakeSnow(point, 1f, 10f);
                 for (int i = 0; i < AuroraHitGlitter; i++)
                     NorthPoleFx.AuroraDust(point, Main.rand.NextVector2Unit() * Main.rand.NextFloat(1.5f, 3.5f), 1.1f);
-                NorthPolePixelFx.Burst(point, 8, 3.5f, NorthPolePixelFx.Flake, 30);
             }
             // One growth step per enemy per swing: each enemy grows its own flake (up to five).
             if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer && northPoleTargets.Add(target.whoAmI))
@@ -1101,6 +1100,19 @@ namespace FrostMelee.Content.Projectiles
                     // 4) яркая передняя кромка по следу острия
                     FillAuroraStrip(n, center, rOut + 1.5f, rOut - AuroraEdgeWidth, 0f, 0.3f, AuroraEdge, AuroraMint, env, true);
                     AuroraPass(device, auroraBodyMask, SamplerState.LinearClamp, trailBlend, n);
+
+                    // 5) переливы: мягкие волны света бегут по ленте от острия к хвосту
+                    FillAuroraStrip(n, center, rOut, rIn, 0f, 1f, Color.Lerp(AuroraMint, Color.White, 0.5f), AuroraTeal,
+                        AuroraShimmerAlpha * env, true);
+                    for (int i = 0; i < n; i++)
+                    {
+                        float t = n > 1 ? i / (float)(n - 1) : 0f;
+                        float wave = 0.5f + 0.5f * (float)Math.Sin((t * AuroraShimmerWaves - time * AuroraShimmerSpeed) * MathHelper.TwoPi);
+                        float k = (float)Math.Pow(wave, 3) * AuroraAlong(t);
+                        trailVerts[i * 2].Color = Mul(trailVerts[i * 2].Color, k);
+                        trailVerts[i * 2 + 1].Color = Mul(trailVerts[i * 2 + 1].Color, k);
+                    }
+                    AuroraPass(device, auroraBodyMask, SamplerState.LinearClamp, trailBlend, n);
                 }
                 finally
                 {
@@ -1116,23 +1128,19 @@ namespace FrostMelee.Content.Projectiles
             Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(AuroraEdge, env), 0f,
                 glow.Size() / 2f, 12f / glow.Width, SpriteEffects.None, 0f);
             DrawAuroraGlitter(player, glow, progress, max, env);
-            // пиксельный «плюсик» на острие (как у выставленного копья, владельцу нравится)
-            if (env > 0.2f)
-            {
-                bool big = (int)(Projectile.localAI[0] / 4f) % 2 == 0;
-                NorthPoleArt.Sprite(big ? "Sparkle1" : "Sparkle0", tipPos, Color.Lerp(AuroraMint, Color.White, 0.6f) * env);
-            }
         }
 
         // === Снежность поверх сияния: снег и блёстки с ленты и острия ===
         private const float AuroraSnowEdgeChance = 0.6f;  // снег с внешнего края ленты, шанс за тик (на точку)
         private const int AuroraSnowEdgePoints = 2;
         private const float AuroraSnowTipChance = 0.5f;   // снег с острия
-        private const float AuroraDustChance = 0.35f;     // огонёк сияния в теле ленты
+        private const float AuroraDustChance = 0.15f;     // огонёк сияния в теле ленты
         private const int AuroraPeakBurst = 8;            // всплеск снега и огоньков на пике взмаха
-        private const float AuroraPixelFlakeChance = 0.55f; // пиксельная снежинка с края ленты, шанс за тик
-        private const int AuroraPixelMotes = 2;           // пиксельные искорки в теле ленты за тик
-        private const int AuroraPixelPeak = 12;           // пиксельных снежинок во всплеске на пике
+        private const float AuroraCalmSnowChance = 0.18f; // спокойная пиксельная снежинка с внешнего края, шанс за тик
+        private const int AuroraLightPoints = 5;          // точки настоящего света, бегущего по ленте
+        private const float AuroraShimmerAlpha = 0.45f;   // переливы: волны света вдоль ленты
+        private const float AuroraShimmerWaves = 2.2f;    // сколько волн на ленте
+        private const float AuroraShimmerSpeed = 0.045f;  // скорость бега волн (за тик)
         private const int AuroraHitSnow = 8;
         private const int AuroraHitGlitter = 4;
         private const int AuroraGlitterCount = 7;         // мерцающие блёстки, рисуются поверх ленты
@@ -1154,22 +1162,26 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.ShakeSnow(pos, AuroraSnowEdgeChance * env, 4f);
             }
             NorthPoleFx.ShakeSnow(tipPos, AuroraSnowTipChance * env, 3f);
-            // пиксельные снежинки по эталону владельца: слетают с внешнего края ленты и
-            // с острия, на лету уменьшаются (снежинка -> звёздочка -> плюс -> пиксель)
-            if (Main.rand.NextFloat() < AuroraPixelFlakeChance * env)
+            // Owner 02.11.2026: the pixel stars looked like Noita confetti. Instead: a few calm
+            // pixel snowflakes (owner's sprite rules) drift down off the outer edge, and the
+            // aurora's light flows along the arc and lights the scene.
+            if (Main.rand.NextFloat() < AuroraCalmSnowChance * env)
             {
                 float back = Main.rand.NextFloat() * TrailTicks * 0.8f / max;
-                Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.9f, 1.05f));
+                Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.98f, 1.04f));
                 Vector2 outward = (pos - player.MountedCenter).SafeNormalize(Vector2.UnitY);
-                NorthPolePixelFx.Spawn(pos, outward * Main.rand.NextFloat(0.8f, 2f), NorthPolePixelFx.Flake, 42, 0.035f);
+                NorthPolePixelFx.Spawn(pos, outward * 0.35f + new Vector2(Main.rand.NextFloat(-0.2f, 0.2f), 0.3f),
+                    NorthPolePixelFx.Snow, 80, 0.008f, 0.985f);
             }
-            for (int i = 0; i < AuroraPixelMotes; i++)
-                if (Main.rand.NextFloat() < env)
-                {
-                    float back = Main.rand.NextFloat() * TrailTicks / max;
-                    Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(1f - AuroraWidth, 1f));
-                    NorthPolePixelFx.Spawn(pos, Main.rand.NextVector2Circular(0.7f, 0.7f), NorthPolePixelFx.Swing, 22, 0.02f);
-                }
+            float lightTime = Projectile.localAI[0] * AuroraShimmerSpeed;
+            for (int i = 0; i < AuroraLightPoints; i++)
+            {
+                float t = (i + 0.5f) / AuroraLightPoints;
+                float wave = 0.5f + 0.5f * (float)Math.Sin((t * AuroraShimmerWaves - lightTime) * MathHelper.TwoPi);
+                Vector2 pos = EndPoint(player, progress - t * TrailTicks * 0.8f / max, true, 1f - AuroraWidth * 0.4f);
+                float k = env * (1f - t) * (0.35f + 0.65f * wave);
+                Lighting.AddLight(pos, 0.15f * k, 0.55f * k, 0.45f * k);
+            }
             // редкие огоньки сияния в теле ленты
             if (Main.rand.NextFloat() < AuroraDustChance * env)
             {
@@ -1178,8 +1190,6 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.AuroraDust(pos, Main.rand.NextVector2Circular(0.6f, 0.6f) + new Vector2(0f, -0.3f), 0.9f);
             }
             // пик взмаха: снежный всплеск с острия
-            if ((int)Projectile.localAI[0] == (int)(max * PeakAt))
-                NorthPolePixelFx.Burst(tipPos, AuroraPixelPeak, 4f, NorthPolePixelFx.Flake, 36);
             if ((int)Projectile.localAI[0] == (int)(max * PeakAt))
                 for (int i = 0; i < AuroraPeakBurst; i++)
                 {

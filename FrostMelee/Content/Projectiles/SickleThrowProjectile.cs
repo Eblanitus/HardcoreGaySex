@@ -67,7 +67,13 @@ namespace FrostMelee.Content.Projectiles
 
         // === Ледяная коса (только ItemID.IceSickle, серп смерти не трогаем) ===
         // Нелинейный полёт: резкий старт и плавное торможение (ease-out), дальность примерно прежняя
-        private const float LaunchSpeedBoost = 1.4f;    // стартовая скорость x от ThrowSpeed
+        private const float LaunchSpeedBoost = 1.4f;
+        // Северный полюс: метательное копьё (владелец 02.11.2026)
+        private const float NorthPoleLaunchBoost = 1.2f;   // быстрее и дальше
+        private const int NorthPoleFlatTicks = 12;         // первые тики летит почти прямо
+        private const float NorthPoleFlatGravity = 0.4f;   // доля обычной гравитации в начале
+        private const float NorthPoleHeavyGravity = 1.3f;  // потом тяжёлое копьё клюёт носом
+        private const float NorthPoleAirDrag = 0.998f;    // стартовая скорость x от ThrowSpeed
         private const float LaunchEaseDrag = 0.984f;    // торможение за тик, пока скорость выше минимума
         private const int LaunchEaseTicks = 60;         // торможение только в первые N тиков полёта
         private const float LaunchEaseMinSpeed = 8.4f;  // ниже этой скорости торможение не добавляется
@@ -139,6 +145,7 @@ namespace FrostMelee.Content.Projectiles
         private bool zoneSpawned;       // зона один раз за бросок
 
         private bool IsIce => (int)Projectile.ai[2] == ItemID.IceSickle;
+        private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;
         private bool IsFrostbrand => (int)Projectile.ai[2] == ItemID.Frostbrand;
         private bool IsAisberg => Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]);
 
@@ -183,6 +190,8 @@ namespace FrostMelee.Content.Projectiles
                     Projectile.rotation = Projectile.velocity.ToRotation();
                 if (IsIce)
                     Projectile.velocity *= LaunchSpeedBoost;
+                if (IsNorthPole)
+                    Projectile.velocity *= NorthPoleLaunchBoost;
                 if (IsIce && Projectile.owner == Main.myPlayer)
                     frostAtThrow = Main.player[Projectile.owner].GetModPlayer<SicklePlayer>().Frost;
             }
@@ -260,15 +269,31 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.velocity.Length() > LaunchEaseMinSpeed)
                     Projectile.velocity *= LaunchEaseDrag;
             }
-            Projectile.velocity.X *= AirDrag;
-            Projectile.velocity.Y = Math.Min(Projectile.velocity.Y + Gravity, MaxFallSpeed);
+            if (IsNorthPole && !harmless)
+            {
+                // Javelin (owner 02.11.2026: "better physics"): a fast flat start, then the heavy
+                // spear tips nose-down and drops steeper; little air drag, the nose follows the path
+                // smoothly instead of snapping.
+                float flight = Projectile.localAI[0];
+                float g = flight < NorthPoleFlatTicks ? NorthPoleFlatGravity
+                    : MathHelper.Lerp(NorthPoleFlatGravity, NorthPoleHeavyGravity, Math.Min(1f, (flight - NorthPoleFlatTicks) / 20f));
+                Projectile.velocity.X *= NorthPoleAirDrag;
+                Projectile.velocity.Y = Math.Min(Projectile.velocity.Y + Gravity * g, MaxFallSpeed);
+            }
+            else
+            {
+                Projectile.velocity.X *= AirDrag;
+                Projectile.velocity.Y = Math.Min(Projectile.velocity.Y + Gravity, MaxFallSpeed);
+            }
             float rawSpeed = Projectile.velocity.Length();
             if (rawSpeed > MaxStepSpeed)
                 Projectile.velocity *= MaxStepSpeed / rawSpeed;
 
             float speed = Projectile.velocity.Length();
             if (!harmless && AlwaysTipFirst)
-                Projectile.rotation = Projectile.velocity.ToRotation();
+                Projectile.rotation = IsNorthPole && Projectile.localAI[0] > 2
+                    ? Projectile.rotation.AngleLerp(Projectile.velocity.ToRotation(), 0.45f)
+                    : Projectile.velocity.ToRotation();
             else
                 Projectile.rotation += Math.Min(speed * SpinPerSpeed, MaxSpin) * spinScale * spinDir;
 
@@ -532,6 +557,8 @@ namespace FrostMelee.Content.Projectiles
             if (SolidTileAt(newCenter, out _, out _) || SolidTileAt(newCenter - axis * geo.RearReach, out _, out _))
                 return false;
             SoundEngine.PlaySound(SoundID.Dig with { Volume = 0.7f, Pitch = 0.2f }, contact);
+            if (IsNorthPole)
+                NorthPoleEffects.ThrowImpact(Projectile, contact, Projectile.velocity);
             Projectile.Center = newCenter;
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = -1f;
@@ -959,6 +986,8 @@ namespace FrostMelee.Content.Projectiles
             // Застреваем во враге как прилетел: кончик внутри цели
             // (TipLodgeOffset), угол — настоящий угол попадания.
             // Доворота до оси полёта нет — это костыль (замечание владельца)
+            if (IsNorthPole)
+                NorthPoleEffects.ThrowImpact(Projectile, Projectile.Center, Projectile.velocity);
             Projectile.velocity = Vector2.Zero;
             Projectile.ai[0] = target.whoAmI;
             State = StateLodged;

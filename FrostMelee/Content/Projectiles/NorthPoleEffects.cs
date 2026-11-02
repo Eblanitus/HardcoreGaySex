@@ -64,6 +64,19 @@ namespace FrostMelee.Content.Projectiles
                 brace.owner, brace.ai[1], speed, target.whoAmI);
         }
 
+        // Weighty landing of the thrown spear (owner 02.11.2026): a dull crack, a small camera
+        // punch along the flight and calm snow knocked off the spot.
+        public static void ThrowImpact(Projectile spear, Vector2 at, Vector2 velocity)
+        {
+            if (Main.dedServ) return;
+            SoundEngine.PlaySound(SoundID.Item50 with { Volume = 0.8f, Pitch = -0.4f }, at);
+            NorthPolePixelFx.Burst(at, 7, 2.5f, NorthPolePixelFx.Snow, 50);
+            SnowDust(at, 8, 3f);
+            if (spear.owner == Main.myPlayer && velocity != Vector2.Zero)
+                Main.instance.CameraModifiers.Add(new Terraria.Graphics.CameraModifiers.PunchCameraModifier(
+                    at, velocity.SafeNormalize(Vector2.UnitX), 4f, 8f, 14, 1200f, "NorthPoleThrow"));
+        }
+
         public static void SnowDust(Vector2 point, int count, float spread = 3f)
         {
             if (Main.dedServ) return;
@@ -331,6 +344,7 @@ namespace FrostMelee.Content.Projectiles
             writer.Write(lastTarget.X);
             writer.Write(lastTarget.Y);
             writer.Write((ushort)flightTicks);
+            writer.Write((byte)Math.Clamp(launchDelay, 0, 255));
         }
         public override void ReceiveExtraAI(BinaryReader reader)
         {
@@ -340,6 +354,7 @@ namespace FrostMelee.Content.Projectiles
             float x = reader.ReadSingle(), y = reader.ReadSingle();
             lastTarget = float.IsFinite(x) && float.IsFinite(y) ? new Vector2(x, y) : Projectile.Center;
             flightTicks = Math.Clamp((int)reader.ReadUInt16(), 0, 180);
+            launchDelay = reader.ReadByte();
         }
         public override void SetStaticDefaults()
         {
@@ -358,8 +373,8 @@ namespace FrostMelee.Content.Projectiles
             Projectile.timeLeft = 180;
             Projectile.netImportant = true;
         }
-        public override bool ShouldUpdatePosition() => !Charging;
-        public override bool? CanDamage() => Charging ? false : null;
+        public override bool ShouldUpdatePosition() => !Charging && launchDelay <= 0;
+        public override bool? CanDamage() => Charging || launchDelay > 0 ? false : null;
 
         private float Level => MathHelper.Clamp(Projectile.ai[1] / NorthPoleBalance.FullCharge, 0, 1);
 
@@ -376,7 +391,7 @@ namespace FrostMelee.Content.Projectiles
             pulse = 1;
             SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.35f, Pitch = -0.3f + Level * 0.8f }, Projectile.Center);
             NorthPoleEffects.SnowDust(Projectile.Center, 4 + (int)(Level * 6), 2f);
-            NorthPolePixelFx.Burst(Projectile.Center, 6 + (int)(Level * 6), 2.5f, NorthPolePixelFx.Swing, 24);
+            NorthPolePixelFx.Burst(Projectile.Center, 3 + (int)(Level * 3), 1.5f, NorthPolePixelFx.Snow, 40);
             if (Projectile.ai[1] >= NorthPoleBalance.FullCharge) Release(false);
         }
 
@@ -402,14 +417,27 @@ namespace FrostMelee.Content.Projectiles
             return found;
         }
 
+        // Released flakes leave one by one, 0.1-0.4 s apart (owner 02.11.2026): the owner's
+        // NorthPolePlayer hands out the launch delays, the flake hovers in its place until then.
+        private int launchDelay;
+        public bool Waiting => !Charging && launchDelay > 0;
+
         public void Release(bool weak)
         {
             if (!NorthPoleEffects.Owned(Projectile) || !Charging) return;
-            bool found = PickNearest();
             Projectile.damage = Math.Max(1, (int)(storedDamage * MathHelper.Lerp(0.4f, 1.5f, Level)
                 * (weak ? NorthPoleBalance.WeakShot : 1)));
             Projectile.ai[0] = 1;
             flightTicks = 0;
+            launchDelay = Main.player[Projectile.owner].GetModPlayer<NorthPolePlayer>().NextLaunchDelay();
+            Projectile.netUpdate = true;
+            if (launchDelay <= 0) Launch();
+        }
+
+        private void Launch()
+        {
+            launchDelay = 0;
+            bool found = PickNearest();
             Projectile.netUpdate = true;
             if (!found && LiveTarget() == null)
             {
@@ -474,6 +502,15 @@ namespace FrostMelee.Content.Projectiles
             }
             else
             {
+                if (launchDelay > 0)
+                {
+                    // waits for its turn in its place; the spear may already be put away
+                    Projectile.Center = Vector2.Lerp(Projectile.Center, HoverPoint(player, slot), 0.25f);
+                    Projectile.velocity = Vector2.Zero;
+                    Projectile.rotation += 0.05f;
+                    if (--launchDelay <= 0 && Projectile.owner == Main.myPlayer) Launch();
+                    return;
+                }
                 // Keeps homing on the target; if it died, takes the enemy nearest to the flake;
                 // with nobody left it bursts where the target was.
                 NPC target = LiveTarget();
@@ -504,7 +541,7 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.AuroraDust(Projectile.Center, (MathHelper.TwoPi * i / 28).ToRotationVector2() * (4f + Level * 3f), 1.4f);
             for (int i = 0; i < 10; i++)
                 NorthPoleFx.ShakeSnow(Projectile.Center, 1f, 16f);
-            NorthPolePixelFx.Burst(Projectile.Center, 14 + (int)(Level * 10), 5f, NorthPolePixelFx.Flake, 34);
+            NorthPolePixelFx.Burst(Projectile.Center, 6 + (int)(Level * 6), 3.5f, NorthPolePixelFx.Snow, 50);
             if (!Main.dedServ) SoundEngine.PlaySound(SoundID.Item27, Projectile.Center);
             if (!NorthPoleEffects.Owned(Projectile)) return;
             // the big flake breaks into small snowflakes that scatter and explode (owner 02.11.2026)
@@ -591,8 +628,7 @@ namespace FrostMelee.Content.Projectiles
             Projectile.Resize(NorthPoleBalance.MiniBlastRadius * 2, NorthPoleBalance.MiniBlastRadius * 2);
             if (Main.dedServ) return;
             SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.45f, Pitch = 0.4f }, Projectile.Center);
-            NorthPolePixelFx.Burst(Projectile.Center, 10, 4.5f, NorthPolePixelFx.Swing, 22);
-            NorthPolePixelFx.Spawn(Projectile.Center, Vector2.Zero, NorthPolePixelFx.Spark, 10, 0f);
+            NorthPolePixelFx.Burst(Projectile.Center, 5, 2.5f, NorthPolePixelFx.Snow, 36);
             NorthPoleEffects.SnowDust(Projectile.Center, 6, 4f);
         }
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) => Explode();
@@ -802,11 +838,11 @@ namespace FrostMelee.Content.Projectiles
             if (age == 1 && !Main.dedServ)
             {
                 SoundEngine.PlaySound(SoundID.Item30 with { Volume = 0.6f }, Projectile.Center);
-                NorthPolePixelFx.Burst(Projectile.Center, 10, 3.5f, NorthPolePixelFx.Swing, 24);
+                NorthPolePixelFx.Burst(Projectile.Center, 5, 2f, NorthPolePixelFx.Snow, 40);
             }
             // pixel snow shaken off the growing tip
-            if (!Main.dedServ && age <= 18 && age % 3 == 0)
-                NorthPolePixelFx.Spawn(Projectile.Center + Direction * length, Direction.RotatedByRandom(0.9f) * 2f, NorthPolePixelFx.Swing, 20);
+            if (!Main.dedServ && age <= 18 && age % 6 == 0)
+                NorthPolePixelFx.Spawn(Projectile.Center + Direction * length, Direction.RotatedByRandom(0.9f) * 1.2f, NorthPolePixelFx.Snow, 40, 0.01f, 0.98f);
             if (!Main.dedServ && length > previous)
                 for (int i = 0; i < 2; i++)
                 {
@@ -843,10 +879,6 @@ namespace FrostMelee.Content.Projectiles
                 MathHelper.Lerp(NorthPoleBalance.SpikeMinLength, NorthPoleBalance.SpikeMaxLength, MathHelper.Clamp(Projectile.ai[1], 0, 1)));
             if (age < 24)
                 NorthPoleFx.Sparkle(tip, 40f * (1f - age / 24f), Direction.ToRotation(), 2, NorthPoleFx.Add(tail, fade), NorthPoleFx.Add(core, fade));
-            // two smaller side spikes break out of the base
-            Vector2 side = Direction.RotatedBy(MathHelper.PiOver2);
-            NorthPoleArt.Icicle(Projectile.Center + side * Width * 0.4f, Projectile.Center + Direction.RotatedBy(0.45f) * length * 0.35f, Width * 0.45f, fade);
-            NorthPoleArt.Icicle(Projectile.Center - side * Width * 0.4f, Projectile.Center + Direction.RotatedBy(-0.45f) * length * 0.35f, Width * 0.45f, fade);
             return false;
         }
     }

@@ -43,6 +43,7 @@ namespace FrostMelee.Content.Weapons
         public static float AttackSpeed => Math.Clamp(Tuning.AttackSpeedPercent, 0, 50) / 100f;
         public static int DawnRegen => Math.Clamp(Tuning.DawnRegenPerSecond, 0, 10) * 2;
         public const int MaxFlakes = 5;
+        public const int LaunchGapMin = 6, LaunchGapMax = 24;   // ticks between released flakes
         public const float ThrowPower = 1.4f;  // the thrown spear hits 40% harder (owner 02.11.2026)      // owner 02.11.2026: up to five flakes grow at once, one per enemy
         public static float WeakShot => Math.Clamp(Tuning.WeakShotPercent, 10, 100) / 100f;
         public const float ShotSpeed = 14f;
@@ -62,6 +63,16 @@ namespace FrostMelee.Content.Weapons
     public class NorthPolePlayer : ModPlayer
     {
         private int missedSwings, rainCooldown;
+        private uint nextLaunch;
+
+        // Released flakes leave one by one, 6-24 ticks (0.1-0.4 s) apart (owner 02.11.2026)
+        public int NextLaunchDelay()
+        {
+            uint now = Main.GameUpdateCount;
+            int delay = nextLaunch > now ? (int)(nextLaunch - now) : 0;
+            nextLaunch = now + (uint)delay + (uint)Main.rand.Next(NorthPoleBalance.LaunchGapMin, NorthPoleBalance.LaunchGapMax + 1);
+            return delay;
+        }
         public const int KindBlessing = 0, KindDawn = 1;
 
         private static IEnumerable<NorthPoleSnowflake> ChargingFlakes(int owner)
