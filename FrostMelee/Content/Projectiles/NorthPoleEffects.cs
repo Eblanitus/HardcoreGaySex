@@ -146,6 +146,8 @@ namespace FrostMelee.Content.Projectiles
         public const int StyleBuff = 2;    // buff snow from thrusts: the warm rose part of the aurora, round and soft
         public static readonly Color TIce = new Color(215, 252, 255), TCyan = new Color(40, 215, 255), TDeep = new Color(15, 130, 190);
         public static readonly Color BPale = new Color(255, 220, 238), BRose = new Color(255, 110, 185), BMagenta = new Color(215, 55, 205);
+        public const int StyleDawn = 3;    // Polar Dawn snow from hits (attack speed + health): amber dawn, red heart
+        public static readonly Color DGold = new Color(255, 214, 120), DAmber = new Color(248, 160, 40), DEmber = new Color(196, 96, 20);
 
         // t 0..1 along the shape; phase drifts with time so the colours flow (shimmer)
         public static Color AuroraAt(float t, float phase, int style = StyleSwing)
@@ -203,6 +205,7 @@ namespace FrostMelee.Content.Projectiles
             if (alpha <= 0.01f) return;
             string name = style == StyleThrow ? "ThrowFlake"
                 : style == StyleBuff ? "BuffFlake"
+                : style == StyleDawn ? "DawnFlake"
                 : "SwingFlake" + Math.Clamp((int)Math.Round(radius / 2f), 3, 11);
             Sprite(name, center, Color.White * alpha);
         }
@@ -290,9 +293,13 @@ namespace FrostMelee.Content.Projectiles
         private bool impacted;
         private Vector2 lastTarget;
         private float pulse; // visual flash on each growth step, local only
+        private int slot;     // hover place among the five growing flakes
+        public int Slot { get => slot; set { slot = Math.Clamp(value, 0, NorthPoleBalance.MaxFlakes - 1); Projectile.netUpdate = true; } }
+        public bool Targets(NPC target) => (int)Projectile.ai[2] == target.whoAmI && targetType == target.type;
 
         public override void SendExtraAI(BinaryWriter writer)
         {
+            writer.Write((byte)slot);
             writer.Write(storedDamage);
             writer.Write(targetType);
             writer.Write(lastTarget.X);
@@ -301,6 +308,7 @@ namespace FrostMelee.Content.Projectiles
         }
         public override void ReceiveExtraAI(BinaryReader reader)
         {
+            slot = Math.Clamp((int)reader.ReadByte(), 0, NorthPoleBalance.MaxFlakes - 1);
             storedDamage = Math.Clamp(reader.ReadInt32(), 0, 1000000);
             targetType = reader.ReadInt32();
             float x = reader.ReadSingle(), y = reader.ReadSingle();
@@ -387,9 +395,16 @@ namespace FrostMelee.Content.Projectiles
             Projectile.Center = center;
         }
 
-        // Floats over the shoulder behind the player; snow is not stopped by tiles.
-        private static Vector2 HoverPoint(Player player) => player.MountedCenter + new Vector2(-player.direction * 34,
-            -64 * player.gravDir + MathF.Sin((float)Main.GameUpdateCount * 0.05f) * 5);
+        // Up to five flakes float in a fan above and behind the player, one place each;
+        // snow is not stopped by tiles. Angles from straight up, towards the back.
+        private static readonly float[] SlotAngles = { 0.55f, 0f, 1.1f, -0.55f, 1.65f };
+        private static Vector2 HoverPoint(Player player, int slot)
+        {
+            float angle = SlotAngles[Math.Clamp(slot, 0, SlotAngles.Length - 1)];
+            float bob = MathF.Sin((float)Main.GameUpdateCount * 0.05f + slot * 1.3f) * 5;
+            Vector2 offset = new Vector2(-player.direction * MathF.Sin(angle) * 72, -MathF.Cos(angle) * 72 * player.gravDir + bob);
+            return player.MountedCenter + offset;
+        }
 
         public override void AI()
         {
@@ -402,7 +417,7 @@ namespace FrostMelee.Content.Projectiles
             if (Charging)
             {
                 if (Projectile.owner == Main.myPlayer && player.HeldItem.type != ItemID.NorthPole) { Projectile.Kill(); return; }
-                Projectile.Center = Vector2.Lerp(Projectile.Center, HoverPoint(player), 0.25f);
+                Projectile.Center = Vector2.Lerp(Projectile.Center, HoverPoint(player, slot), 0.25f);
                 Projectile.velocity = Vector2.Zero;
                 Projectile.rotation += 0.02f + Level * 0.03f;
                 NPC target = LiveTarget();
@@ -445,12 +460,13 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.ShakeSnow(Projectile.Center, 1f, 16f);
             if (!Main.dedServ) SoundEngine.PlaySound(SoundID.Item27, Projectile.Center);
             if (!NorthPoleEffects.Owned(Projectile)) return;
-            for (int i = 0; i < NorthPoleBalance.Shards; i++)
+            // the big flake breaks into small snowflakes that scatter and explode (owner 02.11.2026)
+            for (int i = 0; i < NorthPoleBalance.MiniFlakes; i++)
             {
-                Vector2 velocity = (Projectile.rotation + MathHelper.TwoPi * i / NorthPoleBalance.Shards).ToRotationVector2() * 7;
+                Vector2 velocity = (Projectile.rotation + MathHelper.TwoPi * i / NorthPoleBalance.MiniFlakes).ToRotationVector2() * 6.5f;
                 Projectile.NewProjectile(Projectile.GetSource_FromThis(), Projectile.Center, velocity,
-                    ModContent.ProjectileType<NorthPoleShard>(), Math.Max(1, (int)(Projectile.damage * NorthPoleBalance.ShardDamage)),
-                    Projectile.knockBack * 0.4f, Projectile.owner, Main.rand.Next(3));
+                    ModContent.ProjectileType<NorthPoleMiniFlake>(), Math.Max(1, (int)(Projectile.damage * NorthPoleBalance.MiniFlakeDamage)),
+                    Projectile.knockBack * 0.5f, Projectile.owner, Main.rand.Next(16, 26));
             }
         }
         public override bool PreDraw(ref Color lightColor)
@@ -489,10 +505,13 @@ namespace FrostMelee.Content.Projectiles
         }
     }
 
-    // Icicles of the burst, like the Ice Queen's frost shards: they fly through blocks.
-    public class NorthPoleShard : ModProjectile
+    // Small snowflakes of the burst: scatter, slow down and explode in a small
+    // blast (on contact with an enemy or when their fuse ends). Through blocks.
+    // ai[0]: fuse ticks; localAI[0]: 1 once exploding.
+    public class NorthPoleMiniFlake : ModProjectile
     {
-        public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.FrostShard;
+        private const int BlastTicks = 3;
+        public override string Texture => "Terraria/Images/Projectile_" + ProjectileID.NorthPoleSnowflake;
         public override void SetStaticDefaults()
         {
             Main.projFrames[Type] = 3;
@@ -501,40 +520,66 @@ namespace FrostMelee.Content.Projectiles
         }
         public override void SetDefaults()
         {
-            Projectile.width = Projectile.height = 12;
+            Projectile.width = Projectile.height = 14;
             Projectile.friendly = true;
-            Projectile.hostile = false;
             Projectile.DamageType = DamageClass.Melee;
-            Projectile.penetrate = 2;
+            Projectile.penetrate = -1;
             Projectile.usesLocalNPCImmunity = true;
-            Projectile.localNPCHitCooldown = -1;
+            Projectile.localNPCHitCooldown = -1; // each enemy is hit once: contact and blast together
             Projectile.tileCollide = false;
             Projectile.ignoreWater = true;
-            Projectile.timeLeft = 60;
+            Projectile.timeLeft = 40;
         }
+        private bool Exploding => Projectile.localAI[0] > 0;
         public override void AI()
         {
-            Projectile.frame = Math.Clamp((int)Projectile.ai[0], 0, 2);
-            Projectile.velocity.Y += 0.2f;
-            Projectile.rotation = Projectile.velocity.ToRotation();
-            Projectile.Opacity = Math.Min(1, Projectile.timeLeft / 15f);
+            if (!Exploding)
+            {
+                Projectile.velocity *= 0.94f;
+                Projectile.rotation += 0.15f;
+                if (++Projectile.localAI[1] >= Math.Clamp(Projectile.ai[0], 8, 36)) Explode();
+                if (!Main.dedServ && Main.rand.NextBool(3))
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.SnowflakeIce, -Projectile.velocity * 0.1f, 0, default, 0.7f);
+                    d.noGravity = true;
+                }
+            }
+            Lighting.AddLight(Projectile.Center, 0.2f, 0.45f, 0.5f);
         }
-        public override void OnKill(int timeLeft) => NorthPoleEffects.SnowDust(Projectile.Center, 3);
+        private void Explode()
+        {
+            if (Exploding) return;
+            Projectile.localAI[0] = 1;
+            Projectile.velocity = Vector2.Zero;
+            Projectile.timeLeft = BlastTicks;
+            Projectile.Resize(NorthPoleBalance.MiniBlastRadius * 2, NorthPoleBalance.MiniBlastRadius * 2);
+            if (Main.dedServ) return;
+            SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.45f, Pitch = 0.4f }, Projectile.Center);
+            for (int i = 0; i < 12; i++)
+                NorthPoleFx.AuroraDust(Projectile.Center, (MathHelper.TwoPi * i / 12).ToRotationVector2() * 3.2f, 1.1f);
+            NorthPoleEffects.SnowDust(Projectile.Center, 10, 4f);
+        }
+        public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) => Explode();
         public override bool PreDraw(ref Color lightColor)
         {
-            Vector2 dir = Projectile.rotation.ToRotationVector2();
-            if (NorthPoleArt.DrawCustom("Shard", Projectile.Center, Projectile.rotation, 20, Color.White * Projectile.Opacity))
+            if (Exploding)
+            {
+                float t = 1f - Projectile.timeLeft / (float)BlastTicks;
+                NorthPoleFx.Bloom(Projectile.Center, NorthPoleBalance.MiniBlastRadius * 2.4f, NorthPoleFx.Add(NorthPoleArt.ATeal, 0.5f * (1 - t)));
+                NorthPoleFx.Sparkle(Projectile.Center, 40f, 0f, 4, Color.White, Color.White);
                 return false;
-            NorthPoleArt.PixelTrail(Projectile, "Shard", Projectile.Opacity, 0f, true);
-            if (NorthPoleArt.Pixel("Shard") is Texture2D shard)
-                Main.EntitySpriteDraw(shard, NorthPoleArt.Snap(Projectile.Center), null, Color.White * Projectile.Opacity,
-                    Projectile.rotation, new Vector2(MathF.Floor(shard.Width / 4f) * 2f, MathF.Floor(shard.Height / 4f) * 2f), 1f, SpriteEffects.None, 0);
+            }
+            if (NorthPoleArt.DrawCustom("MiniFlake", Projectile.Center, Projectile.rotation, 16, Color.White))
+                return false;
+            NorthPoleArt.PixelTrail(Projectile, "MiniFlake", 0.6f);
+            NorthPoleArt.Sprite("MiniFlake", Projectile.Center, Color.White);
             return false;
         }
     }
 
     // No damage; only the owning player can collect this projectile with their body.
-    // ai[0]: age, ai[1]: look variant. Falls from the sky THROUGH blocks.
+    // ai[0]: age, ai[1]: look variant, ai[2]: kind (0 Blessing — rose, 1 Polar Dawn — amber).
+    // Falls from the sky THROUGH blocks.
     public class NorthPolePickup : ModProjectile
     {
         // Not a hazard to dodge but a pickup: drifts down from the sky and, once
@@ -560,6 +605,7 @@ namespace FrostMelee.Content.Projectiles
         }
         public override bool? CanDamage() => false;
         private bool Pulled => Projectile.localAI[0] > 0;
+        private bool Dawn => (int)Projectile.ai[2] == NorthPolePlayer.KindDawn;
         public override void AI()
         {
             if (Projectile.owner < 0 || Projectile.owner >= Main.maxPlayers) { Projectile.Kill(); return; }
@@ -584,10 +630,11 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.Center.Y - player.Center.Y > 360) { Projectile.Kill(); return; }
             }
             Projectile.rotation += 0.03f;
-            Lighting.AddLight(Projectile.Center, 0.5f, 0.25f, 0.4f);
+            if (Dawn) Lighting.AddLight(Projectile.Center, 0.55f, 0.38f, 0.12f);
+            else Lighting.AddLight(Projectile.Center, 0.5f, 0.25f, 0.4f);
             if (NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 10 && Projectile.Hitbox.Intersects(player.Hitbox))
             {
-                player.AddBuff(ModContent.BuffType<NorthPoleBlessing>(), NorthPoleBalance.BlessingTicks);
+                player.AddBuff(Dawn ? ModContent.BuffType<NorthPoleDawn>() : ModContent.BuffType<NorthPoleBlessing>(), NorthPoleBalance.BlessingTicks);
                 if (Main.netMode == NetmodeID.MultiplayerClient)
                     NetMessage.SendData(MessageID.PlayerBuffs, number: player.whoAmI);
                 SoundEngine.PlaySound(SoundID.Grab with { Pitch = 0.3f }, player.Center);
@@ -600,7 +647,7 @@ namespace FrostMelee.Content.Projectiles
             if (Main.dedServ) return;
             for (int i = 0; i < 8; i++)
             {
-                Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.PinkTorch, Main.rand.NextVector2Circular(2f, 2f), 0, default, 0.9f);
+                Dust d = Dust.NewDustPerfect(Projectile.Center, Dawn ? DustID.OrangeTorch : DustID.PinkTorch, Main.rand.NextVector2Circular(2f, 2f), 0, default, 0.9f);
                 d.noGravity = true;
             }
         }
@@ -610,12 +657,13 @@ namespace FrostMelee.Content.Projectiles
             float pulse = 0.5f + 0.5f * MathF.Sin(Projectile.ai[0] * 0.15f + Projectile.whoAmI);
             float fade = Math.Min(1, Projectile.timeLeft / 30f) * Math.Min(1, Projectile.ai[0] / 10f);
             Vector2 at = Projectile.Center + new Vector2(0, Pulled ? 0 : MathF.Sin(Projectile.ai[0] * 0.08f) * 2f);
-            NorthPoleFx.Bloom(at, 50f + 14f * pulse, NorthPoleFx.Add(NorthPoleArt.BMagenta, (0.15f + 0.15f * pulse) * fade));
-            NorthPoleFx.Bloom(at, 30f + 6f * pulse, NorthPoleFx.Add(Rose, (0.18f + 0.15f * pulse) * fade));
-            if (NorthPoleArt.DrawCustom("Pickup", at, Projectile.rotation, 22, Color.White * fade))
+            Color outer = Dawn ? NorthPoleArt.DEmber : NorthPoleArt.BMagenta, inner = Dawn ? NorthPoleArt.DAmber : Rose;
+            NorthPoleFx.Bloom(at, 50f + 14f * pulse, NorthPoleFx.Add(outer, (0.15f + 0.15f * pulse) * fade));
+            NorthPoleFx.Bloom(at, 30f + 6f * pulse, NorthPoleFx.Add(inner, (0.18f + 0.15f * pulse) * fade));
+            if (NorthPoleArt.DrawCustom(Dawn ? "DawnPickup" : "Pickup", at, Projectile.rotation, 22, Color.White * fade))
                 return false;
-            NorthPoleArt.Snowflake(at, 12, Projectile.rotation, 0f, (0.85f + 0.15f * pulse) * fade, NorthPoleArt.StyleBuff);
-            NorthPoleFx.Sparkle(at + new Vector2(7, -8), 12f * pulse, 0f, 2, NorthPoleFx.Add(Color.White, pulse * fade), NorthPoleFx.Add(Rose, pulse * fade));
+            NorthPoleArt.Snowflake(at, 12, Projectile.rotation, 0f, (0.85f + 0.15f * pulse) * fade, Dawn ? NorthPoleArt.StyleDawn : NorthPoleArt.StyleBuff);
+            NorthPoleFx.Sparkle(at + new Vector2(7, -8), 12f * pulse, 0f, 2, NorthPoleFx.Add(Color.White, pulse * fade), NorthPoleFx.Add(inner, pulse * fade));
             return false;
         }
     }

@@ -42,7 +42,7 @@ Items: {
 Projectiles: {
 	NorthPoleTrail.DisplayName: North Pole Snowflake
 	NorthPoleSnowflake.DisplayName: Growing Snowflake
-	NorthPoleShard.DisplayName: Icicle
+	NorthPoleMiniFlake.DisplayName: Bursting Snowflake
 	NorthPolePickup.DisplayName: Blessed Snowflake
 	NorthPoleSnowCoat.DisplayName: Snow Coat
 	NorthPoleBraceSpike.DisplayName: Piercing Icicle
@@ -178,6 +178,16 @@ Configs: {
 			Label: Weak shot damage (%)
 			Tooltip: ""
 		}
+
+		AttackSpeedPercent: {
+			Label: Polar Dawn: melee speed bonus (%)
+			// Tooltip: ""
+		}
+
+		DawnRegenPerSecond: {
+			Label: Polar Dawn: regeneration (HP/sec.)
+			// Tooltip: ""
+		}
 	}
 }
 
@@ -220,6 +230,11 @@ Buffs: {
 	NorthPoleBlessing: {
 		DisplayName: North Pole Blessing
 		Description: Increased movement speed, life regeneration and critical hit damage
+	}
+
+	NorthPoleDawn: {
+		DisplayName: Polar Dawn
+		Description: Increased melee speed and life regeneration
 	}
 }
 

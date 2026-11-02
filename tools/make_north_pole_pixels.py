@@ -5,7 +5,8 @@ palette, then upscaled x2 with nearest neighbour, so every art pixel is a
 2x2 block, as in vanilla Terraria textures. Output:
 FrostMelee/Textures/NorthPolePixel/*.png (drawn at scale 1 by NorthPoleArt).
 
-Run: python3 tools/make_north_pole_pixels.py
+Run: python3 tools/make_north_pole_pixels.py [Name ...]  (names: only those sprites; the owner
+hand-corrects sprites in the folder, so never regenerate everything over them)
 """
 import math
 from pathlib import Path
@@ -17,6 +18,8 @@ OUT = Path(__file__).resolve().parents[1] / 'FrostMelee' / 'Textures' / 'NorthPo
 SWING = [(38, 18, 84), (128, 58, 222), (28, 168, 196), (70, 232, 156), (214, 255, 232)]
 THROW = [(10, 44, 84), (18, 112, 172), (44, 196, 246), (178, 242, 255), (255, 255, 255)]
 BUFF = [(86, 18, 70), (196, 54, 172), (250, 112, 186), (255, 196, 226), (255, 248, 252)]
+DAWN = [(92, 40, 8), (196, 96, 20), (248, 160, 40), (255, 214, 120), (255, 250, 225)]
+HEART = [(150, 20, 40), (230, 50, 60), (255, 120, 120)]
 
 
 def save(grid, name):
@@ -167,11 +170,48 @@ def sparkle(r):
     return grid
 
 
+def dawn_flake(R, pal):
+    """Polar Dawn snow: amber 8-arm flake with knobbed tips and a small red heart in the middle."""
+    size = 2 * R + 3
+    c = R + 1
+    cells = {}
+    for a in range(8):
+        dx, dy = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)][a]
+        arm = R - 1 if a % 2 == 0 else max(2, round(R * 0.62))
+        for k in range(2, arm + 1):
+            cells[(c + dx * k, c + dy * k)] = pal[2] if k < arm else pal[3]
+        if a % 2 == 0:  # knob at the straight tips
+            tx, ty = c + dx * arm, c + dy * arm
+            for ox, oy in ((-dy, dx), (dy, -dx)):
+                cells[(tx + ox, ty + oy)] = pal[1]
+    # heart 5x4 centred
+    heart = ['.#.#.', '#####', '.###.', '..#..']
+    for y, row in enumerate(heart):
+        for x, ch in enumerate(row):
+            if ch == '#':
+                hx, hy = c - 2 + x, c - 2 + y
+                cells[(hx, hy)] = HEART[2] if (x, y) in ((1, 0), (1, 1)) else HEART[1] if y < 3 else HEART[0]
+    return outline(cells, size, size, pal[0])
+
+
 SPIKE_WIDTHS = (4, 7, 10)
 SPIKE_LENGTHS = (8, 16, 24, 36, 48, 64, 80, 96)
 
 
-def main():
+EXTRA = {
+    'DawnFlake': lambda: dawn_flake(6, DAWN),
+    'MiniFlake': lambda: snowflake(3, SWING),
+}
+
+
+def main(only=None):
+    # only: regenerate just these names, so hand-corrected sprites in the folder stay untouched
+    if only:
+        for name in only:
+            save(EXTRA[name](), name)
+        return
+    for name, make in EXTRA.items():
+        save(make(), name)
     for R in range(3, 12):
         save(snowflake(R, SWING), f'SwingFlake{R}')
     save(snowflake(3, THROW, branches=False), 'ThrowFlake')
@@ -187,4 +227,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    main(sys.argv[1:] or None)

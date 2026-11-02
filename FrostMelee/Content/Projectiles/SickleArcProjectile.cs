@@ -389,6 +389,7 @@ namespace FrostMelee.Content.Projectiles
         }
 
         private bool northPoleHit;
+        private readonly System.Collections.Generic.HashSet<int> northPoleTargets = new();
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             if (ItemType == ItemID.NorthPole && !Main.dedServ)
@@ -402,8 +403,8 @@ namespace FrostMelee.Content.Projectiles
                 for (int i = 0; i < AuroraHitGlitter; i++)
                     NorthPoleFx.AuroraDust(point, Main.rand.NextVector2Unit() * Main.rand.NextFloat(1.5f, 3.5f), 1.1f);
             }
-            // One growth step per successful swing, not per target in a crowd.
-            if (ItemType == ItemID.NorthPole && !northPoleHit && Projectile.owner == Main.myPlayer)
+            // One growth step per enemy per swing: each enemy grows its own flake (up to five).
+            if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer && northPoleTargets.Add(target.whoAmI))
             {
                 northPoleHit = true;
                 Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().SwingHit(Projectile, target);
@@ -414,7 +415,7 @@ namespace FrostMelee.Content.Projectiles
         {
             if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer
                 && Projectile.localAI[0] >= Math.Max(1f, Projectile.ai[1]))
-                Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().FinishSwing(northPoleHit);
+                Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().FinishSwing(Projectile, northPoleHit);
             frostTrail?.Close();
             frostTrail = null;
         }
