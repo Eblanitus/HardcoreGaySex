@@ -76,8 +76,7 @@ namespace FrostMelee.Content.Projectiles
         {
             if (Main.dedServ) return;
             SoundEngine.PlaySound(SoundID.Item50 with { Volume = 0.8f, Pitch = -0.4f }, at);
-            NorthPolePixelFx.Burst(at, 7, 2.5f, NorthPolePixelFx.Snow, 50);
-            SnowDust(at, 8, 3f);
+            SnowDust(at, 12, 3f);
             if (spear.owner == Main.myPlayer && velocity != Vector2.Zero)
                 Main.instance.CameraModifiers.Add(new Terraria.Graphics.CameraModifiers.PunchCameraModifier(
                     at, velocity.SafeNormalize(Vector2.UnitX), 4f, 8f, 14, 1200f, "NorthPoleThrow"));
@@ -374,7 +373,6 @@ namespace FrostMelee.Content.Projectiles
             pulse = 1;
             SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.35f, Pitch = -0.3f + Level * 0.8f }, Projectile.Center);
             NorthPoleEffects.SnowDust(Projectile.Center, 4 + (int)(Level * 6), 2f);
-            NorthPolePixelFx.Burst(Projectile.Center, 3 + (int)(Level * 3), 1.5f, NorthPolePixelFx.Snow, 40);
             if (Projectile.ai[1] >= NorthPoleBalance.FullCharge) Release(false);
         }
 
@@ -520,11 +518,11 @@ namespace FrostMelee.Content.Projectiles
             NorthPoleEffects.SnowDust(Projectile.Center, 12 + (int)(Level * 14), 3 + Level * 3);
             if (!impacted || Charging) return;
             // разрыв: кольцо огоньков сияния и снежный выброс (на всех клиентах)
-            for (int i = 0; i < 28; i++)
-                NorthPoleFx.AuroraDust(Projectile.Center, (MathHelper.TwoPi * i / 28).ToRotationVector2() * (4f + Level * 3f), 1.4f);
-            for (int i = 0; i < 10; i++)
+            // owner 02.11.2026: no smooth particle rings ("Noita"), a few chunky vanilla flakes
+            for (int i = 0; i < 8; i++)
+                NorthPoleFx.AuroraDust(Projectile.Center, (MathHelper.TwoPi * i / 8 + Main.rand.NextFloat(-0.3f, 0.3f)).ToRotationVector2() * (3f + Level * 2f), 1.4f);
+            for (int i = 0; i < 6; i++)
                 NorthPoleFx.ShakeSnow(Projectile.Center, 1f, 16f);
-            NorthPolePixelFx.Burst(Projectile.Center, 6 + (int)(Level * 6), 3.5f, NorthPolePixelFx.Snow, 50);
             if (!Main.dedServ) SoundEngine.PlaySound(SoundID.Item27, Projectile.Center);
             if (!NorthPoleEffects.Owned(Projectile)) return;
             // the big flake breaks into small snowflakes that scatter and explode (owner 02.11.2026)
@@ -611,7 +609,6 @@ namespace FrostMelee.Content.Projectiles
             Projectile.Resize(NorthPoleBalance.MiniBlastRadius * 2, NorthPoleBalance.MiniBlastRadius * 2);
             if (Main.dedServ) return;
             SoundEngine.PlaySound(SoundID.Item27 with { Volume = 0.45f, Pitch = 0.4f }, Projectile.Center);
-            NorthPolePixelFx.Burst(Projectile.Center, 5, 2.5f, NorthPolePixelFx.Snow, 36);
             NorthPoleEffects.SnowDust(Projectile.Center, 6, 4f);
         }
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone) => Explode();

@@ -252,7 +252,7 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
     def test_owner_feedback_round_02_11(self):
         effects = read('Content/Projectiles/NorthPoleEffects.cs')
         player = read('Content/Weapons/NorthPolePlayer.cs')
-        fx = read('Content/Projectiles/NorthPolePixelFx.cs')
+        fx = read('Content/Projectiles/NorthPoleDrift.cs')
         flake = effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleMiniFlake', 1)[0]
         # each flake flies at the enemy nearest to it; a flake whose enemy died does not hang
         self.assertIn('bool found = PickNearest();', flake)
@@ -330,6 +330,16 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         # the charged tip "plus" stays on the braced spear
         self.assertIn('NorthPoleBalance.GustFullSpeed', brace)
         self.assertIn('NorthPoleFx.Sparkle(tip', brace)
+
+    def test_owner_feedback_round_02_11_e_vanilla_particles(self):
+        # owner 02.11.2026: the smooth pixel particle streams read as "Noita"; everything uses
+        # plain vanilla snow dust now, the pixel particle system is gone
+        self.assertFalse((ROOT / 'FrostMelee/Content/Projectiles/NorthPolePixelFx.cs').exists())
+        for path in (ROOT / 'FrostMelee/Content').rglob('*.cs'):
+            self.assertNotIn('NorthPolePixelFx', path.read_text(encoding='utf-8'), path.name)
+        drift = read('Content/Projectiles/NorthPoleDrift.cs')
+        self.assertIn('DustID.SnowflakeIce', drift)
+        self.assertNotIn('NorthPoleArt.Sprite', drift)
 
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image
