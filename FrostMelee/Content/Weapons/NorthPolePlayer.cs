@@ -119,9 +119,17 @@ namespace FrostMelee.Content.Weapons
             // straight through any roof. It slows down while passing the player.
             float x = MathHelper.Clamp(Player.Center.X + Main.rand.NextFloat(-128, 128), 32, Main.maxTilesX * 16 - 32);
             float y = Math.Max(32, Math.Min(Main.screenPosition.Y - 24, Player.Center.Y - 360));
-            Projectile.NewProjectile(stab.GetSource_FromThis(), new Vector2(x, y), new Vector2(0, 5f),
+            Projectile.NewProjectile(stab.GetSource_FromThis(), new Vector2(x, y), new Vector2(0, 3f),
                 ModContent.ProjectileType<NorthPolePickup>(), 0, 0, Player.whoAmI, 0, Main.rand.Next(3));
             rainCooldown = NorthPoleBalance.RainCooldown;
+            // Readable cue on the spear itself: a puff of warm snow motes rises off the tip
+            if (!Main.dedServ)
+                for (int i = 0; i < 6; i++)
+                {
+                    Dust d = Dust.NewDustPerfect(stab.Center + Main.rand.NextVector2Circular(6, 6), DustID.GoldFlame,
+                        new Vector2(Main.rand.NextFloat(-0.6f, 0.6f), -Main.rand.NextFloat(1.5f, 3.5f)), 0, default, 0.8f);
+                    d.noGravity = true;
+                }
         }
 
         public override void ModifyHitNPCWithItem(Item item, NPC target, ref NPC.HitModifiers modifiers)

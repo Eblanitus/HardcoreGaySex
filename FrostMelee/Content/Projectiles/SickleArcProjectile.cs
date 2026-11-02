@@ -391,6 +391,8 @@ namespace FrostMelee.Content.Projectiles
         private bool northPoleHit;
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            if (ItemType == ItemID.NorthPole)
+                AddAuroraHit(target);
             // One growth step per successful swing, not per target in a crowd.
             if (ItemType == ItemID.NorthPole && !northPoleHit && Projectile.owner == Main.myPlayer)
             {
@@ -624,11 +626,9 @@ namespace FrostMelee.Content.Projectiles
             Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.75f, 1f));
             if (ItemType == ItemID.NorthPole)
             {
-                // с ленты сияния осыпается снег (падает, а не висит), в воздухе остаются огоньки сияния
-                NorthPoleFx.ShakeSnow(pos, 0.9f * env);
-                NorthPoleFx.ShakeSnow(EndPoint(player, progress - back * 0.5f, true, Main.rand.NextFloat(0.6f, 1f)), 0.6f * env);
-                if (Main.rand.NextFloat() < 0.5f * env)
-                    NorthPoleFx.AuroraDust(pos, Main.rand.NextVector2Circular(0.6f, 0.6f) + new Vector2(0f, -0.3f), Main.rand.NextFloat(1f, 1.5f));
+                // с кромки сияния понемногу осыпается снег — падает, а не висит;
+                // остальное делает сама лента (DrawAuroraTrail)
+                NorthPoleFx.ShakeSnow(pos, 0.45f * env, 3f);
                 return;
             }
             if (Main.rand.NextFloat() < IceCrystalChance * env)
@@ -713,7 +713,8 @@ namespace FrostMelee.Content.Projectiles
         {
             if (Main.dedServ)
                 return;
-            Texture2D a = trailMask, b = streakMask;
+            Texture2D a = trailMask, b = streakMask, r = auroraRayMask;
+            auroraRayMask = null;
             BasicEffect e = trailEffect;
             trailMask = null;
             streakMask = null;
@@ -725,6 +726,7 @@ namespace FrostMelee.Content.Projectiles
             {
                 a?.Dispose();
                 b?.Dispose();
+                r?.Dispose();
                 e?.Dispose();
             });
         }
@@ -898,6 +900,11 @@ namespace FrostMelee.Content.Projectiles
         // SpriteBatch на время рисования ленты закрываем и открываем заново с настройками ванильных снарядов.
         private void DrawTrail(Player player, Texture2D glow, float progress, float max, float env)
         {
+            if (ItemType == ItemID.NorthPole)
+            {
+                DrawAuroraTrail(player, glow, progress, max, env);
+                return;
+            }
             float tip = TipRadius();
             int n = BuildTrailAngles(progress, max);
             GraphicsDevice device = Main.graphics.GraphicsDevice;
@@ -938,6 +945,191 @@ namespace FrostMelee.Content.Projectiles
                 Additive(headCore, env), 0f, glow.Size() / 2f, TrailHeadDot * 1.6f / glow.Width, SpriteEffects.None, 0f);
         }
 
+        // === Северный полюс: дуга-сияние ===
+        // Цельная композиция вместо «ленты + частиц»: полоса полярного сияния по следу острия.
+        // • Форма: полоса лежит от острия внутрь, ширина нелинейная — тонко на замахе,
+        //   набухает к середине взмаха, сходит на нет к концу; вдоль ленты сужается к хвосту.
+        // • Градиент поперёк (вершинные цвета): кромка у острия — белая мята, глубже — бирюза,
+        //   внутренний край уходит в фиолет, как у настоящего сияния.
+        // • Лучи: второй проход — светлые вертикальные «складки» занавеса поперёк полосы,
+        //   медленно плывут вдоль неё (маска с лучами, тайлится).
+        // • Кромка: третий проход — тонкая яркая линия по самому следу острия.
+        // • Удар: вспышка-звезда сияния в точке попадания (DrawAuroraHits).
+        private const float AuroraWidth = 0.62f;        // макс. ширина полосы, доля длины клинка
+        private const float AuroraMinWidth = 0.28f;     // ширина на замахе/в конце, доля от макс.
+        private const float AuroraTailTaper = 0.55f;    // насколько полоса сужается к хвосту
+        private const float AuroraBodyAlpha = 0.9f;
+        private const float AuroraRayAlpha = 0.9f;
+        private const float AuroraRayRepeat = 3f;       // сколько раз рисунок лучей повторяется вдоль ленты
+        private const float AuroraRaySpeed = 0.012f;    // дрейф лучей, циклов за тик
+        private const int AuroraRayCount = 14;
+        private const float AuroraEdgeWidth = 5f;       // кромка, px
+        private const int AuroraHitTicks = 14;
+
+        private static Texture2D auroraRayMask;
+
+        // Лучи занавеса: узкие поперечные полосы разной яркости и длины; растут от кромки (v = 0) внутрь
+        private static Texture2D MakeAuroraRayMask()
+        {
+            Random rng = new Random(11);
+            float[] pos = new float[AuroraRayCount], width = new float[AuroraRayCount],
+                gain = new float[AuroraRayCount], reach = new float[AuroraRayCount];
+            for (int s = 0; s < AuroraRayCount; s++)
+            {
+                pos[s] = (s + 0.5f + 0.6f * ((float)rng.NextDouble() - 0.5f)) / AuroraRayCount;
+                width[s] = 0.008f + 0.02f * (float)rng.NextDouble();
+                gain[s] = 0.35f + 0.65f * (float)rng.NextDouble();
+                reach[s] = 0.45f + 0.55f * (float)rng.NextDouble();
+            }
+            return MakeMask(256, 64, (u, v) =>
+            {
+                float best = 0f;
+                for (int s = 0; s < AuroraRayCount; s++)
+                {
+                    float d = u - pos[s];
+                    d -= (float)Math.Round(d);                  // бесшовный повтор по u
+                    float line = (float)Math.Exp(-(d / width[s]) * (d / width[s]));
+                    if (line < 0.01f)
+                        continue;
+                    float along = 1f - Smooth01(v / reach[s]);  // луч тает к внутреннему краю
+                    best = Math.Max(best, line * gain[s] * along);
+                }
+                return best;
+            });
+        }
+
+        // Набухание к середине взмаха: тонкий замах, толстая середина, тонкий конец
+        private static float AuroraSwell(float progress)
+        {
+            float s = (float)Math.Sin(MathHelper.Pi * MathHelper.Clamp(progress, 0f, 1f));
+            return AuroraMinWidth + (1f - AuroraMinWidth) * (float)Math.Pow(s, 0.8f);
+        }
+
+        private void FillAuroraStrip(int n, Vector2 center, float rOut, float width, float alphaOut, float alphaIn,
+            Color colorOut, Color colorIn, float uRepeat, float uScroll, bool taperAlong)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                float t = n > 1 ? i / (float)(n - 1) : 0f;
+                Vector2 dir = trailAngles[i].ToRotationVector2();
+                float w = width * (taperAlong ? 1f - t * AuroraTailTaper : 1f);
+                float fade = (float)Math.Pow(1f - t, 1.1f) * Smooth01(t / 0.04f + 0.25f);
+                Color o = colorOut * (alphaOut * fade);
+                Color inner = colorIn * (alphaIn * fade);
+                o.A = 0;
+                inner.A = 0;
+                float u = uRepeat > 0f ? t * uRepeat - uScroll : t;
+                trailVerts[i * 2] = new VertexPositionColorTexture(new Vector3(center + dir * rOut - Main.screenPosition, 0f), o, new Vector2(u, 0f));
+                trailVerts[i * 2 + 1] = new VertexPositionColorTexture(new Vector3(center + dir * (rOut - w) - Main.screenPosition, 0f), inner, new Vector2(u, 1f));
+            }
+        }
+
+        private void DrawAuroraTrail(Player player, Texture2D glow, float progress, float max, float env)
+        {
+            float tip = TipRadius();
+            int n = BuildTrailAngles(progress, max);
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            NorthPoleFx.Palette(out Color core, out Color tail, out Color edge);
+            if (tip > 1f && n >= 2 && EnsureTrailAssets(device))
+            {
+                if (auroraRayMask == null || auroraRayMask.IsDisposed)
+                    auroraRayMask = MakeAuroraRayMask();
+                EnsureVerts(n);
+                float width = tip * AuroraWidth * AuroraSwell(progress);
+                float rOut = tip * 1.02f;
+                Vector2 center = player.MountedCenter;
+                float scroll = Projectile.localAI[0] * AuroraRaySpeed;
+                trailEffect.World = Matrix.Identity;
+                trailEffect.View = Main.GameViewMatrix.TransformationMatrix;
+                trailEffect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
+                Main.spriteBatch.End();
+                device.BlendState = trailBlend;
+                device.DepthStencilState = DepthStencilState.None;
+                device.RasterizerState = trailRaster;
+                try
+                {
+                    // 1) тело: мягкий градиент поперёк — бирюза у кромки, фиолет внутри
+                    FillAuroraStrip(n, center, rOut, width, AuroraBodyAlpha * env, AuroraBodyAlpha * 0.95f * env,
+                        Color.Lerp(tail, core, 0.25f), edge, 0f, 0f, true);
+                    trailEffect.Texture = trailMask;
+                    device.SamplerStates[0] = SamplerState.LinearClamp;
+                    trailEffect.CurrentTechnique.Passes[0].Apply();
+                    device.DrawUserPrimitives(PrimitiveType.TriangleStrip, trailVerts, 0, n * 2 - 2);
+
+                    // 2) лучи-складки занавеса: светлые у кромки, плывут вдоль полосы
+                    FillAuroraStrip(n, center, rOut, width * 1.1f, AuroraRayAlpha * env, AuroraRayAlpha * 0.5f * env,
+                        Color.Lerp(core, tail, 0.35f), Color.Lerp(tail, edge, 0.6f), AuroraRayRepeat, scroll, true);
+                    trailEffect.Texture = auroraRayMask;
+                    device.SamplerStates[0] = SamplerState.LinearWrap;
+                    trailEffect.CurrentTechnique.Passes[0].Apply();
+                    device.DrawUserPrimitives(PrimitiveType.TriangleStrip, trailVerts, 0, n * 2 - 2);
+
+                    // 3) кромка: тонкая яркая линия ровно по следу острия
+                    FillAuroraStrip(n, center, rOut + AuroraEdgeWidth * 0.3f, AuroraEdgeWidth * (0.6f + 0.4f * AuroraSwell(progress)),
+                        env, env * 0.6f, core, tail, 0f, 0f, false);
+                    trailEffect.Texture = trailMask;
+                    device.SamplerStates[0] = SamplerState.LinearClamp;
+                    trailEffect.CurrentTechnique.Passes[0].Apply();
+                    device.DrawUserPrimitives(PrimitiveType.TriangleStrip, trailVerts, 0, n * 2 - 2);
+                }
+                finally
+                {
+                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                }
+            }
+
+            // голова: мягкая мятная капля у острия, не белая точка
+            Vector2 tipPos = EndPoint(player, progress, true);
+            Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(tail, 0.55f * env), 0f,
+                glow.Size() / 2f, 44f * AuroraSwell(progress) / glow.Width, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(core, env), 0f,
+                glow.Size() / 2f, 16f / glow.Width, SpriteEffects.None, 0f);
+            DrawAuroraHits(glow, tail, edge, core);
+        }
+
+        // Вспышки ударов: звезда сияния + мягкое пятно в точке попадания, быстро гаснут
+        private Vector2[] auroraHitPos;
+        private int[] auroraHitTick;
+        private int auroraHitCount;
+
+        private void AddAuroraHit(NPC target)
+        {
+            if (Main.dedServ)
+                return;
+            auroraHitPos ??= new Vector2[4];
+            auroraHitTick ??= new int[4];
+            Player player = Main.player[Projectile.owner];
+            Vector2 tipPos = EndPoint(player, SwingProgress(player), true);
+            Vector2 point = Vector2.Clamp(tipPos, target.Hitbox.TopLeft(), target.Hitbox.BottomRight());
+            int slot = auroraHitCount++ % auroraHitPos.Length;
+            auroraHitPos[slot] = point;
+            auroraHitTick[slot] = (int)Projectile.localAI[0];
+            for (int i = 0; i < 10; i++)
+                NorthPoleFx.ShakeSnow(point, 1f, 10f);
+            for (int i = 0; i < 6; i++)
+                NorthPoleFx.AuroraDust(point, Main.rand.NextVector2Unit() * Main.rand.NextFloat(1.5f, 3.5f), 1.1f);
+            Lighting.AddLight(point, 0.4f, 1f, 0.9f);
+        }
+
+        private void DrawAuroraHits(Texture2D glow, Color tail, Color edge, Color core)
+        {
+            if (auroraHitPos == null)
+                return;
+            int count = Math.Min(auroraHitCount, auroraHitPos.Length);
+            for (int i = 0; i < count; i++)
+            {
+                int age = (int)Projectile.localAI[0] - auroraHitTick[i];
+                if (age < 0 || age >= AuroraHitTicks)
+                    continue;
+                float k = 1f - age / (float)AuroraHitTicks;
+                Vector2 pos = auroraHitPos[i];
+                Main.EntitySpriteDraw(glow, pos - Main.screenPosition, null, Additive(edge, 0.6f * k), 0f, glow.Size() / 2f,
+                    (60f + 40f * (1f - k)) / glow.Width, SpriteEffects.None, 0f);
+                DrawSparkle(glow, pos, 70f * (0.5f + 0.5f * k), i * 0.9f, 3, Additive(tail, k), Additive(core, k));
+            }
+        }
+
         // Широкий мягкий ореол под шлейфом
         private void DrawHalo(Player player, Texture2D glow, float progress, float max, float env, bool tip, float sizeMult)
         {
@@ -963,17 +1155,7 @@ namespace FrostMelee.Content.Projectiles
         {
             GlowColors(out Color core, out Color tail, out Color edge);
             if (ItemType == ItemID.NorthPole)
-            {
-                // занавесы сияния свисают с ленты вниз и колышутся
-                const int Curtains = 7;
-                for (int i = 0; i < Curtains; i++)
-                {
-                    float t = (i + 0.5f) / Curtains * 0.9f;
-                    Vector2 top = EndPoint(player, progress - t * HaloTicks / max, true, 0.85f + 0.12f * (float)Math.Sin(i * 2.7f));
-                    float fade = (1f - t) * env;
-                    NorthPoleFx.Curtain(top, 34f + 22f * (float)Math.Abs(Math.Sin(i * 1.9f)), 10f, 0.32f * fade, i * 1.1f);
-                }
-            }
+                return; // у Северного полюса вся композиция — в DrawAuroraTrail
             float time = Projectile.localAI[0] * TwinkleSpeed;
             int specialCount = IceSnowflakeCount;
             float specialSize = IceSnowflakeSize;
