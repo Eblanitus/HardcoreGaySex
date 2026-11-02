@@ -293,7 +293,7 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertNotIn('NorthPolePixelFx.Flake', arc)
         self.assertNotIn('NorthPolePixelFx.Swing', arc)
         self.assertNotIn('"Sparkle1"', arc)
-        self.assertIn('NorthPolePixelFx.Snow', arc)
+        self.assertNotIn('NorthPolePixelFx', arc)   # no particles on the arc any more
         self.assertIn('AuroraShimmerWaves', arc)
         # released flakes leave one by one, 0.1-0.4 s apart
         self.assertIn('public const int LaunchGapMin = 6, LaunchGapMax = 24;', player)
@@ -301,6 +301,22 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         # thrown spear: javelin physics and weighty impact
         self.assertIn('Projectile.velocity *= NorthPoleLaunchBoost;', throw)
         self.assertEqual(throw.count('NorthPoleEffects.ThrowImpact('), 2)
+
+    def test_owner_feedback_round_02_11_c(self):
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        player = read('Content/Weapons/NorthPolePlayer.cs')
+        arc = read('Content/Projectiles/SickleArcProjectile.cs')
+        veil = read('Content/Projectiles/NorthPoleVeil.cs')
+        # brace icicles: one per enemy, capped, half damage
+        brace = effects.split('public static void BraceSpike', 1)[1].split('public static void SnowDust', 1)[0]
+        self.assertIn('if ((int)p.ai[2] == target.whoAmI) return;', brace)
+        self.assertIn('if (alive >= NorthPoleBalance.MaxSpikes) oldest?.Kill();', brace)
+        self.assertIn('brace.damage * NorthPoleBalance.SpikeDamage', brace)
+        self.assertIn('public const int MaxSpikes = 3;', player)
+        # arc: second trail = aurora veil left in the world, drawn like the other ribbons
+        self.assertIn('NorthPoleVeil.Add(', arc)
+        self.assertLess(veil.index('BlendState.AlphaBlend'), veil.index(': additive'))
+        self.assertIn('public override void PostDrawTiles()', veil)
 
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image
