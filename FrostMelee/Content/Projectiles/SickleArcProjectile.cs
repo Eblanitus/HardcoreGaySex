@@ -402,6 +402,7 @@ namespace FrostMelee.Content.Projectiles
                     NorthPoleFx.ShakeSnow(point, 1f, 10f);
                 for (int i = 0; i < AuroraHitGlitter; i++)
                     NorthPoleFx.AuroraDust(point, Main.rand.NextVector2Unit() * Main.rand.NextFloat(1.5f, 3.5f), 1.1f);
+                NorthPolePixelFx.Burst(point, 8, 3.5f, NorthPolePixelFx.Flake, 30);
             }
             // One growth step per enemy per swing: each enemy grows its own flake (up to five).
             if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer && northPoleTargets.Add(target.whoAmI))
@@ -1115,6 +1116,12 @@ namespace FrostMelee.Content.Projectiles
             Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(AuroraEdge, env), 0f,
                 glow.Size() / 2f, 12f / glow.Width, SpriteEffects.None, 0f);
             DrawAuroraGlitter(player, glow, progress, max, env);
+            // пиксельный «плюсик» на острие (как у выставленного копья, владельцу нравится)
+            if (env > 0.2f)
+            {
+                bool big = (int)(Projectile.localAI[0] / 4f) % 2 == 0;
+                NorthPoleArt.Sprite(big ? "Sparkle1" : "Sparkle0", tipPos, Color.Lerp(AuroraMint, Color.White, 0.6f) * env);
+            }
         }
 
         // === Снежность поверх сияния: снег и блёстки с ленты и острия ===
@@ -1123,6 +1130,9 @@ namespace FrostMelee.Content.Projectiles
         private const float AuroraSnowTipChance = 0.5f;   // снег с острия
         private const float AuroraDustChance = 0.35f;     // огонёк сияния в теле ленты
         private const int AuroraPeakBurst = 8;            // всплеск снега и огоньков на пике взмаха
+        private const float AuroraPixelFlakeChance = 0.55f; // пиксельная снежинка с края ленты, шанс за тик
+        private const int AuroraPixelMotes = 2;           // пиксельные искорки в теле ленты за тик
+        private const int AuroraPixelPeak = 12;           // пиксельных снежинок во всплеске на пике
         private const int AuroraHitSnow = 8;
         private const int AuroraHitGlitter = 4;
         private const int AuroraGlitterCount = 7;         // мерцающие блёстки, рисуются поверх ленты
@@ -1144,6 +1154,22 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.ShakeSnow(pos, AuroraSnowEdgeChance * env, 4f);
             }
             NorthPoleFx.ShakeSnow(tipPos, AuroraSnowTipChance * env, 3f);
+            // пиксельные снежинки по эталону владельца: слетают с внешнего края ленты и
+            // с острия, на лету уменьшаются (снежинка -> звёздочка -> плюс -> пиксель)
+            if (Main.rand.NextFloat() < AuroraPixelFlakeChance * env)
+            {
+                float back = Main.rand.NextFloat() * TrailTicks * 0.8f / max;
+                Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(0.9f, 1.05f));
+                Vector2 outward = (pos - player.MountedCenter).SafeNormalize(Vector2.UnitY);
+                NorthPolePixelFx.Spawn(pos, outward * Main.rand.NextFloat(0.8f, 2f), NorthPolePixelFx.Flake, 42, 0.035f);
+            }
+            for (int i = 0; i < AuroraPixelMotes; i++)
+                if (Main.rand.NextFloat() < env)
+                {
+                    float back = Main.rand.NextFloat() * TrailTicks / max;
+                    Vector2 pos = EndPoint(player, progress - back, true, Main.rand.NextFloat(1f - AuroraWidth, 1f));
+                    NorthPolePixelFx.Spawn(pos, Main.rand.NextVector2Circular(0.7f, 0.7f), NorthPolePixelFx.Swing, 22, 0.02f);
+                }
             // редкие огоньки сияния в теле ленты
             if (Main.rand.NextFloat() < AuroraDustChance * env)
             {
@@ -1152,6 +1178,8 @@ namespace FrostMelee.Content.Projectiles
                 NorthPoleFx.AuroraDust(pos, Main.rand.NextVector2Circular(0.6f, 0.6f) + new Vector2(0f, -0.3f), 0.9f);
             }
             // пик взмаха: снежный всплеск с острия
+            if ((int)Projectile.localAI[0] == (int)(max * PeakAt))
+                NorthPolePixelFx.Burst(tipPos, AuroraPixelPeak, 4f, NorthPolePixelFx.Flake, 36);
             if ((int)Projectile.localAI[0] == (int)(max * PeakAt))
                 for (int i = 0; i < AuroraPeakBurst; i++)
                 {

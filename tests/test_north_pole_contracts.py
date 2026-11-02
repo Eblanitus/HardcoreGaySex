@@ -252,11 +252,49 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
 
+    def test_owner_feedback_round_02_11(self):
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        player = read('Content/Weapons/NorthPolePlayer.cs')
+        fx = read('Content/Projectiles/NorthPolePixelFx.cs')
+        flake = effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleMiniFlake', 1)[0]
+        # each flake flies at the enemy nearest to it; a flake whose enemy died does not hang
+        self.assertIn('bool found = PickNearest();', flake)
+        self.assertIn('else if (Projectile.owner == Main.myPlayer && Projectile.ai[1] > 0) { Release(false); return; }', flake)
+        # spear put away: flakes are released (and burst), not silently killed
+        self.assertIn('player.HeldItem.type != ItemID.NorthPole) { Release(true); return; }', flake)
+        self.assertIn('flake.Release(true);', player.split('public override void PostUpdate', 1)[1].split('public override void UpdateDead', 1)[0])
+        # no diamond glow on snowflakes
+        draw = flake.split('public override bool PreDraw', 1)[1]
+        self.assertNotIn('Bloom(', draw)
+        self.assertNotIn('Ring(', draw)
+        pickup = effects.split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
+        self.assertNotIn('Bloom(', pickup)
+        # throw: lingering trail with Frostbite, stronger throw
+        self.assertIn('NorthPoleDrift.Add(Projectile.Center, Projectile.owner);', effects)
+        self.assertIn('npc.AddBuff(BuffID.Frostburn2, DebuffTicks);', fx)
+        self.assertIn('modifiers.SourceDamage *= NorthPoleBalance.ThrowPower;', player)
+        # brace icicle: no glow strokes/rings, the tip plus stays
+        spike = effects.split('public class NorthPoleBraceSpike', 1)[1].split('internal static class NorthPoleFx', 1)[0]
+        self.assertNotIn('Stroke(', spike)
+        self.assertNotIn('Ring(', spike)
+        self.assertIn('NorthPoleFx.Sparkle(tip', spike)
+        # sprites centred on their opaque area (owner's canvas can be larger)
+        self.assertIn('Rectangle src = Bounds(t);', effects)
+
+    def test_generated_sprites_follow_owner_reference(self):
+        from PIL import Image
+        folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
+        names = ['DawnFlake', 'MiniFlake'] + [f'Mote{r}' for r in range(3)] + [f'TMote{r}' for r in range(3)] \
+            + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
+        for name in names:
+            alphas = {a for *_, a in Image.open(folder / f'{name}.png').convert('RGBA').getdata()}
+            self.assertLessEqual(alphas, {0, 255}, name)   # opaque only: no shadow, no soft edges
+
     def test_pixel_sprites_are_2x2_blocks(self):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
         names = [f'SwingFlake{r}' for r in range(3, 12)] + ['ThrowFlake', 'BuffFlake', 'DawnFlake', 'MiniFlake', 'Glint',
-                 'Sparkle0', 'Sparkle1', 'Sparkle2'] + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
+                 'Sparkle0', 'Sparkle1', 'Sparkle2', 'Mote0', 'Mote1', 'Mote2', 'TMote0', 'TMote1', 'TMote2'] + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
         for name in names:
             im = Image.open(folder / f'{name}.png').convert('RGBA')
             w, h = im.size
