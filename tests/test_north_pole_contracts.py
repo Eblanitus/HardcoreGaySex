@@ -317,6 +317,9 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('NorthPoleVeil.Add(', arc)
         self.assertLess(veil.index('BlendState.AlphaBlend'), veil.index(': additive'))
         self.assertIn('public override void PostDrawTiles()', veil)
+        # smoothing (owner 02.11.2026): spline through the path, player motion spread inside the tick
+        self.assertIn('sPos[n] = CatmullRom(', veil)
+        self.assertIn('- player.velocity * (1f - f)', arc)
 
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image

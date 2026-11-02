@@ -91,7 +91,7 @@ namespace FrostMelee.Content.Projectiles
                 for (int y = 0; y < h; y++)
                 {
                     float v = (y + 0.5f) / h;
-                    float fall = MathF.Pow(1f - v, 1.4f) * MathHelper.Clamp(v / 0.06f, 0f, 1f);
+                    float fall = MathF.Pow(1f - v, 1.4f) * SmoothStep(v / 0.16f);   // soft top edge, no hard line
                     for (int x = 0; x < w; x++)
                     {
                         float u = (x + 0.5f) / w * MathHelper.TwoPi;
@@ -133,27 +133,71 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
+        // Smoothing (owner 02.11.2026: "looks a bit torn, needs smoothing"): the recorded tip path
+        // is run through a Catmull-Rom spline (Subdiv points per segment), age and length along it
+        // are interpolated, and the ends taper by distance, so there are no corners or steps.
+        public const int Subdiv = 4;
+        public const float EndTaper = 40f;          // px at each end of a run that fade out
+        private static Vector2[] sPos = new Vector2[512];
+        private static float[] sAge = new float[512], sU = new float[512];
+
+        private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+        {
+            float t2 = t * t, t3 = t2 * t;
+            return 0.5f * (2f * p1 + (p2 - p0) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (3f * p1 - p0 - 3f * p2 + p3) * t3);
+        }
+
+        private static int Smooth(int start, int count)
+        {
+            int total = (count - 1) * Subdiv + 1;
+            if (sPos.Length < total) { sPos = new Vector2[total * 2]; sAge = new float[total * 2]; sU = new float[total * 2]; }
+            int n = 0;
+            for (int k = 0; k < count - 1; k++)
+            {
+                Point a = points[start + k], b = points[start + k + 1];
+                Vector2 p0 = points[start + Math.Max(0, k - 1)].Pos, p3 = points[start + Math.Min(count - 1, k + 2)].Pos;
+                for (int j = 0; j < Subdiv; j++)
+                {
+                    float t = j / (float)Subdiv;
+                    sPos[n] = CatmullRom(p0, a.Pos, b.Pos, p3, t);
+                    sAge[n] = MathHelper.Lerp(tick - a.Born, tick - b.Born, t);
+                    sU[n] = MathHelper.Lerp(a.U, b.U, t);
+                    n++;
+                }
+            }
+            Point last = points[start + count - 1];
+            sPos[n] = last.Pos; sAge[n] = tick - last.Born; sU[n] = last.U; n++;
+            return n;
+        }
+
+        private static float SmoothStep(float x)
+        {
+            x = MathHelper.Clamp(x, 0f, 1f);
+            return x * x * (3f - 2f * x);
+        }
+
         private static void DrawRun(GraphicsDevice device, int start, int count)
         {
             if (count < 2) return;
-            if (verts.Length < count * 2) verts = new VertexPositionColorTexture[count * 2];
+            int n = Smooth(start, count);
+            if (verts.Length < n * 2) verts = new VertexPositionColorTexture[n * 4];
             float flow = tick * Flow;
+            float uMin = sU[0], uMax = sU[n - 1];
             for (int pass = 0; pass < 2; pass++)
             {
                 bool back = pass == 0;
-                for (int k = 0; k < count; k++)
+                for (int k = 0; k < n; k++)
                 {
-                    Point p = points[start + k];
-                    int age = tick - p.Born;
-                    float t = age / (float)Life;
-                    float fade = MathHelper.Clamp(age / 3f, 0f, 1f) * (1f - t * t);
-                    // the newest end (the tip) and the oldest end taper off
-                    float ends = MathHelper.Clamp(k / 3f, 0f, 1f) * MathHelper.Clamp((count - 1 - k) / 3f, 0f, 1f);
-                    float a = fade * (0.35f + 0.65f * ends);
-                    float drop = Drop * MathHelper.Clamp(age / UnfoldTicks, 0.15f, 1f) * (back ? 1.15f : 1f);
-                    float u = p.U * UScale - flow;
-                    Vector2 top = p.Pos - Main.screenPosition - (back ? new Vector2(0, 3) : Vector2.Zero);
-                    Vector2 bottom = top + new Vector2(MathF.Sin(age * 0.08f + p.U * 0.03f) * 4f, drop);
+                    float age = sAge[k];
+                    float t = MathHelper.Clamp(age / Life, 0f, 1f);
+                    float fade = SmoothStep(age / 4f) * (1f - t * t);
+                    // both ends of the run fade out smoothly by distance
+                    float ends = SmoothStep((sU[k] - uMin) / EndTaper) * SmoothStep((uMax - sU[k]) / EndTaper);
+                    float a = fade * ends;
+                    float drop = Drop * MathHelper.Lerp(0.15f, 1f, SmoothStep(age / UnfoldTicks)) * (back ? 1.15f : 1f);
+                    float u = sU[k] * UScale - flow;
+                    Vector2 top = sPos[k] - Main.screenPosition - (back ? new Vector2(0, 3) : Vector2.Zero);
+                    Vector2 bottom = top + new Vector2(MathF.Sin(age * 0.08f + sU[k] * 0.03f) * 4f, drop);
                     Color cTop, cBottom;
                     if (back)
                     {
@@ -162,7 +206,7 @@ namespace FrostMelee.Content.Projectiles
                     }
                     else
                     {
-                        float hue = 0.5f + 0.5f * MathF.Sin(p.U * 0.02f - tick * 0.05f);
+                        float hue = 0.5f + 0.5f * MathF.Sin(sU[k] * 0.02f - tick * 0.05f);
                         cTop = Color.Lerp(Mint, Color.Lerp(Mint, Color.White, 0.4f), hue * 0.5f) * (BodyAlpha * a);
                         cBottom = Color.Lerp(Teal, Violet, 0.4f + 0.6f * t) * (BodyAlpha * a);
                         cTop.A = cBottom.A = 0;
@@ -173,7 +217,7 @@ namespace FrostMelee.Content.Projectiles
                 device.BlendState = back ? BlendState.AlphaBlend : additive;
                 effect.Texture = mask;
                 effect.CurrentTechnique.Passes[0].Apply();
-                device.DrawUserPrimitives(PrimitiveType.TriangleStrip, verts, 0, count * 2 - 2);
+                device.DrawUserPrimitives(PrimitiveType.TriangleStrip, verts, 0, n * 2 - 2);
             }
         }
     }
