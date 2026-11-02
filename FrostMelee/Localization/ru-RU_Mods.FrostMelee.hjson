@@ -181,10 +181,6 @@ LassoStatus: {
 
 SnowballMass: Снежный ком: {0}%
 PrototypeArtworkNotice: Механика реализована; характеристики и графика предварительные, нужны игровые тесты
-<<<<<<< HEAD
-FlailRamp: Разгон: {0}%
-=======
-
 FlailRamp: "Разгон: {0}%"
 
 Buffs: {
@@ -212,4 +208,3 @@ Configs.NorthPoleTuning: {
 	CritDamagePercent.Label: Прибавка множителя крита (%)
 	WeakShotPercent.Label: Урон ослабленного выстрела (%)
 }
->>>>>>> 933c334f2f32bf964cc845c1e83f7a057c8a5475
