@@ -50,13 +50,15 @@ namespace FrostMelee.Content.Weapons
         public const int MiniFlakes = 5;          // the burst: small snowflakes that explode (owner 02.11.2026)
         public const float MiniFlakeDamage = 0.35f;
         public const int MiniBlastRadius = 40;
-        // Brace icicle length follows the player's speed (owner 02.11.2026): standing still gives a stub,
-        // a full sprint a long lance. Full length is reached at a normal top run speed.
-        public const int MaxSpikes = 3;           // live brace icicles per player (owner 02.11.2026)
-        public const float SpikeDamage = 0.5f;    // of the brace hit damage
-        public const float SpikeMinLength = 32f;
-        public const float SpikeMaxLength = 224f;
-        public const float SpikeFullSpeed = 9f;
+        // Brace "Пурга" (owner 02.11.2026 replaced the icicles): a snow gust from behind the braced enemy.
+        // Length and push follow the player's speed; full at a normal top run speed.
+        public const int GustCooldown = 30;       // ticks: one gust per half second per player
+        public const float GustDamage = 0.6f;     // of the brace hit damage
+        public const float GustMinLength = 64f;
+        public const float GustMaxLength = 224f;
+        public const float GustHalfAngle = 0.45f; // rad, about 26 degrees each side
+        public const float GustKnockMin = 5f, GustKnockMax = 12f;
+        public const float GustFullSpeed = 9f;
     }
 
     // This weapon follows the existing SicklePlayer owning-client damage model.
@@ -66,6 +68,7 @@ namespace FrostMelee.Content.Weapons
     {
         private int missedSwings, rainCooldown;
         private uint nextLaunch;
+        public int GustCooldown;   // brace "Пурга" (NorthPoleEffects.BraceGust)
 
         // Released flakes leave one by one, 6-24 ticks (0.1-0.4 s) apart (owner 02.11.2026)
         public int NextLaunchDelay()
@@ -96,6 +99,7 @@ namespace FrostMelee.Content.Weapons
         public override void PostUpdate()
         {
             if (rainCooldown > 0) rainCooldown--;
+            if (GustCooldown > 0) GustCooldown--;
             if (Player.whoAmI != Main.myPlayer) return;
             if (Player.dead || !Player.active) { KillChargingFlakes(); missedSwings = 0; }
             else if (Player.HeldItem.type != ItemID.NorthPole)

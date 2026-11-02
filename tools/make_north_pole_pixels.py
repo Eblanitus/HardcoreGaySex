@@ -116,29 +116,6 @@ def soft_flake(R, pal):
     return outline(cells, size, size, pal[0])
 
 
-def icicle(width, length, pal):
-    """Tapered icicle, tip at the top row, base at the bottom: straight diagonal sides,
-    violet base -> teal -> mint tip, a lit facet stripe left of the centre, dark right edge."""
-    w = width + 2
-    h = length + 2
-    cx = w / 2
-    cells = {}
-    for y in range(1, h - 1):
-        t = (y - 1) / max(1, length - 1)          # 0 tip .. 1 base
-        half = max(0.5, (width / 2) * t ** 0.85)
-        body = pal[3] if t < 0.3 else pal[2] if t < 0.65 else pal[1]
-        xs = [x for x in range(1, w - 1) if abs(x + 0.5 - cx) <= half]
-        for x in xs:
-            cells[(x, y)] = body
-        if xs:
-            cells[(xs[0], y)] = pal[4] if t < 0.45 else pal[3]          # lit edge
-            if len(xs) >= 3:
-                facet = xs[len(xs) // 2 - 1]
-                cells[(facet, y)] = pal[4] if t < 0.3 else pal[3]       # facet stripe
-                cells[(xs[-1], y)] = pal[1] if t < 0.65 else pal[0]     # shadow edge
-    return outline(cells, w, h, pal[0])
-
-
 def shard(pal):
     """Ice Queen-like frost shard pointing right: long diamond, widest near the base."""
     L, W = 12, 5
@@ -235,39 +212,6 @@ def snow_flake():
     return plain(cells, 5, 5)
 
 
-def spike_arm(width_idx, length, pal):
-    """Brace icicle redone by the owner's reference: a giant snowflake ray, tip at the top row.
-    Shaft 1 px at the tip, 3 px further down for the wider ones (light core, teal sides);
-    V-branches pointing to the tip, longer towards the base; violet only on branch tips
-    and the base. Opaque, no shadow."""
-    reach = (2, 3, 5)[width_idx]           # branch length at the base
-    w = 2 * (1 + reach) + 3
-    h = length + 1
-    cx = w // 2
-    cells = {}
-    for y in range(h):
-        t = y / max(1, h - 1)              # 0 tip .. 1 base
-        half = 1 if (width_idx >= 1 and t > (0.55 if width_idx == 1 else 0.35)) else 0
-        for dx in range(-half, half + 1):
-            cells[(cx + dx, y)] = (pal[4] if t < 0.35 else pal[3]) if dx == 0 else pal[2]
-    step = (5, 6, 7)[width_idx]
-    y = 3
-    while y < h - 2:
-        t = y / max(1, h - 1)
-        blen = max(2, round(reach * min(1.0, 0.3 + t)))
-        start = 1 if (width_idx >= 1 and t > (0.55 if width_idx == 1 else 0.35)) else 0
-        for sgn in (1, -1):
-            for k in range(1, blen + 1):
-                x, yy = cx + sgn * (start + k), y + k
-                if 0 <= x < w and yy < h:
-                    cells[(x, yy)] = pal[1] if (k == blen and blen >= 3) else pal[2]
-        y += step
-    for dx in (-1, 0, 1):                  # base: violet
-        if width_idx >= 1 or dx == 0:
-            cells[(cx + dx, h - 1)] = pal[1]
-    return plain(cells, w, h)
-
-
 def sparkle_opaque(r):
     """4-point plus for tinting: opaque white, 1-px rays, no alpha falloff (owner's reference)."""
     size = 2 * r + 1
@@ -279,8 +223,6 @@ def sparkle_opaque(r):
     return grid
 
 
-SPIKE_WIDTHS = (4, 7, 10)
-SPIKE_LENGTHS = (8, 16, 24, 36, 48, 64, 80, 96)
 
 
 EXTRA = {
@@ -291,7 +233,6 @@ EXTRA = {
     'Snow2': lambda: snow_flake(),
     **{f'Snow{r}': (lambda r=r: mote(r, SNOW)) for r in range(2)},
     **{f'Sparkle{i}': (lambda r=r: sparkle_opaque(r)) for i, r in enumerate((2, 4, 7))},
-    **{f'Spike{i}_{n}': (lambda i=i, n=n: spike_arm(i, n, SWING)) for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)},
 }
 
 
@@ -308,10 +249,6 @@ def main(only=None):
     save(snowflake(3, THROW, branches=False), 'ThrowFlake')
     save(soft_flake(5, BUFF), 'BuffFlake')
     save(shard(SWING), 'Shard')
-    # icicles: 3 widths x 7 lengths (art px); the game picks the closest and crops it while it grows
-    for i, wd in enumerate(SPIKE_WIDTHS):
-        for ln in SPIKE_LENGTHS:
-            save(icicle(wd, ln, SWING), f'Spike{i}_{ln}')
     for i, r in enumerate((2, 4, 7)):
         save(sparkle(r), f'Sparkle{i}')
     save(snowflake(2, THROW, branches=False), 'Glint')

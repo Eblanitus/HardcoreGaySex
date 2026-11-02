@@ -45,7 +45,7 @@ Projectiles: {
 	NorthPoleMiniFlake.DisplayName: Bursting Snowflake
 	NorthPolePickup.DisplayName: Blessed Snowflake
 	NorthPoleSnowCoat.DisplayName: Snow Coat
-	NorthPoleBraceSpike.DisplayName: Piercing Icicle
+	NorthPoleGust.DisplayName: Polar Gust
 	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"

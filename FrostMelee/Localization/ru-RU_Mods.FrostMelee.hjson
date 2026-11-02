@@ -45,7 +45,7 @@ Projectiles: {
 	NorthPoleMiniFlake.DisplayName: Взрывная снежинка
 	NorthPolePickup.DisplayName: Благословенная снежинка
 	NorthPoleSnowCoat.DisplayName: Снежный покров
-	NorthPoleBraceSpike.DisplayName: Пронзающая сосулька
+	NorthPoleGust.DisplayName: Пурга
 	FlinxYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.FlinxYoyo.DisplayName}"
 	YetiYoyoProjectile.DisplayName: "{$Mods.FrostMelee.Items.YetiYoyo.DisplayName}"
 	SnowballFlailProjectile.DisplayName: "{$Mods.FrostMelee.Items.SnowballFlail.DisplayName}"
