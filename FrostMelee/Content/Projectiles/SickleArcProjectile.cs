@@ -1136,7 +1136,7 @@ namespace FrostMelee.Content.Projectiles
         private const float AuroraSnowTipChance = 0.5f;   // снег с острия
         private const float AuroraDustChance = 0.15f;     // огонёк сияния в теле ленты
         private const int AuroraPeakBurst = 8;            // всплеск снега и огоньков на пике взмаха
-        private const int AuroraVeilSubsteps = 4;         // точек второго следа (завесы) за тик
+        private const int AuroraVeilSubsteps = 6;         // точек второго следа (завесы) за тик
         private const int AuroraLightPoints = 5;          // точки настоящего света, бегущего по ленте
         private const float AuroraShimmerAlpha = 0.45f;   // переливы: волны света вдоль ленты
         private const float AuroraShimmerWaves = 2.2f;    // сколько волн на ленте
@@ -1167,9 +1167,14 @@ namespace FrostMelee.Content.Projectiles
             if (env > 0.1f)
             {
                 float prev = progress - 1f / max;
+                // промежуточные точки внутри тика; сдвиг игрока за тик тоже размазываем,
+                // иначе на бегу на стыках тиков завеса шла ступеньками
                 for (int j = 1; j <= AuroraVeilSubsteps; j++)
-                    NorthPoleVeil.Add(EndPoint(player, MathHelper.Lerp(prev, progress, j / (float)AuroraVeilSubsteps), true, 0.97f),
+                {
+                    float f = j / (float)AuroraVeilSubsteps;
+                    NorthPoleVeil.Add(EndPoint(player, MathHelper.Lerp(prev, progress, f), true, 0.97f) - player.velocity * (1f - f),
                         Projectile.identity);
+                }
             }
             // свет сияния бежит по ленте и освещает сцену
             float lightTime = Projectile.localAI[0] * AuroraShimmerSpeed;
