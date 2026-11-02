@@ -153,6 +153,11 @@ namespace FrostMelee
             // Наш код ориентации не зависит: приклад/остриё меряются по пикселям (SickleSprite).
             TryOverride(ItemID.IceSickle, "FrostMelee/Items/IceSpearHeld");
 
+            // Северный полюс: в руках длинное копьё, как в ванилле (её снаряд
+            // NorthPoleWeapon, повёрнутый так же, как IceSpearHeld). Инвентарь
+            // по-прежнему рисует ванильную иконку (SickleGlobalItem.InventoryTexturePath).
+            TryOverride(ItemID.NorthPole, "FrostMelee/Items/NorthPoleHeld");
+
             // Ледяные мечи: свои спрайты в ВАНИЛЬНОЙ ориентации (рукоять внизу-слева,
             // остриё вверху-справа) — то, что ждут ваниль в руке, мерилка мечей
             // (SickleSprite.MeasureSword) и Weapon Out Lite. Один слот на всё:
