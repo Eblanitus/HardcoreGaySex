@@ -181,10 +181,6 @@ LassoStatus: {
 
 SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
-<<<<<<< HEAD
-FlailRamp: Spin power: {0}%
-=======
-
 FlailRamp: "Spin power: {0}%"
 
 Buffs: {
@@ -212,4 +208,3 @@ Configs.NorthPoleTuning: {
 	CritDamagePercent.Label: Critical multiplier bonus (%)
 	WeakShotPercent.Label: Weak shot damage (%)
 }
->>>>>>> 933c334f2f32bf964cc845c1e83f7a057c8a5475
