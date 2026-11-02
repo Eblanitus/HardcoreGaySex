@@ -103,6 +103,17 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('to.SafeNormalize(Vector2.UnitY) * speed', pickup)
         self.assertNotIn('CometTail', pickup)   # a tail made it read as an incoming attack
         self.assertIn('Warm', pickup)
+        # owner 02.11.2026: weaker pull, the player has to come close
+        rng = float(re.search(r'MagnetRange = ([\d.]+)f', pickup).group(1))
+        spd = float(re.search(r'MagnetSpeed = ([\d.]+)f', pickup).group(1))
+        self.assertLessEqual(rng, 140)
+        self.assertLessEqual(spd, 8)
+
+    def test_sky_snow_spawns_across_the_whole_screen_width(self):
+        call = self.player.split('public void CallSnow', 1)[1].split('public override', 1)[0]
+        self.assertIn('Main.screenWidth', call)
+        self.assertIn('Main.GameViewMatrix.Zoom.X', call)
+        self.assertNotIn('NextFloat(-128, 128)', call)
 
     def test_impact_burst_is_once_owner_only_not_on_cancel(self):
         snow = self.effects.split('public class NorthPoleSnowflake', 1)[1].split('public class NorthPoleShard', 1)[0]
@@ -175,6 +186,17 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('AuroraSwell(progress)', arc)
         self.assertIn('AddAuroraHit(target);', arc)
         self.assertNotIn('NorthPoleFx.Curtain(', arc)
+        # third arc: dark night underlay (normal blend) under the additive ribbon,
+        # no vanilla white line, halos or ice sparks for North Pole
+        trail = arc.split('private void DrawAuroraTrail', 1)[1].split('private void AddAuroraHit', 1)[0]
+        self.assertIn('device.BlendState = BlendState.AlphaBlend;', trail)
+        self.assertLess(trail.index('BlendState.AlphaBlend;'), trail.index('device.BlendState = trailBlend;'))
+        self.assertIn('AuroraNight * alpha', arc)
+        self.assertIn('if (ItemType != ItemID.NorthPole)\n                Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3)', arc)
+        glow = arc.split('private void DrawBladeGlow', 1)[1].split('public override bool PreDraw', 1)[0]
+        self.assertLess(glow.index('DrawAuroraTrail('), glow.index('DrawHalo('))
+        fx = arc.split('private void SwingGlowEffects', 1)[1].split('private void DrawSparkle', 1)[0] if 'private void DrawSparkle' in arc.split('private void SwingGlowEffects', 1)[1] else arc.split('private void SwingGlowEffects', 1)[1]
+        self.assertLess(fx.index('if (ItemType == ItemID.NorthPole)'), fx.index('SpawnSpark('))
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
