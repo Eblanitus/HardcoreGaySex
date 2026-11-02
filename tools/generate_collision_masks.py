@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'FrostMelee/Content/WeaponCollisionMasks.Generated.cs'
 SPRITES = (
     ('IceSickle', 'FrostMelee/Items/IceSpearHeld.png'),
-    ('NorthPole', 'ReferenceSprites/FrostMelee/North_Pole.png'),
+    ('NorthPole', 'FrostMelee/Items/NorthPoleHeld.png'),
     ('IceBlade', 'FrostMelee/Items/Ice_Blade.png'),
     ('Frostbrand', 'FrostMelee/Items/Frostbrand.png'),
     ('Frozen', 'FrostMelee/Items/IceSpearFrozen.png'),

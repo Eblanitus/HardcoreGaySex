@@ -127,7 +127,8 @@ class NorthPoleContracts(unittest.TestCase):
             self.assertIn('NorthPoleBlessing:', text)
             self.assertIn('NorthPoleMechanicsTooltip:', text)
             for key in expected:
-                self.assertIn(f'{key}.Label:', text)
+                # Плоская запись (Key.Label:) или вложенная, как её пишет tModLoader.
+                self.assertRegex(text, rf'{key}(\.Label:|: \{{\s*Label:)')
         unfinished = read('Content/Items/Prototypes/PrototypeWeapons.cs').split('public class UnfinishedVanillaReworks', 1)[1]
         self.assertNotIn('ItemID.NorthPole', unfinished)
 
