@@ -787,7 +787,7 @@ namespace FrostMelee.Content.Projectiles
     // Blizzard gust of the braced spear. ai[0]: direction; ai[1]: player speed [0..1];
     // ai[2]: the braced enemy (it already took the spear, the gust blows past it).
     // A cone of wind that reaches out over GrowTicks, hits each enemy once and pushes it along
-    // the spear. Drawn only with calm pixel snow streaming along the cone (owner's reference).
+    // the spear. Drawn only with vanilla snow dust blown along the cone (owner: no smooth stream).
     public class NorthPoleGust : ModProjectile
     {
         public const int Life = 16, GrowTicks = 8, StreamTicks = 10;
@@ -825,22 +825,24 @@ namespace FrostMelee.Content.Projectiles
                 if (age == 1)
                 {
                     SoundEngine.PlaySound(SoundID.Item28 with { Volume = 0.55f, Pitch = -0.35f }, Projectile.Center);
-                    NorthPolePixelFx.Burst(Projectile.Center, 6, 2f, NorthPolePixelFx.Snow, 36);
+                    NorthPoleEffects.SnowDust(Projectile.Center, 6, 3f);
                     if (Projectile.owner == Main.myPlayer)
                         Main.instance.CameraModifiers.Add(new Terraria.Graphics.CameraModifiers.PunchCameraModifier(
                             Projectile.Center, dir, 2f + 3f * Power, 8f, 10, 1000f, "NorthPoleGust"));
                 }
-                // snow streams out along the cone: dense white snow, a few aurora motes
-                if (age <= StreamTicks)
+                // Owner 02.11.2026: the smooth pixel stream read as "Noita". Plain vanilla snow dust
+                // instead, like the Blizzard Staff: few chunky flakes in short puffs, vanilla motion.
+                if (age <= StreamTicks && age % 2 == 1)
                 {
-                    int count = 3 + (int)(4 * Power);
+                    int count = 2 + (int)(3 * Power);
                     for (int i = 0; i < count; i++)
                     {
                         float spread = Main.rand.NextFloat(-1f, 1f) * NorthPoleBalance.GustHalfAngle;
-                        Vector2 v = dir.RotatedBy(spread) * FullLength / 15f * Main.rand.NextFloat(0.55f, 1f);
-                        Vector2 at = Projectile.Center + new Vector2(-dir.Y, dir.X) * Main.rand.NextFloat(-6f, 6f);
-                        byte set = i % 4 == 3 ? NorthPolePixelFx.Swing : NorthPolePixelFx.Snow;
-                        NorthPolePixelFx.Spawn(at, v, set, Main.rand.Next(20, 30), 0.015f, 0.94f);
+                        Vector2 v = dir.RotatedBy(spread) * FullLength / 14f * Main.rand.NextFloat(0.6f, 1f);
+                        bool heavy = i % 3 == 0;
+                        Dust d = Dust.NewDustPerfect(Projectile.Center, heavy ? DustID.Snow : DustID.SnowflakeIce, v, 0, default,
+                            Main.rand.NextFloat(1.1f, 1.5f));
+                        d.noGravity = !heavy;
                     }
                 }
             }
@@ -874,7 +876,7 @@ namespace FrostMelee.Content.Projectiles
         {
             target.AddBuff(BuffID.Frostburn2, NorthPoleBalance.FrostbiteTicks);
             if (!Main.dedServ)
-                NorthPolePixelFx.Burst(target.Center, 4, 1.6f, NorthPolePixelFx.Snow, 30);
+                NorthPoleEffects.SnowDust(target.Center, 4, 2f);
         }
         public override bool PreDraw(ref Color lightColor)
         {

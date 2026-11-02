@@ -322,7 +322,9 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         gust = effects.split('public class NorthPoleGust', 1)[1].split('internal static class NorthPoleFx', 1)[0]
         self.assertIn('NorthPoleBalance.GustHalfAngle + margin', gust)
         self.assertIn('modifiers.HitDirectionOverride', gust)
-        self.assertIn('NorthPolePixelFx.Snow', gust)
+        # vanilla snow dust, not the smooth pixel stream (owner: "Noita again")
+        self.assertIn('DustID.SnowflakeIce', gust)
+        self.assertNotIn('NorthPolePixelFx', gust)
         self.assertNotIn('Stroke(', gust)
         self.assertNotIn('Bloom(', gust)
         # the charged tip "plus" stays on the braced spear
