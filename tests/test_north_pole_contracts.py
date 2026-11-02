@@ -102,7 +102,7 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('to.Length() < MagnetRange', pickup)
         self.assertIn('to.SafeNormalize(Vector2.UnitY) * speed', pickup)
         self.assertNotIn('CometTail', pickup)   # a tail made it read as an incoming attack
-        self.assertIn('Warm', pickup)
+        self.assertIn('NorthPoleArt.StyleBuff', pickup)
         # owner 02.11.2026: weaker pull, the player has to come close
         rng = float(re.search(r'MagnetRange = ([\d.]+)f', pickup).group(1))
         spd = float(re.search(r'MagnetSpeed = ([\d.]+)f', pickup).group(1))
@@ -217,8 +217,13 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
             self.assertIn('AuroraAt(', body)
             self.assertIn('AuroraLine(', body)   # dark underlay + colour
         pickup = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPolePickup', 1)[1].split('public class NorthPoleSnowCoat', 1)[0]
-        self.assertIn('Warm', pickup)          # pickup keeps its gold halo/ring: unlike combat flakes
+        # every kind of snow has its own look (owner 02.11.2026)
+        self.assertIn('NorthPoleArt.StyleBuff', pickup)   # rose, round soft flake
+        self.assertNotIn('Ring(', pickup)                 # no gold outline
         self.assertNotIn('CometTail', pickup)
+        trail = read('Content/Projectiles/NorthPoleEffects.cs').split('public class NorthPoleTrail', 1)[1].split('public class NorthPoleSnowflake', 1)[0]
+        self.assertIn('style: NorthPoleArt.StyleThrow', trail)
+        self.assertIn('NorthPoleArt.StyleThrow);', trail)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
