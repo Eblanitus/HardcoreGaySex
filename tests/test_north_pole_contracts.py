@@ -200,6 +200,12 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('AuroraEdge', aurora)
         for word in ('Crystal', 'Needle', 'Shard', 'Rime', 'Compass', 'Star'):
             self.assertNotIn(word, aurora)
+        # snowiness on top of the aurora (owner: "не хватает доп эффектов и снежности")
+        self.assertIn('DrawAuroraGlitter(player, glow, progress, max, env);', aurora)
+        snow = arc.split('private void AuroraSnow', 1)[1].split('private void DrawAuroraGlitter', 1)[0]
+        self.assertIn('NorthPoleFx.ShakeSnow(', snow)
+        self.assertIn('NorthPoleFx.AuroraDust(', snow)
+        self.assertIn('AuroraSnow(player, progress);', arc)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
