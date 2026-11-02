@@ -9,36 +9,41 @@ using Terraria.ModLoader;
 
 namespace FrostMelee.Content.Projectiles
 {
-    // Взмах Северного полюса — «Полярный компас» (02.11.2026). Своя форма, не общая лента серпа:
-    // • Ось — тонкая яркая стрелка от игрока до острия, идёт по кругу вместе с копьём.
-    // • Меридианы — за осью через каждые 10° остаются тонкие радиальные штрихи-деления
-    //   (каждый 3-й длиннее, каждый 9-й, через 90°, — самый длинный). Гаснут по одному,
-    //   первыми — самые старые, с хвоста.
-    // • Широта — тонкая окружность по внешнему краю с засечками, только на пройденном угле.
-    // • Пик взмаха — на острие вспыхивает полярная звезда (4 длинных луча крестом),
-    //   от неё расходятся два тонких кольца.
-    // • Цвет — холодный белый и бледно-голубой; мята и фиолет сияния только на звезде и кольцах.
+    // Взмах Северного полюса — «Полярный компас» (02.11.2026, вторая редакция по скрину из игры).
+    // Своя форма, не общая лента серпа, и вся — в пределах длины копья:
+    // • Ось — тонкая яркая стрелка вдоль копья до острия, идёт по кругу вместе с ним.
+    // • Меридианы — за осью через каждые 15° остаются короткие радиальные деления разной
+    //   толщины (каждое 45° длиннее и толще, каждые 90° — самое длинное). Ведущие, у стрелки,
+    //   горят мятой сияния и уходят в фиолет, старые — холодный белый/голубой; гаснут с хвоста
+    //   за ~0.2 с, после конца взмаха всё исчезает примерно за 0.3 с.
+    // • Широта — тонкая окружность у внешнего конца делений, только на пройденном угле.
+    // • Пик взмаха — полярная звезда на острие (едет с ним): 4 сужающихся луча разной длины,
+    //   север длиннее, лучи не сходятся в центре (не перекрестие прицела); одно маленькое кольцо.
     // • Под каждым штрихом — тёмная подложка обычным смешением, чтобы читалось на снегу.
     // Рисуется после пыли (On_Main.DrawDust, как огонь Фростборна): поверх врагов и игрока.
     // Чисто визуально: на каждом клиенте свой экземпляр из того же снаряда взмаха.
     public class PolarCompassFx : ModSystem
     {
-        public const float MeridianStep = MathHelper.Pi / 18f;  // 10° между делениями
-        public const int MeridianLife = 16;                     // тиков живёт деление
-        public const float MeridianOuter = 0.97f;               // внешний конец деления, доля длины копья
-        public const float MinorInner = 0.62f;                  // внутренний конец: обычное деление
-        public const float MajorInner = 0.44f;                  // каждое 3-е (30°)
-        public const float CardinalInner = 0.2f;                // каждое 9-е (90°)
-        public const float LatitudeRadius = 1.05f;              // окружность-широта, доля длины копья
+        // Масштаб: всё внутри длины копья (на скрине из игры шкала больше копья читалась интерфейсом)
+        public const float MeridianStep = MathHelper.Pi / 12f;  // 15° между делениями (24 на круг)
+        public const int MeridianLife = 10;                     // тиков живёт деление: эффект гаснет ~0.2-0.3 с
+        public const float MeridianOuter = 0.86f;               // внешний конец деления, доля длины копья
+        public const float MinorInner = 0.74f;                  // внутренний конец: обычное деление
+        public const float MajorInner = 0.6f;                   // каждое 3-е (45°)
+        public const float CardinalInner = 0.44f;               // каждое 6-е (90°)
+        public const float LatitudeRadius = 0.9f;               // окружность-широта, доля длины копья
         public const float AxisInner = 0.1f;                    // ось начинается чуть от центра
-        public const float UnderPad = 2.5f;                     // подложка шире штриха на столько px с каждой стороны
-        public const float UnderAlpha = 0.6f;
-        public const int StarLife = 26;
-        public const float StarRay = 64f;                       // длина луча звезды, px
-        public const int RingLife = 28;
-        public const int RingDelay = 6;                         // второе кольцо позже на столько тиков
-        public const float RingMax = 74f;                       // радиус кольца в конце, px
-        public const int HitLife = 12;
+        public const float UnderPad = 2f;                       // подложка шире штриха на столько px с каждой стороны
+        public const float UnderAlpha = 0.55f;
+        public const int LeadTicks = 5;                         // столько тиков деление несёт цвет сияния
+        public const int StarLife = 18;
+        public const float StarNorth = 44f;                     // лучи звезды, px: север самый длинный,
+        public const float StarSouth = 24f;                     // юг короче,
+        public const float StarSide = 16f;                      // запад/восток короче всех
+        public const float StarGap = 3f;                        // лучи не сходятся в центре — не перекрестие
+        public const int RingLife = 12;
+        public const float RingMax = 22f;                       // радиус кольца в конце, px
+        public const int HitLife = 10;
 
         public static readonly Color Cold = new Color(236, 246, 255);
         public static readonly Color Pale = new Color(160, 205, 255);
@@ -107,7 +112,7 @@ namespace FrostMelee.Content.Projectiles
                     if (Open)
                         return false;
                     int age = Now - ClosedAt;
-                    return age > MeridianLife && (PeakTick < 0 || Now - PeakTick > Math.Max(StarLife, RingLife + RingDelay));
+                    return age > MeridianLife && (PeakTick < 0 || Now - PeakTick > Math.Max(StarLife, RingLife));
                 }
             }
         }
@@ -206,6 +211,18 @@ namespace FrostMelee.Content.Projectiles
             return k <= 0f ? 0f : (float)Math.Pow(k, 1.4f);
         }
 
+        // Цвет деления по возрасту: ведущие (свежие, у стрелки) — мята сияния, уходят в фиолет,
+        // старые — холодный белый/голубой по роду деления
+        private static Color MarkColor(int age, int kind)
+        {
+            Color rest = kind == 2 ? Cold : kind == 1 ? Color.Lerp(Pale, Cold, 0.5f) : Pale;
+            if (age <= 1)
+                return Mint;
+            if (age < LeadTicks)
+                return Color.Lerp(Mint, Violet, (age - 1) / (float)(LeadTicks - 1));
+            return Color.Lerp(Violet, rest, MathHelper.Clamp((age - LeadTicks) / 3f, 0f, 1f));
+        }
+
         private static void DrawSwing(Swing s, bool under)
         {
             Player p = Main.player[s.Owner];
@@ -214,7 +231,7 @@ namespace FrostMelee.Content.Projectiles
             if (r <= 1f)
                 return;
 
-            // меридианы-деления + засечки на широте
+            // меридианы-деления + засечки на широте; толщина по роду и тает с возрастом
             float lat = r * LatitudeRadius;
             for (int i = 0; i < s.Marks.Count; i++)
             {
@@ -222,97 +239,88 @@ namespace FrostMelee.Content.Projectiles
                 float a = MarkAlpha(m.Born);
                 if (a <= 0.02f)
                     continue;
-                bool cardinal = m.Index % 9 == 0;
-                bool major = m.Index % 3 == 0;
-                float inner = cardinal ? CardinalInner : major ? MajorInner : MinorInner;
-                float width = cardinal ? 2.2f : major ? 1.7f : 1.2f;
-                float tick = cardinal ? 10f : major ? 6f : 3f;
+                int kind = m.Index % 6 == 0 ? 2 : m.Index % 3 == 0 ? 1 : 0;
+                float inner = kind == 2 ? CardinalInner : kind == 1 ? MajorInner : MinorInner;
+                float width = (kind == 2 ? 2.4f : kind == 1 ? 1.6f : 1f) * (0.6f + 0.4f * a);
+                float tick = kind == 2 ? 6f : kind == 1 ? 4f : 2f;
+                Color col = MarkColor(Now - m.Born, kind);
                 Vector2 dir = m.Angle.ToRotationVector2();
-                // свежее деление на миг ярче — «щелчок» стрелки
-                float flash = Now - m.Born < 3 ? 1f : 0f;
-                Color col = Color.Lerp(Pale, Cold, cardinal ? 0.9f : major ? 0.6f : 0.25f + 0.6f * flash);
                 Stroke(c + dir * r * inner, c + dir * r * MeridianOuter, width, col, a, under);
                 Stroke(c + dir * lat, c + dir * (lat + tick), width, col, a, under);
             }
 
-            // широта: дуга между соседними делениями, затем от последнего до оси
+            // широта: дуга между соседними делениями, затем от последнего до оси (у стрелки — мята)
             for (int i = 1; i < s.Marks.Count; i++)
             {
                 float a = Math.Min(MarkAlpha(s.Marks[i - 1].Born), MarkAlpha(s.Marks[i].Born));
                 if (a > 0.02f)
-                    Arc(c, lat, s.Marks[i - 1].Angle, s.Marks[i].Angle, 3, 1.2f, Pale, a * 0.9f, under);
+                    Arc(c, lat, s.Marks[i - 1].Angle, s.Marks[i].Angle, 3, 1f,
+                        MarkColor(Now - s.Marks[i].Born, 0), a * 0.85f, under);
             }
             if (s.Open && s.Marks.Count > 0)
-                Arc(c, lat, s.Marks[s.Marks.Count - 1].Angle, s.Axis, 3, 1.2f, Pale, 0.9f, under);
+                Arc(c, lat, s.Marks[s.Marks.Count - 1].Angle, s.Axis, 3, 1f, Mint, 0.9f, under);
 
-            // ось-стрелка
+            Vector2 axisDir = s.Axis.ToRotationVector2();
+            Vector2 tip = c + axisDir * r;
+            // ось-стрелка — вдоль самого копья, до его острия
             if (s.Open)
             {
-                Vector2 dir = s.Axis.ToRotationVector2();
-                Vector2 tip = c + dir * r;
-                Stroke(c + dir * r * AxisInner, tip, 2.4f, Cold, 1f, under);
-                if (!under)
+                Stroke(c + axisDir * r * AxisInner, tip, 2f, Cold, 0.9f, under);
+                if (!under && NorthPoleFx.Glow is Texture2D glow)
                 {
-                    Texture2D glow = NorthPoleFx.Glow;
-                    if (glow != null)
-                    {
-                        // мягкий холодный ореол вдоль стрелки и точка на острие
-                        Vector2 mid = c + dir * r * 0.55f;
-                        Main.spriteBatch.Draw(glow, mid - Main.screenPosition, null, Add(Pale, 0.35f), s.Axis,
-                            glow.Size() / 2f, new Vector2(r * 0.95f / glow.Width, 10f / glow.Height), SpriteEffects.None, 0f);
-                        Main.spriteBatch.Draw(glow, tip - Main.screenPosition, null, Add(Cold, 0.9f), 0f,
-                            glow.Size() / 2f, 12f / glow.Width, SpriteEffects.None, 0f);
-                    }
+                    Vector2 mid = c + axisDir * r * 0.55f;
+                    Main.spriteBatch.Draw(glow, mid - Main.screenPosition, null, Add(Mint, 0.3f), s.Axis,
+                        glow.Size() / 2f, new Vector2(r * 0.95f / glow.Width, 8f / glow.Height), SpriteEffects.None, 0f);
+                    Main.spriteBatch.Draw(glow, tip - Main.screenPosition, null, Add(Cold, 0.8f), 0f,
+                        glow.Size() / 2f, 10f / glow.Width, SpriteEffects.None, 0f);
                 }
             }
 
+            // звезда — на острие: пока взмах идёт, едет вместе с ним, потом гаснет на месте
             if (s.PeakTick >= 0)
-                DrawStar(c + s.PeakAngle.ToRotationVector2() * s.PeakRadius, Now - s.PeakTick, under);
+                DrawStar(tip, Now - s.PeakTick, under);
         }
 
-        // Полярная звезда: 4 длинных луча крестом + два расходящихся кольца
+        // Полярная звезда: 4 сужающихся луча разной длины (север длиннее), в центре
+        // не сходятся — не перекрестие прицела; одно небольшое кольцо
         private static void DrawStar(Vector2 pos, int age, bool under)
         {
             if (age < StarLife)
             {
-                float env = age < 3 ? (age + 1) / 4f : 1f - (age - 3) / (float)(StarLife - 3);
+                float env = age < 2 ? (age + 1) / 3f : 1f - (age - 2) / (float)(StarLife - 2);
                 env = MathHelper.Clamp(env, 0f, 1f);
-                float len = StarRay * (0.75f + 0.25f * env);
-                for (int k = 0; k < 4; k++)
+                float grow = 0.7f + 0.3f * env;
+                Ray(pos, -MathHelper.PiOver2, StarNorth * grow, Mint, env, under);  // север
+                Ray(pos, MathHelper.PiOver2, StarSouth * grow, Violet, env, under); // юг
+                Ray(pos, 0f, StarSide * grow, Violet, env * 0.85f, under);          // восток
+                Ray(pos, MathHelper.Pi, StarSide * grow, Violet, env * 0.85f, under); // запад
+                if (!under && NorthPoleFx.Glow is Texture2D glow)
                 {
-                    Vector2 d = (k * MathHelper.PiOver2 - MathHelper.PiOver2).ToRotationVector2();
-                    float l = k % 2 == 0 ? len : len * 0.72f;        // вертикальная ось длиннее — как на картах
-                    Stroke(pos, pos + d * l, 1.6f, Cold, env, under);
-                }
-                if (!under)
-                {
-                    Texture2D glow = NorthPoleFx.Glow;
-                    if (glow != null)
-                    {
-                        Vector2 o = glow.Size() / 2f;
-                        Vector2 at = pos - Main.screenPosition;
-                        // цветная «аура» лучей: мята по вертикали, фиолет по горизонтали
-                        Main.spriteBatch.Draw(glow, at, null, Add(Mint, 0.8f * env), MathHelper.PiOver2, o,
-                            new Vector2(len * 2f / glow.Width, 9f / glow.Height), SpriteEffects.None, 0f);
-                        Main.spriteBatch.Draw(glow, at, null, Add(Violet, 0.8f * env), 0f, o,
-                            new Vector2(len * 1.44f / glow.Width, 9f / glow.Height), SpriteEffects.None, 0f);
-                        Main.spriteBatch.Draw(glow, at, null, Add(Violet, 0.45f * env), 0f, o,
-                            30f * env / glow.Width, SpriteEffects.None, 0f);
-                        Main.spriteBatch.Draw(glow, at, null, Add(Color.White, env), 0f, o,
-                            13f / glow.Width, SpriteEffects.None, 0f);
-                    }
+                    Vector2 o = glow.Size() / 2f;
+                    Vector2 at = pos - Main.screenPosition;
+                    Main.spriteBatch.Draw(glow, at, null, Add(Violet, 0.4f * env), 0f, o, 22f / glow.Width, SpriteEffects.None, 0f);
+                    Main.spriteBatch.Draw(glow, at, null, Add(Color.White, env), 0f, o, 9f / glow.Width, SpriteEffects.None, 0f);
                 }
             }
-            for (int ring = 0; ring < 2; ring++)
+            if (age < RingLife)
             {
-                int ra = age - ring * RingDelay;
-                if (ra < 0 || ra >= RingLife)
-                    continue;
-                float t = ra / (float)RingLife;
-                float radius = 10f + RingMax * (1f - (1f - t) * (1f - t)) * (ring == 0 ? 1f : 0.7f);
-                float a = (1f - t) * (ring == 0 ? 1f : 0.8f);
-                Color col = Color.Lerp(Mint, Violet, ring == 0 ? t : 0.4f + 0.6f * t);
-                Arc(pos, radius, 0f, MathHelper.TwoPi, 36, 1.5f, col, a, under);
+                float t = age / (float)RingLife;
+                float radius = 8f + RingMax * (1f - (1f - t) * (1f - t));
+                Arc(pos, radius, 0f, MathHelper.TwoPi, 28, 1.2f, Color.Lerp(Mint, Violet, t), 0.7f * (1f - t), under);
+            }
+        }
+
+        // Луч: от StarGap наружу, тремя отрезками — толще и ярче у центра, тоньше к концу
+        private static void Ray(Vector2 pos, float angle, float length, Color tint, float alpha, bool under)
+        {
+            Vector2 d = angle.ToRotationVector2();
+            float span = length - StarGap;
+            for (int k = 0; k < 3; k++)
+            {
+                float t0 = k / 3f, t1 = (k + 1) / 3f;
+                Color col = Color.Lerp(Cold, tint, t1);
+                Stroke(pos + d * (StarGap + span * t0), pos + d * (StarGap + span * t1), 2.2f - 0.7f * k, col,
+                    alpha * (1f - 0.3f * k), under);
             }
         }
 
@@ -322,7 +330,7 @@ namespace FrostMelee.Content.Projectiles
             float a = 1f - age / (float)HitLife;
             if (a <= 0f)
                 return;
-            float len = 20f * (0.7f + 0.3f * a);
+            float len = 14f * (0.7f + 0.3f * a);
             for (int k = 0; k < 4; k++)
             {
                 Vector2 d = (k * MathHelper.PiOver2 + MathHelper.PiOver4).ToRotationVector2();
