@@ -179,11 +179,11 @@ namespace FrostMelee.Content.Items.Prototypes
     public class UnfinishedVanillaReworks : GlobalItem
     {
         public override bool AppliesToEntity(Item item, bool lateInstantiation) =>
-            item.type == ItemID.NorthPole || item.type == ItemID.ChristmasTreeSword;
+            item.type == ItemID.ChristmasTreeSword;
 
         public override void ModifyTooltips(Item item, List<TooltipLine> tooltips)
         {
-            string key = item.type == ItemID.NorthPole ? "NorthPolePrototypeNotice" : "TreeSwordPrototypeNotice";
+            string key = "TreeSwordPrototypeNotice";
             tooltips.Add(new TooltipLine(Mod, "Prototype", Language.GetTextValue("Mods.FrostMelee." + key)));
         }
     }

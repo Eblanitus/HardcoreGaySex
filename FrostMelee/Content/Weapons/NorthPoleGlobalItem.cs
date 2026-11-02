@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Terraria;
+using Terraria.Localization;
 using Terraria.ID;
 using Terraria.ModLoader;
 
@@ -11,6 +13,13 @@ namespace FrostMelee.Content.Weapons
     {
         public override bool AppliesToEntity(Item entity, bool lateInstantiation) =>
             entity.type == ItemID.NorthPole;
+
+        public override void ModifyTooltips(Item item, List<TooltipLine> tooltips)
+        {
+            if (FrostMeleeConfigDefaults.ShowControlTooltips)
+                tooltips.Add(new TooltipLine(Mod, "NorthPoleMechanics",
+                    Language.GetTextValue("Mods.FrostMelee.NorthPoleMechanicsTooltip")));
+        }
 
         public override void SetDefaults(Item item)
         {
