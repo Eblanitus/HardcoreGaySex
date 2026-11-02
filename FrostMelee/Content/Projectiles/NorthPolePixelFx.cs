@@ -14,13 +14,14 @@ namespace FrostMelee.Content.Projectiles
     // Visual only, local to every client.
     public class NorthPolePixelFx : ModSystem
     {
-        public const byte Swing = 0, Throw = 1, Flake = 2, Spark = 3;
+        public const byte Swing = 0, Throw = 1, Flake = 2, Spark = 3, Snow = 4;
         private static readonly string[][] Stages =
         {
             new[] { "Mote2", "Mote1", "Mote0" },
             new[] { "TMote2", "TMote1", "TMote0" },
             new[] { "SwingFlake4", "SwingFlake3", "Mote2", "Mote1", "Mote0" },
             new[] { "Sparkle1", "Sparkle0", "Mote1", "Mote0" },
+            new[] { "Snow2", "Snow1", "Snow0" },   // calm white snow: the default for North Pole bursts
         };
 
         private struct Particle

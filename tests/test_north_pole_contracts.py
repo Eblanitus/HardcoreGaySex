@@ -51,7 +51,7 @@ class NorthPoleContracts(unittest.TestCase):
     def test_growth_is_not_a_frost_resource_or_recursive_proc(self):
         self.assertNotIn('AddFrost(', self.player + self.effects)
         self.assertNotIn('SwingHit(', self.effects)
-        self.assertIn('CanDamage() => Charging ? false : null', self.effects)
+        self.assertIn('CanDamage() => Charging || launchDelay > 0 ? false : null', self.effects)
         self.assertIn('storedDamage = Math.Max(1, damage)', self.effects)
         self.assertIn('Projectile.ai[0] = 1;', self.effects)
 
@@ -281,10 +281,31 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         # sprites centred on their opaque area (owner's canvas can be larger)
         self.assertIn('Rectangle src = Bounds(t);', effects)
 
+    def test_owner_feedback_round_02_11_b(self):
+        effects = read('Content/Projectiles/NorthPoleEffects.cs')
+        player = read('Content/Weapons/NorthPolePlayer.cs')
+        arc = read('Content/Projectiles/SickleArcProjectile.cs')
+        throw = read('Content/Projectiles/SickleThrowProjectile.cs')
+        # plain icicle in brace mode: one Icicle call, no side spikes
+        spike = effects.split('public class NorthPoleBraceSpike', 1)[1].split('internal static class NorthPoleFx', 1)[0]
+        self.assertEqual(spike.count('NorthPoleArt.Icicle('), 1)
+        # arc: no pixel confetti, flowing shimmer + light, calm snow only
+        self.assertNotIn('NorthPolePixelFx.Flake', arc)
+        self.assertNotIn('NorthPolePixelFx.Swing', arc)
+        self.assertNotIn('"Sparkle1"', arc)
+        self.assertIn('NorthPolePixelFx.Snow', arc)
+        self.assertIn('AuroraShimmerWaves', arc)
+        # released flakes leave one by one, 0.1-0.4 s apart
+        self.assertIn('public const int LaunchGapMin = 6, LaunchGapMax = 24;', player)
+        self.assertIn('GetModPlayer<NorthPolePlayer>().NextLaunchDelay()', effects)
+        # thrown spear: javelin physics and weighty impact
+        self.assertIn('Projectile.velocity *= NorthPoleLaunchBoost;', throw)
+        self.assertEqual(throw.count('NorthPoleEffects.ThrowImpact('), 2)
+
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'
-        names = ['DawnFlake', 'MiniFlake'] + [f'Mote{r}' for r in range(3)] + [f'TMote{r}' for r in range(3)] \
+        names = ['DawnFlake', 'MiniFlake', 'Snow0', 'Snow1', 'Snow2'] + [f'Mote{r}' for r in range(3)] + [f'TMote{r}' for r in range(3)] \
             + [f'Spike{i}_{n}' for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)]
         for name in names:
             alphas = {a for *_, a in Image.open(folder / f'{name}.png').convert('RGBA').getdata()}
