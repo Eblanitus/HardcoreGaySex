@@ -42,7 +42,8 @@ namespace FrostMelee.Content.Weapons
         public const float TrailDamage = 0.7f;
         public static float AttackSpeed => Math.Clamp(Tuning.AttackSpeedPercent, 0, 50) / 100f;
         public static int DawnRegen => Math.Clamp(Tuning.DawnRegenPerSecond, 0, 10) * 2;
-        public const int MaxFlakes = 5;      // owner 02.11.2026: up to five flakes grow at once, one per enemy
+        public const int MaxFlakes = 5;
+        public const float ThrowPower = 1.4f;  // the thrown spear hits 40% harder (owner 02.11.2026)      // owner 02.11.2026: up to five flakes grow at once, one per enemy
         public static float WeakShot => Math.Clamp(Tuning.WeakShotPercent, 10, 100) / 100f;
         public const float ShotSpeed = 14f;
         public const int MiniFlakes = 5;          // the burst: small snowflakes that explode (owner 02.11.2026)
@@ -83,9 +84,12 @@ namespace FrostMelee.Content.Weapons
         {
             if (rainCooldown > 0) rainCooldown--;
             if (Player.whoAmI != Main.myPlayer) return;
-            if (Player.dead || !Player.active || Player.HeldItem.type != ItemID.NorthPole)
+            if (Player.dead || !Player.active) { KillChargingFlakes(); missedSwings = 0; }
+            else if (Player.HeldItem.type != ItemID.NorthPole)
             {
-                KillChargingFlakes();
+                // spear put away: growing flakes fly off weakened and burst, they are not lost (owner 02.11.2026)
+                foreach (NorthPoleSnowflake flake in ChargingFlakes(Player.whoAmI).ToList())
+                    flake.Release(true);
                 missedSwings = 0;
             }
         }
@@ -183,6 +187,12 @@ namespace FrostMelee.Content.Weapons
         }
         public override void ModifyHitNPCWithProj(Projectile proj, NPC target, ref NPC.HitModifiers modifiers)
         {
+            // stronger throw (owner 02.11.2026)
+            if (proj.ModProjectile is SickleThrowProjectile && (int)proj.ai[2] == ItemID.NorthPole)
+            {
+                modifiers.SourceDamage *= NorthPoleBalance.ThrowPower;
+                modifiers.Knockback *= 1.25f;
+            }
             if (Player.HasBuff(ModContent.BuffType<NorthPoleBlessing>())) modifiers.CritDamage += NorthPoleBalance.CritDamage;
         }
     }

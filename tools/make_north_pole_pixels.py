@@ -170,28 +170,101 @@ def sparkle(r):
     return grid
 
 
-def dawn_flake(R, pal):
-    """Polar Dawn snow: amber 8-arm flake with knobbed tips and a small red heart in the middle."""
+def plain(cells, w, h):
+    """Owner's reference (02.11.2026, commit bdc84db): opaque pixels only, no shadow, no outline."""
+    grid = [[None] * w for _ in range(h)]
+    for (x, y), c in cells.items():
+        if 0 <= x < w and 0 <= y < h:
+            grid[y][x] = c
+    return grid
+
+
+def star(R, pal, diag_ratio=0.7, tip=None, heart=None):
+    """Airy 8-ray star like the owner's BuffFlake: 1-px rays, lighter tips, bright heart."""
     size = 2 * R + 3
     c = R + 1
     cells = {}
-    for a in range(8):
-        dx, dy = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)][a]
-        arm = R - 1 if a % 2 == 0 else max(2, round(R * 0.62))
-        for k in range(2, arm + 1):
-            cells[(c + dx * k, c + dy * k)] = pal[2] if k < arm else pal[3]
-        if a % 2 == 0:  # knob at the straight tips
-            tx, ty = c + dx * arm, c + dy * arm
-            for ox, oy in ((-dy, dx), (dy, -dx)):
-                cells[(tx + ox, ty + oy)] = pal[1]
-    # heart 5x4 centred
-    heart = ['.#.#.', '#####', '.###.', '..#..']
-    for y, row in enumerate(heart):
-        for x, ch in enumerate(row):
-            if ch == '#':
-                hx, hy = c - 2 + x, c - 2 + y
-                cells[(hx, hy)] = HEART[2] if (x, y) in ((1, 0), (1, 1)) else HEART[1] if y < 3 else HEART[0]
-    return outline(cells, size, size, pal[0])
+    for a, (dx, dy) in enumerate([(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]):
+        arm = R if a % 2 == 0 else max(1, round(R * diag_ratio))
+        for k in range(1, arm + 1):
+            cells[(c + dx * k, c + dy * k)] = pal[2]
+        cells[(c + dx * arm, c + dy * arm)] = tip or pal[3]
+    cells[(c, c)] = pal[4]
+    if heart:
+        for (dx, dy), col in heart.items():
+            cells[(c + dx, c + dy)] = col
+    return plain(cells, size, size)
+
+
+def dawn_flake(R, pal):
+    """Polar Dawn snow: amber airy 8-ray star, pale tips, small red heart in the middle."""
+    heart = {(0, 0): HEART[2], (-1, -1): HEART[1], (1, -1): HEART[1], (-1, 0): HEART[1], (1, 0): HEART[1], (0, 1): HEART[0]}
+    return star(R, pal, 0.7, tip=pal[4], heart=heart)
+
+
+def mini_flake(pal):
+    """Small bursting flake: plus with a diagonal X, 1-px rays (as the owner's SwingFlake3)."""
+    return star(3, pal, 0.67, tip=pal[1])
+
+
+def mote(r, pal):
+    """Pixel snow mote for particles: r=0 one pixel, 1 plus, 2 small star."""
+    size = 2 * r + 1
+    c = r
+    cells = {(c, c): pal[4]}
+    if r >= 1:
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            cells[(c + dx, c + dy)] = pal[3]
+    if r >= 2:
+        for dx, dy in ((2, 0), (-2, 0), (0, 2), (0, -2)):
+            cells[(c + dx, c + dy)] = pal[2]
+        for dx, dy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+            cells[(c + dx, c + dy)] = pal[1]
+    return plain(cells, size, size)
+
+
+def spike_arm(width_idx, length, pal):
+    """Brace icicle redone by the owner's reference: a giant snowflake ray, tip at the top row.
+    Shaft 1 px at the tip, 3 px further down for the wider ones (light core, teal sides);
+    V-branches pointing to the tip, longer towards the base; violet only on branch tips
+    and the base. Opaque, no shadow."""
+    reach = (2, 3, 5)[width_idx]           # branch length at the base
+    w = 2 * (1 + reach) + 3
+    h = length + 1
+    cx = w // 2
+    cells = {}
+    for y in range(h):
+        t = y / max(1, h - 1)              # 0 tip .. 1 base
+        half = 1 if (width_idx >= 1 and t > (0.55 if width_idx == 1 else 0.35)) else 0
+        for dx in range(-half, half + 1):
+            cells[(cx + dx, y)] = (pal[4] if t < 0.35 else pal[3]) if dx == 0 else pal[2]
+    step = (5, 6, 7)[width_idx]
+    y = 3
+    while y < h - 2:
+        t = y / max(1, h - 1)
+        blen = max(2, round(reach * min(1.0, 0.3 + t)))
+        start = 1 if (width_idx >= 1 and t > (0.55 if width_idx == 1 else 0.35)) else 0
+        for sgn in (1, -1):
+            for k in range(1, blen + 1):
+                x, yy = cx + sgn * (start + k), y + k
+                if 0 <= x < w and yy < h:
+                    cells[(x, yy)] = pal[1] if (k == blen and blen >= 3) else pal[2]
+        y += step
+    for dx in (-1, 0, 1):                  # base: violet
+        if width_idx >= 1 or dx == 0:
+            cells[(cx + dx, h - 1)] = pal[1]
+    return plain(cells, w, h)
+
+
+def sparkle_opaque(r):
+    """4-point plus for tinting: opaque white, 1-px rays, no alpha falloff (owner's reference)."""
+    size = 2 * r + 1
+    grid = [[None] * size for _ in range(size)]
+    for k in range(r + 1):
+        col = (255, 255, 255, 255) if k < r else (200, 200, 200, 255)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            grid[r + dy * k][r + dx * k] = col
+    return grid
 
 
 SPIKE_WIDTHS = (4, 7, 10)
@@ -199,8 +272,12 @@ SPIKE_LENGTHS = (8, 16, 24, 36, 48, 64, 80, 96)
 
 
 EXTRA = {
-    'DawnFlake': lambda: dawn_flake(6, DAWN),
-    'MiniFlake': lambda: snowflake(3, SWING),
+    'DawnFlake': lambda: dawn_flake(5, DAWN),
+    'MiniFlake': lambda: mini_flake(SWING),
+    **{f'Mote{r}': (lambda r=r: mote(r, SWING)) for r in range(3)},
+    **{f'TMote{r}': (lambda r=r: mote(r, THROW)) for r in range(3)},
+    **{f'Sparkle{i}': (lambda r=r: sparkle_opaque(r)) for i, r in enumerate((2, 4, 7))},
+    **{f'Spike{i}_{n}': (lambda i=i, n=n: spike_arm(i, n, SWING)) for i in range(3) for n in (8, 16, 24, 36, 48, 64, 80, 96)},
 }
 
 
