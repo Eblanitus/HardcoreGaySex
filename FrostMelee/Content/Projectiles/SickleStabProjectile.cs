@@ -566,8 +566,15 @@ namespace FrostMelee.Content.Projectiles
             // Frostbite с попадания тычка убран: он остался только от сильного инея взмаха (FrostTrailSystem)
         }
 
+        private bool northPoleDawnCalled;
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
+            // North Pole: a thrust that hits also calls Polar Dawn snow, once per thrust (owner 02.11.2026)
+            if ((int)Projectile.ai[2] == ItemID.NorthPole && !northPoleDawnCalled && Projectile.owner == Main.myPlayer)
+            {
+                northPoleDawnCalled = true;
+                Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().CallSnow(Projectile, Weapons.NorthPolePlayer.KindDawn, false);
+            }
             TryApplyFrostbite((type, time) => target.AddBuff(type, time));
             SpawnHitEffect(target.Center);
         }
