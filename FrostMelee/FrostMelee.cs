@@ -155,7 +155,8 @@ namespace FrostMelee
 
             // Северный полюс: в руках длинное копьё, как в ванилле (её снаряд
             // NorthPoleWeapon, повёрнутый так же, как IceSpearHeld). Инвентарь
-            // по-прежнему рисует ванильную иконку (SickleGlobalItem.InventoryTexturePath).
+            // рисует свою иконку Items/NorthPole.png (SickleGlobalItem.InventoryTexturePath);
+            // оба спрайта перекрашены в палитру северного сияния (tools/recolor_north_pole_aurora.py).
             TryOverride(ItemID.NorthPole, "FrostMelee/Items/NorthPoleHeld");
 
             // Ледяные мечи: свои спрайты в ВАНИЛЬНОЙ ориентации (рукоять внизу-слева,
