@@ -214,7 +214,7 @@ LassoStatus: {
 
 SnowballMass: Snowball: {0}%
 PrototypeArtworkNotice: Mechanics implemented; temporary stats and artwork, playtesting needed
-FlailRamp: "Spin power: {0}%"
+FlailRamp: Spin power: {0}%
 
 Buffs: {
 	NorthPoleBlessing: {
