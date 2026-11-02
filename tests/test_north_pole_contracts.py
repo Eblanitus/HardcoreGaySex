@@ -40,10 +40,12 @@ class NorthPoleContracts(unittest.TestCase):
         self.assertIn('if (slot >= NorthPoleBalance.MaxFlakes) return;', self.player)
         self.assertIn('++missedSwings >= NorthPoleBalance.MissesToRelease', self.player)
         self.assertIn('foreach (NorthPoleSnowflake flake in flakes) flake.Release(true);', self.player)
-        # every swing shakes down buff snow; a hit adds Polar Dawn snow
+        # buffs only from thrusts, the arc only grows flakes (owner 02.11.2026)
         finish = self.player.split('public void FinishSwing', 1)[1].split('private int PickupsOfKind', 1)[0]
-        self.assertLess(finish.index('CallSnow(arc, KindBlessing, false);'), finish.index('if (hit)'))
-        self.assertIn('if (hit) { missedSwings = 0; CallSnow(arc, KindDawn, false); return; }', finish)
+        self.assertNotIn('CallSnow(', finish)
+        self.assertNotIn('CallSnow(', self.arc)
+        self.assertIn('if (hit) { missedSwings = 0; return; }', finish)
+        self.assertIn('.CallSnow(Projectile, Weapons.NorthPolePlayer.KindDawn, false);', self.stab)
         self.assertIn('if (Projectile.ai[1] >= NorthPoleBalance.FullCharge) Release(false)', self.effects)
 
     def test_growth_is_not_a_frost_resource_or_recursive_proc(self):

@@ -125,13 +125,11 @@ namespace FrostMelee.Content.Weapons
         }
 
         // Called once on a naturally completed arc, never once per animation tick.
-        // Every swing shakes buff snow from the sky, hit or miss; a swing that hit
-        // also brings the second buff, Polar Dawn (owner 02.11.2026).
+        // The arc only grows snowflakes; buff snow comes from thrusts only (owner 02.11.2026).
         public void FinishSwing(Projectile arc, bool hit)
         {
             if (Player.whoAmI != Main.myPlayer || Player.dead) return;
-            CallSnow(arc, KindBlessing, false);
-            if (hit) { missedSwings = 0; CallSnow(arc, KindDawn, false); return; }
+            if (hit) { missedSwings = 0; return; }
             List<NorthPoleSnowflake> flakes = ChargingFlakes(Player.whoAmI).ToList();
             if (flakes.Count == 0) { missedSwings = 0; return; }
             if (++missedSwings >= NorthPoleBalance.MissesToRelease)
@@ -200,8 +198,8 @@ namespace FrostMelee.Content.Weapons
         }
     }
 
-    // Second buff from the arc (owner 02.11.2026): a swing that hit shakes down
-    // amber "Polar Dawn" snow that speeds up attacks and restores health.
+    // Second buff (owner 02.11.2026): a thrust that hits also calls amber
+    // "Polar Dawn" snow that speeds up attacks and restores health.
     public class NorthPoleDawn : ModBuff
     {
         public override string Texture => "Terraria/Images/Buff_" + BuffID.Regeneration;
