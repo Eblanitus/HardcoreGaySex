@@ -389,19 +389,8 @@ namespace FrostMelee.Content.Projectiles
         }
 
         private bool northPoleHit;
-        private PolarCompassFx.Swing compass;   // взмах Северного полюса: свой «компас» на этом клиенте
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            if (ItemType == ItemID.NorthPole && !Main.dedServ)
-            {
-                // засечка компаса в точке удара + горстка снега
-                Player owner = Main.player[Projectile.owner];
-                Vector2 tipPos = EndPoint(owner, SwingProgress(owner), true);
-                Vector2 point = Vector2.Clamp(tipPos, target.Hitbox.TopLeft(), target.Hitbox.BottomRight());
-                PolarCompassFx.AddHit(point);
-                for (int i = 0; i < 4; i++)
-                    NorthPoleFx.ShakeSnow(point, 1f, 10f);
-            }
             // One growth step per successful swing, not per target in a crowd.
             if (ItemType == ItemID.NorthPole && !northPoleHit && Projectile.owner == Main.myPlayer)
             {
@@ -415,8 +404,6 @@ namespace FrostMelee.Content.Projectiles
             if (ItemType == ItemID.NorthPole && Projectile.owner == Main.myPlayer
                 && Projectile.localAI[0] >= Math.Max(1f, Projectile.ai[1]))
                 Main.player[Projectile.owner].GetModPlayer<Weapons.NorthPolePlayer>().FinishSwing(northPoleHit);
-            compass?.Close();
-            compass = null;
             frostTrail?.Close();
             frostTrail = null;
         }
@@ -579,14 +566,10 @@ namespace FrostMelee.Content.Projectiles
             if (!SwingGlow || Main.dedServ)
                 return;
             float progress = SwingProgress(player);
-            // Северный полюс: общей дуги и её частиц нет — взмах рисует «Полярный компас»
-            // (PolarCompassFx): стрелка, деления-меридианы, широта, звезда на пике.
-            // Ведём его весь взмах, без огибающей свечения: стрелка видна с первого тика
+            // Северный полюс: только свет у острия, без искр и пара — дугу-сияние рисует DrawAuroraArc
             if (ItemType == ItemID.NorthPole)
             {
-                compass ??= PolarCompassFx.Begin(Projectile.owner, BladeAngleAt(0f), SwingFace);
-                compass?.Track(BladeAngleAt(progress), TipRadius(), progress >= PeakAt);
-                Lighting.AddLight(EndPoint(player, progress, true), 0.35f, 0.5f, 0.7f);
+                Lighting.AddLight(EndPoint(player, progress, true), 0.25f, 0.7f, 0.6f);
                 return;
             }
             float env = GlowEnvelope(player, progress);
@@ -728,7 +711,8 @@ namespace FrostMelee.Content.Projectiles
         {
             if (Main.dedServ)
                 return;
-            Texture2D a = trailMask, b = streakMask;
+            Texture2D a = trailMask, b = streakMask, m1 = auroraBodyMask, m2 = auroraBackMask, m3 = auroraCurtainMask;
+            auroraBodyMask = auroraBackMask = auroraCurtainMask = null;
             BasicEffect e = trailEffect;
             trailMask = null;
             streakMask = null;
@@ -740,6 +724,9 @@ namespace FrostMelee.Content.Projectiles
             {
                 a?.Dispose();
                 b?.Dispose();
+                m1?.Dispose();
+                m2?.Dispose();
+                m3?.Dispose();
                 e?.Dispose();
             });
         }
@@ -953,6 +940,173 @@ namespace FrostMelee.Content.Projectiles
                 Additive(headCore, env), 0f, glow.Size() / 2f, TrailHeadDot * 1.6f / glow.Width, SpriteEffects.None, 0f);
         }
 
+        // === Северный полюс: дуга-сияние (02.11.2026, по брифу владельца) ===
+        // Обычная лента по следу острия, которая читается как северное сияние:
+        // • тёмная подложка шире ленты (обычное смешение) — дуга видна на снегу;
+        // • поперёк ширины градиент мята → бирюза → фиолет, по ВСЕЙ длине ленты;
+        // • внутри — мягкие вертикальные «занавесы»-полосы поперёк ленты: текут вдоль дуги
+        //   и покачиваются (внутренний конец полосы гуляет вбок);
+        // • яркая передняя кромка по следу острия и мягкая капля на острие.
+        private const float AuroraWidth = 0.55f;        // ширина ленты, доля длины копья
+        private const float AuroraBackWiden = 1.45f;    // подложка шире ленты внутрь
+        private const float AuroraBackPad = 6f;         // и выступает наружу, px
+        private const float AuroraBackAlpha = 0.7f;     // плотность подложки
+        private const float AuroraBodyAlpha = 0.75f;
+        private const float AuroraCurtainAlpha = 0.7f;
+        private const float AuroraCurtainRepeat = 2f;   // сколько раз рисунок занавесов укладывается вдоль ленты
+        private const float AuroraCurtainFlow = 0.02f;  // течение вдоль дуги, циклов за тик
+        private const float AuroraCurtainSway = 0.06f;  // покачивание: сдвиг внутреннего конца полос
+        private const int AuroraCurtainCount = 7;
+        private const float AuroraEdgeWidth = 4f;       // передняя кромка, px
+
+        private static readonly Color AuroraNight = new Color(4, 8, 30);
+        private static readonly Color AuroraMint = new Color(60, 255, 140);
+        private static readonly Color AuroraTeal = new Color(20, 200, 220);
+        private static readonly Color AuroraViolet = new Color(185, 90, 255);
+        private static readonly Color AuroraEdge = new Color(200, 255, 230);
+
+        private static Texture2D auroraBodyMask, auroraBackMask, auroraCurtainMask;
+
+        // u — вдоль ленты (0 остриё, 1 хвост), v — поперёк (0 внешний край у острия, 1 внутренний)
+        private static float AuroraAlong(float u) =>
+            Smooth01(u / 0.04f) * (float)Math.Pow(1f - u, 1.1f);
+
+        private static Texture2D MakeAuroraCurtainMask()
+        {
+            Random rng = new Random(23);
+            float[] pos = new float[AuroraCurtainCount], width = new float[AuroraCurtainCount],
+                gain = new float[AuroraCurtainCount], reach = new float[AuroraCurtainCount];
+            for (int i = 0; i < AuroraCurtainCount; i++)
+            {
+                pos[i] = (i + 0.5f + 0.5f * ((float)rng.NextDouble() - 0.5f)) / AuroraCurtainCount;
+                width[i] = 0.03f + 0.04f * (float)rng.NextDouble();   // мягкие, не нитки
+                gain[i] = 0.5f + 0.5f * (float)rng.NextDouble();
+                reach[i] = 0.6f + 0.4f * (float)rng.NextDouble();
+            }
+            return MakeMask(256, 64, (u, v) =>
+            {
+                float sum = 0f;
+                for (int i = 0; i < AuroraCurtainCount; i++)
+                {
+                    float d = u - pos[i];
+                    d -= (float)Math.Round(d);                 // бесшовный повтор по u
+                    float line = (float)Math.Exp(-(d / width[i]) * (d / width[i]));
+                    sum += line * gain[i] * (1f - Smooth01(v / reach[i]));
+                }
+                return Math.Min(1f, sum) * Smooth01(v / 0.06f);
+            });
+        }
+
+        private static void EnsureAuroraMasks()
+        {
+            if (auroraBodyMask == null || auroraBodyMask.IsDisposed)
+                auroraBodyMask = MakeMask(128, 64, (u, v) =>
+                    AuroraAlong(u) * Smooth01(v / 0.06f) * (0.6f + 0.4f * (float)Math.Pow(1f - v, 0.7f)) * Smooth01((1f - v) / 0.15f));
+            if (auroraBackMask == null || auroraBackMask.IsDisposed)
+                auroraBackMask = MakeMask(128, 64, (u, v) =>
+                    Smooth01(u / 0.03f) * (float)Math.Pow(1f - u, 0.8f) * Smooth01(v / 0.12f) * Smooth01((1f - v) / 0.3f));
+            if (auroraCurtainMask == null || auroraCurtainMask.IsDisposed)
+                auroraCurtainMask = MakeAuroraCurtainMask();
+        }
+
+        // Полоса между радиусами rOut и rIn по углам trailAngles; v0..v1 — какой кусок маски поперёк,
+        // цвета cOut/cIn — по краям. additive: A = 0 (свечение), иначе обычное смешение (подложка).
+        // uShift/sway — для занавесов: сдвиг рисунка вдоль и покачивание внутреннего конца.
+        private void FillAuroraStrip(int n, Vector2 center, float rOut, float rIn, float v0, float v1,
+            Color cOut, Color cIn, float alpha, bool additive, float uRepeat = 1f, float uShift = 0f, float sway = 0f, float time = 0f)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                float t = n > 1 ? i / (float)(n - 1) : 0f;
+                Vector2 dir = trailAngles[i].ToRotationVector2();
+                Color o = cOut * alpha, inner = cIn * alpha;
+                if (additive)
+                    o.A = inner.A = 0;
+                float u = t * uRepeat - uShift;
+                float uIn = u + sway * (float)Math.Sin(time * 0.09f + t * 7f);
+                trailVerts[i * 2] = new VertexPositionColorTexture(new Vector3(center + dir * rOut - Main.screenPosition, 0f), o, new Vector2(u, v0));
+                trailVerts[i * 2 + 1] = new VertexPositionColorTexture(new Vector3(center + dir * rIn - Main.screenPosition, 0f), inner, new Vector2(uIn, v1));
+            }
+        }
+
+        private void AuroraPass(GraphicsDevice device, Texture2D mask, SamplerState sampler, BlendState blend, int n)
+        {
+            device.BlendState = blend;
+            trailEffect.Texture = mask;
+            device.SamplerStates[0] = sampler;
+            trailEffect.CurrentTechnique.Passes[0].Apply();
+            device.DrawUserPrimitives(PrimitiveType.TriangleStrip, trailVerts, 0, n * 2 - 2);
+        }
+
+        private void DrawAuroraArc(Player player, Texture2D glow, float progress, float max, float env)
+        {
+            float tip = TipRadius();
+            int n = BuildTrailAngles(progress, max);
+            GraphicsDevice device = Main.graphics.GraphicsDevice;
+            if (tip > 1f && n >= 2 && EnsureTrailAssets(device))
+            {
+                EnsureAuroraMasks();
+                EnsureVerts(n);
+                float rOut = tip;
+                float width = tip * AuroraWidth;
+                float rMid = rOut - width * 0.4f;
+                float rIn = rOut - width;
+                Vector2 center = player.MountedCenter;
+                float time = Projectile.localAI[0];
+                trailEffect.World = Matrix.Identity;
+                trailEffect.View = Main.GameViewMatrix.TransformationMatrix;
+                trailEffect.Projection = Matrix.CreateOrthographicOffCenter(0f, device.Viewport.Width, device.Viewport.Height, 0f, -1f, 1f);
+                Main.spriteBatch.End();
+                device.DepthStencilState = DepthStencilState.None;
+                device.RasterizerState = trailRaster;
+                try
+                {
+                    // 1) тёмная подложка: шире ленты внутрь и чуть наружу, края мягкие
+                    FillAuroraStrip(n, center, rOut + AuroraBackPad, rOut - width * AuroraBackWiden, 0f, 1f,
+                        AuroraNight, AuroraNight, AuroraBackAlpha * env, false);
+                    AuroraPass(device, auroraBackMask, SamplerState.LinearClamp, BlendState.AlphaBlend, n);
+
+                    // 2) тело: мята → бирюза (внешняя часть), бирюза → фиолет (внутренняя), по всей длине
+                    FillAuroraStrip(n, center, rOut, rMid, 0f, 0.4f, AuroraMint, AuroraTeal, AuroraBodyAlpha * env, true);
+                    AuroraPass(device, auroraBodyMask, SamplerState.LinearClamp, trailBlend, n);
+                    FillAuroraStrip(n, center, rMid, rIn, 0.4f, 1f, AuroraTeal, AuroraViolet, AuroraBodyAlpha * env, true);
+                    AuroraPass(device, auroraBodyMask, SamplerState.LinearClamp, trailBlend, n);
+
+                    // 3) занавесы: мягкие поперечные полосы, текут вдоль дуги и покачиваются
+                    float flow = time * AuroraCurtainFlow;
+                    FillAuroraStrip(n, center, rOut, rIn, 0f, 1f, Color.Lerp(AuroraMint, Color.White, 0.3f), AuroraViolet,
+                        AuroraCurtainAlpha * env, true, AuroraCurtainRepeat, flow, AuroraCurtainSway, time);
+                    // затухание вдоль ленты у занавесов — через цвет вершин
+                    for (int i = 0; i < n; i++)
+                    {
+                        float k = AuroraAlong(n > 1 ? i / (float)(n - 1) : 0f);
+                        trailVerts[i * 2].Color = Mul(trailVerts[i * 2].Color, k);
+                        trailVerts[i * 2 + 1].Color = Mul(trailVerts[i * 2 + 1].Color, k);
+                    }
+                    AuroraPass(device, auroraCurtainMask, SamplerState.LinearWrap, trailBlend, n);
+
+                    // 4) яркая передняя кромка по следу острия
+                    FillAuroraStrip(n, center, rOut + 1.5f, rOut - AuroraEdgeWidth, 0f, 0.3f, AuroraEdge, AuroraMint, env, true);
+                    AuroraPass(device, auroraBodyMask, SamplerState.LinearClamp, trailBlend, n);
+                }
+                finally
+                {
+                    Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                        DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+                }
+            }
+
+            // мягкая капля на острие — голова ленты
+            Vector2 tipPos = EndPoint(player, progress, true);
+            Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(AuroraMint, 0.45f * env), 0f,
+                glow.Size() / 2f, 30f / glow.Width, SpriteEffects.None, 0f);
+            Main.EntitySpriteDraw(glow, tipPos - Main.screenPosition, null, Additive(AuroraEdge, env), 0f,
+                glow.Size() / 2f, 12f / glow.Width, SpriteEffects.None, 0f);
+        }
+
+        private static Color Mul(Color c, float k) =>
+            new Color((byte)(c.R * k), (byte)(c.G * k), (byte)(c.B * k), (byte)(c.A * k));
+
         // Широкий мягкий ореол под шлейфом
         private void DrawHalo(Player player, Texture2D glow, float progress, float max, float env, bool tip, float sizeMult)
         {
@@ -1036,6 +1190,11 @@ namespace FrostMelee.Content.Projectiles
                 return;
 
             float max = SwingMaxTicks(player);
+            if (ItemType == ItemID.NorthPole)
+            {
+                DrawAuroraArc(player, glow, progress, max, env);
+                return;
+            }
             DrawHalo(player, glow, progress, max, env, true, 1f);
             DrawHalo(player, glow, progress, max, env, false, HandleScale);
             DrawTrail(player, glow, progress, max, env);
@@ -1060,12 +1219,10 @@ namespace FrostMelee.Content.Projectiles
             float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
             // Дуга: белая полупрозрачная линия (как у ванильного серпа)
-            // У Северного полюса общей дуги нет совсем: ни белой линии, ни ленты, ни ореолов.
-            // Его взмах рисует PolarCompassFx после пыли
-            if (ItemType == ItemID.NorthPole)
-                return false;
-            Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3), Color.White * 0.25f * lerpTime,
-                Projectile.rotation, origin, scale * LineDrawScale, spriteEffects, 0f);
+            // (у Северного полюса её нет — только своя дуга-сияние DrawAuroraArc)
+            if (ItemType != ItemID.NorthPole)
+                Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3), Color.White * 0.25f * lerpTime,
+                    Projectile.rotation, origin, scale * LineDrawScale, spriteEffects, 0f);
 
             Player owner = Main.player[Projectile.owner];
             DrawBladeGlow(owner);

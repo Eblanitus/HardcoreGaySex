@@ -181,36 +181,25 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         stab = read('Content/Projectiles/SickleStabProjectile.cs')
         brace = read('Content/Projectiles/SickleBraceProjectile.cs')
         self.assertIn('if (ItemType == ItemID.NorthPole)\n            {\n                NorthPoleFx.Palette(out core, out tail, out edge);', arc)
-        # Swing = 'Polar compass' (owner 02.11.2026): no shared sickle arc at all
-        compass = read('Content/Projectiles/PolarCompassFx.cs')
-        self.assertNotIn('Aurora', arc)
+        # Swing = aurora ribbon (owner 02.11.2026): no compass, no vanilla white line
+        self.assertFalse((ROOT / 'FrostMelee/Content/Projectiles/PolarCompassFx.cs').exists())
+        self.assertNotIn('PolarCompass', arc)
         self.assertNotIn('NorthPoleFx.Curtain(', arc)
-        pre = arc.split('public override bool PreDraw', 1)[1]
-        self.assertLess(pre.index('if (ItemType == ItemID.NorthPole)\n                return false;'),
-                        pre.index('texture.Frame(1, 4, 0, 3)'))
-        self.assertIn('PolarCompassFx.Begin(Projectile.owner, BladeAngleAt(0f), SwingFace)', arc)
-        self.assertIn('compass?.Track(BladeAngleAt(progress), TipRadius(), progress >= PeakAt);', arc)
-        self.assertIn('compass?.Close();', arc)
-        self.assertIn('PolarCompassFx.AddHit(point);', arc)
-        self.assertIn('On_Main.DrawDust += DrawAfterDust;', compass)
-        self.assertIn('MeridianStep = MathHelper.Pi / 12f', compass)
-        # in-game feedback: inside the spear's length, short-lived, aurora on leading marks,
-        # star rides the tip and its rays do not cross the centre (no sniper crosshair)
-        num = lambda name: float(re.search(name + r' = ([\d.]+)f?;', compass).group(1))
-        self.assertLess(num('MeridianOuter'), 1.0)
-        self.assertLess(num('LatitudeRadius'), 1.0)
-        self.assertLessEqual(num('MeridianLife'), 12)
-        self.assertIn('return Mint;', compass)
-        self.assertIn('DrawStar(tip, Now - s.PeakTick, under);', compass)
-        self.assertGreater(num('StarNorth'), num('StarSouth'))
-        self.assertGreater(num('StarGap'), 0)
-        self.assertIn('new Rectangle(0, 0, 1, 1)', compass)
-        # dark underlay pass first, then light; star/rings carry the aurora accent
-        self.assertIn('DrawSwing(s, pass == 0);', compass)
-        self.assertIn('Night * (UnderAlpha * alpha)', compass)
-        body = compass.split('public class PolarCompassFx', 1)[1]
-        for word in ('Crystal', 'Needle', 'Shard', 'Rime', 'Frozen'):
-            self.assertNotIn(word, body)   # not the frozen Ice Spear look
+        self.assertIn('if (ItemType != ItemID.NorthPole)\n                Main.EntitySpriteDraw(texture, position, texture.Frame(1, 4, 0, 3)', arc)
+        glow = arc.split('private void DrawBladeGlow', 1)[1].split('public override bool PreDraw', 1)[0]
+        self.assertLess(glow.index('DrawAuroraArc('), glow.index('DrawHalo('))
+        aurora = arc.split('private void DrawAuroraArc', 1)[1].split('private static Color Mul', 1)[0]
+        # dark backing wider than the ribbon, drawn first with normal blending
+        self.assertLess(aurora.index('BlendState.AlphaBlend, n);'), aurora.index('trailBlend, n);'))
+        self.assertIn('rOut - width * AuroraBackWiden', aurora)
+        self.assertGreater(float(re.search(r'AuroraBackWiden = ([\d.]+)f', arc).group(1)), 1.0)
+        # mint -> teal -> violet across the width, the full length; curtains flow and sway
+        self.assertIn('AuroraMint, AuroraTeal', aurora)
+        self.assertIn('AuroraTeal, AuroraViolet', aurora)
+        self.assertIn('AuroraCurtainRepeat, flow, AuroraCurtainSway, time', aurora)
+        self.assertIn('AuroraEdge', aurora)
+        for word in ('Crystal', 'Needle', 'Shard', 'Rime', 'Compass', 'Star'):
+            self.assertNotIn(word, aurora)
         self.assertIn('private bool IsNorthPole => (int)Projectile.ai[2] == ItemID.NorthPole;', stab)
         self.assertNotIn('DrawSkyCall(', stab)   # the beam over the spear was unreadable
         self.assertIn('if (itemType == ItemID.NorthPole)\n                DrawPolarCharge(geo);', brace)
