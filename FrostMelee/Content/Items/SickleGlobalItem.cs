@@ -143,6 +143,13 @@ namespace FrostMelee.Content.Items
             float bladeReach = sprite.Length * 0.5f * SpinTipReach * adjustedItemScale;
 
             float finalScale = bladeReach / ArcReachAtScale1;
+            // Северный полюс: острие идёт по кругу SwingReach (копьё держат за конец древка).
+            // Линия дуги на пике ровно до того же радиуса — дальше картинки ничего не бьёт
+            if (item.type == ItemID.NorthPole)
+            {
+                bladeReach = Weapons.NorthPoleBalance.SwingReach * adjustedItemScale;
+                finalScale = bladeReach / SickleArcProjectile.LineReachAtFullScale;
+            }
 
             // Дуга стартует там же, где видимый серп: SicklePlayer.ApplySpinSwing
             // берёт стартовый угол на курсор, а дуга добавляет к углу velocity ещё π —

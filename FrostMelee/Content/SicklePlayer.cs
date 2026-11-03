@@ -402,6 +402,17 @@ namespace FrostMelee.Content
         // от тела (крутится краем).
         public const float SpinRadius = 0f;
 
+        // Северный полюс (владелец 03.11.2026): радиус взмаха до 140 px. Копьё не растягиваем:
+        // его держат за конец древка, середина копья уходит вперёд по оси на это смещение,
+        // и острие описывает круг SwingReach (× масштаб оружия). Смещение — px на масштабе 1.
+        public static float SpinRadiusFor(int itemType)
+        {
+            if (itemType != ItemID.NorthPole)
+                return SpinRadius;
+            SickleSprite.BladeZone zone = SickleSprite.GetFullZone(itemType);
+            return zone == null ? SpinRadius : Math.Max(0f, Weapons.NorthPoleBalance.SwingReach - zone.RMax);
+        }
+
         // Захват старта взмаха: направление взгляда и стартовый угол фиксируем
         // ОДИН раз (в тик, когда itemAnimation появился), иначе:
         // 1) ChangeDir по углу руки каждый тик флипает спрайт — персонаж «крутится»;
@@ -450,8 +461,9 @@ namespace FrostMelee.Content
             // кисть целилась в сам центр и рука всегда торчала вправо по миру.)
             Vector2 shaftDir = Vector2.UnitX.RotatedBy(angle);
             Vector2 armDir;
-            if (SpinRadius > 0f)
-                armDir = (SpinSwingCenter + shaftDir * SpinRadius - Player.MountedCenter).SafeNormalize(shaftDir);
+            float spinRadius = SpinRadiusFor(Player.HeldItem.type);
+            if (spinRadius > 0f)
+                armDir = (SpinSwingCenter + shaftDir * spinRadius - Player.MountedCenter).SafeNormalize(shaftDir);
             else
                 armDir = shaftDir.X * spinFaceDir >= 0f ? shaftDir : -shaftDir;
             float armRot = armDir.ToRotation() - MathHelper.PiOver2;
