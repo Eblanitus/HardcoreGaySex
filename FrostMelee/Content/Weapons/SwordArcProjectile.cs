@@ -554,8 +554,8 @@ namespace FrostMelee.Content.Weapons
         // веер. wobble — дрожь внешнего края (пламя; лёд 0), thick — множитель
         // толщины. Нет записи (первый тик) — формульная история вокруг тела.
         // reach > 0 — внешний край дуги не по острию, а на этом радиусе от кисти
-        // (Айсберг: лёд за остриём, AisbergReach); внутренний край тогда не
-        // дальше острия, чтобы между клинком и льдом не было пустоты.
+        // (Айсберг: AisbergReach). Лента та же, только на большем радиусе —
+        // как у ванильных Терра-клинка и Экскалибура: тонкая полоса у края.
         private int BuildBladeShape(Player player, float[] angles, float[] rOut, float[] rIn, out Vector2 center,
             float wobble, float thick, float gt, float reach = 0f) {
             // Лента — по записанному пути настоящего клинка вокруг кисти
@@ -588,8 +588,6 @@ namespace FrostMelee.Content.Weapons
                     // больше настройка — физически толще лента пламени
                     float innerFrac = 1f - (1f - MathHelper.Lerp(0.68f, 0.34f, bulge)) * thick;
                     rIn[i] = Math.Max(BladeReach * 0.2f, rOut[i] * innerFrac);
-                    if (reach > 0f)
-                        rIn[i] = Math.Min(rIn[i], fbHistRadius[i]);
                     n++;
                 }
             } else {
@@ -973,25 +971,38 @@ namespace FrostMelee.Content.Weapons
         }
 
         // Радиус взмаха Айсберга от кисти (больше Терра-клинка, AisbergReach)
+        // Толщина ленты Айсберга (множитель движка): на радиусе 175 полоса
+        // ~28 px у концов и ~58 px в середине, как ванильная дуга Терра-клинка.
+        // Между клинком и лентой — тихий ванильный сектор (DrawBladeSector)
+        private const float AisbergRibbonThick = 0.5f;
+
         private static float AisbergSwingReach(Player player) => AisbergReach.Swing * AisbergReach.Scale(player);
 
         private void DrawAisbergArc(Player player, Texture2D texture, SpriteEffects fx, float maxAnim) {
             if (Main.dedServ)
                 return;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            // Форма — тем же движком, что у Фростбранда (BuildBladeShape): путь
-            // клинка вокруг кисти, серп, сходящийся к острию и к хвосту. Ледяной
-            // край не дрожит (wobble 0). Своё у Айсберга — только рисунок плиты
-            // Под плитой — тот же фоновый ванильный сектор, что у Фростбранда,
-            // в светлой гамме глыбы
-            // Радиус — AisbergReach.Swing: плита тянется от острия до него, это и есть хитбокс
+            // Радиус взмаха — AisbergReach.Swing (больше Терра-клинка). Как у
+            // ванильных Терра-клинка и Экскалибура: дальность видна тремя слоями.
+            //  1) тихий ванильный сектор от кисти до радиуса (DrawBladeSector,
+            //     тот же, что у Фростбранда) — вся заметаемая площадь;
+            //  2) лента общего движка (BuildBladeShape) — тонкая полоса у края
+            //     радиуса, плитой льда (AisbergArcFx.Draw);
+            //  3) ледяной шип — продолжение клинка от острия до радиуса
+            //     (AisbergArcFx.DrawSpike, как у тычка и встречи). Шип и клинок
+            //     вместе — ровно хитбокс взмаха (BladeHit до того же радиуса).
             float reach = AisbergSwingReach(player);
             DrawBladeSector(texture, fx, AisbergArcFx.Steel, AisbergArcFx.Pale,
                 FlameSectorAlpha * env, FlameSectorAlpha2 * env, reach);
-            int n = BuildBladeShape(player, aisAngles, aisROut, aisRIn, out Vector2 center, 0f, 1f, 0f, reach);
-            if (n < 2)
-                return;
-            AisbergArcFx.Draw(aisAngles, aisROut, aisRIn, n, center, env, Projectile.localAI[0], Projectile.identity);
+            int n = BuildBladeShape(player, aisAngles, aisROut, aisRIn, out Vector2 center, 0f, AisbergRibbonThick, 0f, reach);
+            if (n >= 2)
+                AisbergArcFx.Draw(aisAngles, aisROut, aisRIn, n, center, env, Projectile.localAI[0], Projectile.identity);
+            if (fbHasBlade) {
+                float bladeLen = Vector2.Distance(fbHand, fbTipPos);
+                Vector2 dir = (fbTipPos - fbHand).SafeNormalize(Vector2.UnitX);
+                float spikeLen = AisbergReach.SpikeLength(player, AisbergReach.Swing, bladeLen);
+                AisbergArcFx.DrawSpike(fbTipPos - dir * AisbergReach.SpikeOverlap, dir, spikeLen, 1f, player.direction == -1);
+            }
         }
 
         // Дуга праздничных мечей (подкласс FestiveSwords): чистый шаблон без
