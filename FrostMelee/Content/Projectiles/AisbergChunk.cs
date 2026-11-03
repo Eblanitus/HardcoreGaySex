@@ -14,10 +14,13 @@ namespace FrostMelee.Content.Projectiles
     // ai[0] — вид: 0 обычная глыба взмаха, 1 крупная глыба броска.
     // ai[1] — вариант рисунка 0..2. ai[2] — урон всплеска при расколе.
     //
-    // Глыба падает, при столкновении раскалывается: всплеск ледяной
-    // энергии (AisbergBlast: урон по площади + Frostbite). Свои глыбы
-    // можно расколоть раньше: тычком (просто взрыв) и встречей
-    // (взрыв + замороженная поверхность, см. CrackTouched).
+    // «Льдины»: глыба сама не взрывается. Падая, бьёт врагов собой и
+    // ложится на землю льдиной; полежав, тихо тает. Взорвать её
+    // (AisbergBlast: урон по площади + Frostbite) может только владелец:
+    // - взмах отбивает льдину от себя, как бильярдный шар (KnockTouched),
+    //   отбитая раскалывается о первого врага или о стену;
+    // - тычок раскалывает на месте, встреча — с заморозкой поверхности
+    //   (CrackTouched).
     public class AisbergChunk : ModProjectile
     {
         private const int GraceTicks = 8;       // не бьёт сразу из места рождения на враге
@@ -25,7 +28,11 @@ namespace FrostMelee.Content.Projectiles
         private const float MaxFall = 13f;
         private const float SmallScale = 0.95f;
         private const float LargeScale = 1.7f;
-        private const int LandedLifeTicks = 150; // упавшая глыба стоит, потом раскалывается сама
+        private const int LandedLifeTicks = 480; // льдина лежит 8 с, потом тает без взрыва
+        private const int MaxLying = 8;          // больше льдин на поле — старейшая тает
+        private const float KnockSpeed = 15f;
+        private const float KnockGravity = 0.12f;
+        private const int KnockedLifeTicks = 75;
 
         private bool initialized;
         private bool cracked;
@@ -33,9 +40,11 @@ namespace FrostMelee.Content.Projectiles
         private int landedTicks;
         private float spin;
 
-        // ai[0]: 0/1 — падает (обычная/крупная), 2/3 — уже лежит
+        // ai[0]: 0/1 — падает (обычная/крупная), 2/3 — лежит льдиной,
+        // 4/5 — отбита взмахом и летит
         private bool IsLarge => (int)Projectile.ai[0] % 2 == 1;
-        private bool Landed => Projectile.ai[0] >= 1.5f;
+        private bool Landed => Projectile.ai[0] >= 1.5f && Projectile.ai[0] < 3.5f;
+        private bool Knocked => Projectile.ai[0] >= 3.5f;
         private float BlastRadius => IsLarge ? 130f : 80f;
         private int Age => (int)Projectile.localAI[0];
 
@@ -50,7 +59,9 @@ namespace FrostMelee.Content.Projectiles
             Projectile.height = 24;
             Projectile.friendly = true;
             Projectile.DamageType = DamageClass.Melee;
-            Projectile.penetrate = 1;
+            // Падающая глыба проходит сквозь врагов (кулдаун ниже), отбитая
+            // раскалывается о первого сама (Crack в OnHitNPC)
+            Projectile.penetrate = -1;
             Projectile.tileCollide = true;
             Projectile.ignoreWater = true;
             Projectile.timeLeft = 360;
@@ -79,7 +90,16 @@ namespace FrostMelee.Content.Projectiles
             {
                 Projectile.velocity = Vector2.Zero;
                 Projectile.tileCollide = false;
+                Projectile.rotation *= 0.85f;
                 if (Projectile.owner == Main.myPlayer && ++landedTicks >= LandedLifeTicks)
+                    Projectile.Kill(); // растаяла: без раскола и взрыва
+            }
+            else if (Knocked)
+            {
+                Projectile.velocity.Y = Math.Min(Projectile.velocity.Y + KnockGravity, MaxFall);
+                Projectile.rotation += spin * 2.5f;
+                // Отбитая, но никуда не попавшая — всё равно лопается в конце полёта
+                if (Projectile.owner == Main.myPlayer && Projectile.timeLeft <= 1)
                     Crack(false);
             }
             else
@@ -98,30 +118,96 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        public override bool? CanDamage() => Age > GraceTicks && !cracked;
+        // Лежащая льдина сама не бьёт: она снаряд для взмаха, а не ловушка
+        public override bool? CanDamage() => !cracked && !Landed && (Knocked || Age > GraceTicks);
 
         public override bool OnTileCollide(Vector2 oldVelocity)
         {
-            // Упала сверху на поверхность — стоит как своя глыба: её можно
-            // успеть расколоть тычком или разбитой встречей заморозить
-            // землю вокруг. Сама треснет через LandedLifeTicks.
-            if (!Landed && oldVelocity.Y > 0.5f && Projectile.velocity.Y == 0f)
+            // Отбитая разбивается о стену или пол
+            if (Knocked)
+            {
+                Crack(false);
+                return true;
+            }
+
+            // Упала сверху на поверхность — ложится льдиной
+            if (oldVelocity.Y > 0.5f && Projectile.velocity.Y == 0f)
             {
                 Projectile.ai[0] += 2f;
                 Projectile.velocity = Vector2.Zero;
                 Projectile.tileCollide = false;
-                Projectile.timeLeft = Math.Max(Projectile.timeLeft, LandedLifeTicks + 30);
+                Projectile.timeLeft = LandedLifeTicks + 30;
+                landedTicks = 0;
                 Projectile.netUpdate = true;
+                if (Projectile.owner == Main.myPlayer)
+                    MeltOldestOverLimit();
                 return false;
             }
 
-            Crack(false);
-            return true;
+            // Боком о стену или о потолок — гасим эту ось и падаем дальше
+            if (Projectile.velocity.X != oldVelocity.X)
+                Projectile.velocity.X = 0f;
+            if (Projectile.velocity.Y != oldVelocity.Y)
+                Projectile.velocity.Y = 0f;
+            return false;
         }
 
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
-            Crack(false);
+            if (Knocked)
+                Crack(false);
+        }
+
+        // Льдин на поле не больше MaxLying: лишняя старейшая тает
+        private void MeltOldestOverLimit()
+        {
+            int count = 0;
+            AisbergChunk oldest = null;
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (!p.active || p.type != Type || p.owner != Projectile.owner)
+                    continue;
+                if (p.ModProjectile is not AisbergChunk chunk || !chunk.Landed || chunk.cracked)
+                    continue;
+                count++;
+                if (oldest == null || chunk.landedTicks > oldest.landedTicks)
+                    oldest = chunk;
+            }
+            if (count > MaxLying && oldest != null)
+                oldest.Projectile.Kill();
+        }
+
+        // Взмах задел льдину: она срывается от игрока по прямой, как шар от кия
+        private void Knock(Player owner)
+        {
+            Vector2 dir = Projectile.Center - owner.Center;
+            if (dir.LengthSquared() < 1f)
+                dir = new Vector2(owner.direction, 0f);
+            dir.Normalize();
+            // Чуть вверх: лежащая на полу льдина не должна сразу чиркнуть о него
+            dir = Vector2.Normalize(dir + new Vector2(0f, -0.15f));
+
+            Projectile.ai[0] = IsLarge ? 5f : 4f;
+            Projectile.velocity = dir * KnockSpeed;
+            Projectile.tileCollide = true;
+            Projectile.timeLeft = KnockedLifeTicks;
+            Projectile.knockBack *= 2.5f; // удар отбитой льдины — это толчок, контроль
+            Projectile.netUpdate = true;
+            // Чтобы не застрять в полу, на котором лежала
+            Projectile.position.Y -= 4f;
+
+            SoundEngine.PlaySound(SoundID.Item50 with { Volume = 0.7f, Pitch = IsLarge ? -0.3f : 0.1f },
+                Projectile.Center);
+            if (!Main.dedServ)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    Dust d = Dust.NewDustPerfect(Projectile.Center, DustID.Frost,
+                        -dir.RotatedByRandom(0.6f) * Main.rand.NextFloat(1f, 3f), 100, default, 1.1f);
+                    d.noGravity = true;
+                }
+            }
         }
 
         public void Crack(bool freezeSurface)
@@ -201,6 +287,28 @@ namespace FrostMelee.Content.Projectiles
                     continue;
                 if (p.ModProjectile is AisbergChunk chunk && !chunk.cracked && overlaps(p.Hitbox))
                     chunk.Crack(freezeSurface);
+            }
+        }
+
+        // Отбить свои льдины, которых коснулся клинок взмаха. swingAge — сколько
+        // тиков идёт взмах: глыбы, отколотые этим же взмахом, моложе него и
+        // не отбиваются, иначе они срывались бы прямо из места рождения.
+        public static void KnockTouched(Projectile arc, int swingAge, Func<Rectangle, bool> overlaps)
+        {
+            if (arc == null || arc.owner != Main.myPlayer)
+                return;
+            Player owner = Main.player[arc.owner];
+            int type = ModContent.ProjectileType<AisbergChunk>();
+            for (int i = 0; i < Main.maxProjectiles; i++)
+            {
+                Projectile p = Main.projectile[i];
+                if (!p.active || p.type != type || p.owner != arc.owner)
+                    continue;
+                if (p.ModProjectile is not AisbergChunk chunk || chunk.cracked || chunk.Knocked)
+                    continue;
+                if (chunk.Age <= swingAge || !overlaps(p.Hitbox))
+                    continue;
+                chunk.Knock(owner);
             }
         }
 
