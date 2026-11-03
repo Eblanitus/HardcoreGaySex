@@ -531,12 +531,13 @@ namespace FrostMelee.Content.Weapons
         // сектора — записанный угол клинка, внешний радиус — длина клинка.
         // Сектор — готовый ванильный серп: с первого тика удара он целый, не
         // зависит от длины записанного пути
-        private void DrawBladeSector(Texture2D texture, SpriteEffects fx, Color deep, Color light, float alpha, float alpha2) {
+        private void DrawBladeSector(Texture2D texture, SpriteEffects fx, Color deep, Color light, float alpha, float alpha2,
+            float radius = 0f) {
             if (!fbHasBlade || fbHistCount < 1 || alpha <= 0.005f)
                 return;
             int dir = Projectile.ai[0] >= 0f ? 1 : -1;
             float sectorRot = fbHistAngle[0] - dir * IceArcFx.HeadAngle;
-            float sectorScale = fbHistRadius[0] * FlameSectorOuter / LineTexOuter;
+            float sectorScale = (radius > 0f ? radius : fbHistRadius[0] * FlameSectorOuter) / LineTexOuter;
             Rectangle body = texture.Frame(1, 4, 0, 0);
             Vector2 sectorOrigin = body.Size() / 2f;
             Vector2 sectorPos = fbHand - Main.screenPosition;
@@ -552,8 +553,11 @@ namespace FrostMelee.Content.Weapons
         // поэтому и в начале удара, пока путь короткий, дуга — узкий серп, а не
         // веер. wobble — дрожь внешнего края (пламя; лёд 0), thick — множитель
         // толщины. Нет записи (первый тик) — формульная история вокруг тела.
+        // reach > 0 — внешний край дуги не по острию, а на этом радиусе от кисти
+        // (Айсберг: лёд за остриём, AisbergReach); внутренний край тогда не
+        // дальше острия, чтобы между клинком и льдом не было пустоты.
         private int BuildBladeShape(Player player, float[] angles, float[] rOut, float[] rIn, out Vector2 center,
-            float wobble, float thick, float gt) {
+            float wobble, float thick, float gt, float reach = 0f) {
             // Лента — по записанному пути настоящего клинка вокруг кисти
             // (fbHist*): голова ровно на острие, тело — где клинок правда был.
             // Внешний край чуть дышит языками: радиус дрожит, к хвосту сильнее.
@@ -579,17 +583,19 @@ namespace FrostMelee.Content.Weapons
                                + (float)Math.Sin(gt * 2.6f + i * 1.15f) * 0.03f;
                     float flick = 1f + wobble * wave * (0.3f + 0.7f * t) + 0.06f * bulge - 0.04f * t * t;
                     angles[i] = fbHistAngle[i];
-                    rOut[i] = fbHistRadius[i] * flick;
+                    rOut[i] = (reach > 0f ? reach : fbHistRadius[i]) * flick;
                     // Толщина языка (1 − внутренний радиус) — по ядрёности:
                     // больше настройка — физически толще лента пламени
                     float innerFrac = 1f - (1f - MathHelper.Lerp(0.68f, 0.34f, bulge)) * thick;
                     rIn[i] = Math.Max(BladeReach * 0.2f, rOut[i] * innerFrac);
+                    if (reach > 0f)
+                        rIn[i] = Math.Min(rIn[i], fbHistRadius[i]);
                     n++;
                 }
             } else {
                 center = player.RotatedRelativePoint(player.MountedCenter);
                 n = BuildTrailHistory(player, angles, rOut, rIn);
-                float outerNow = ArcLineRadius(Projectile.localAI[0]);
+                float outerNow = reach > 0f ? reach : ArcLineRadius(Projectile.localAI[0]);
                 for (int i = 0; i < n; i++) {
                     rOut[i] = outerNow;
                     rIn[i] = Math.Max(BladeReach * 0.2f, rOut[i] * (1f - (1f - FlameInnerFrac) * thick));
@@ -961,10 +967,13 @@ namespace FrostMelee.Content.Weapons
             if (!fbHasBlade)
                 return;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            AisbergArcFx.Light(fbHand, fbHistAngle[0], fbHistRadius[0], env);
+            AisbergArcFx.Light(fbHand, fbHistAngle[0], AisbergSwingReach(player), env);
             if ((int)Projectile.localAI[0] == (int)(maxAnim * PeakAt))
-                AisbergArcFx.PeakCrumble(fbHand, fbHistAngle[0], fbHistRadius[0]);
+                AisbergArcFx.PeakCrumble(fbHand, fbHistAngle[0], AisbergSwingReach(player));
         }
+
+        // Радиус взмаха Айсберга от кисти (больше Терра-клинка, AisbergReach)
+        private static float AisbergSwingReach(Player player) => AisbergReach.Swing * AisbergReach.Scale(player);
 
         private void DrawAisbergArc(Player player, Texture2D texture, SpriteEffects fx, float maxAnim) {
             if (Main.dedServ)
@@ -975,9 +984,11 @@ namespace FrostMelee.Content.Weapons
             // край не дрожит (wobble 0). Своё у Айсберга — только рисунок плиты
             // Под плитой — тот же фоновый ванильный сектор, что у Фростбранда,
             // в светлой гамме глыбы
+            // Радиус — AisbergReach.Swing: плита тянется от острия до него, это и есть хитбокс
+            float reach = AisbergSwingReach(player);
             DrawBladeSector(texture, fx, AisbergArcFx.Steel, AisbergArcFx.Pale,
-                FlameSectorAlpha * env, FlameSectorAlpha2 * env);
-            int n = BuildBladeShape(player, aisAngles, aisROut, aisRIn, out Vector2 center, 0f, 1f, 0f);
+                FlameSectorAlpha * env, FlameSectorAlpha2 * env, reach);
+            int n = BuildBladeShape(player, aisAngles, aisROut, aisRIn, out Vector2 center, 0f, 1f, 0f, reach);
             if (n < 2)
                 return;
             AisbergArcFx.Draw(aisAngles, aisROut, aisRIn, n, center, env, Projectile.localAI[0], Projectile.identity);
@@ -1085,6 +1096,9 @@ namespace FrostMelee.Content.Weapons
                     && distance <= BladeReach;
             }
 
+            // Айсберг бьёт дальше острия — до края ледяной плиты (AisbergReach)
+            if (SwordTypes.IsAisbergId(SwordItem))
+                bladeLen = Math.Max(bladeLen, AisbergSwingReach(player));
             GetBladeWedge(player, out Vector2 hand, out float bladeStart, out float bladeSweep);
             return NearestInWedge(target, hand, bladeStart, bladeSweep, out float bladeDist, out _)
                 && bladeDist <= bladeLen;
