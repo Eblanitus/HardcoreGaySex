@@ -819,8 +819,8 @@ namespace FrostMelee.Content.Weapons
         // на все точки ленты. Лента ложится на настоящий путь острия вокруг
         // кисти и заканчивается там, где клинок реально был, — та же форма
         // дуги, что у Фростбранда, а не формульный веер вокруг центра тела
-        private int BuildRecordedHistory(float[] angles, float[] rOut, float[] rIn) {
-            int cap = Math.Min(fbHistCount, (int)TrailTicks);
+        private int BuildRecordedHistory(float[] angles, float[] rOut, float[] rIn, int maxTicks = (int)TrailTicks) {
+            int cap = Math.Min(fbHistCount, maxTicks);
             if (cap < 2)
                 return 0;
             int n = 0;
@@ -947,7 +947,10 @@ namespace FrostMelee.Content.Weapons
                 return;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
             bool rec = fbHasBlade && fbHistCount >= 2;
-            int n = rec ? BuildRecordedHistory(aisAngles, aisROut, aisRIn)
+            // Вся записанная история взмаха (до FlamePoints тиков), а не 14 тиков,
+            // как у ленты Ice Blade: иначе начало взмаха отрезалось, и плита
+            // начиналась с прямого среза посреди пути клинка (замечание владельца)
+            int n = rec ? BuildRecordedHistory(aisAngles, aisROut, aisRIn, FlamePoints)
                         : BuildTrailHistory(player, aisAngles, aisROut, aisRIn);
             if (n < 2)
                 return;
