@@ -953,15 +953,8 @@ namespace FrostMelee.Content.Weapons
                 return;
             // Центр — живая кисть, как у ленты Ice Blade (см. DrawHone)
             Vector2 center = rec ? player.itemLocation : player.RotatedRelativePoint(player.MountedCenter);
-            Main.spriteBatch.End();
-            try {
-                AisbergArcFx.Draw(Main.graphics.GraphicsDevice, aisAngles, aisROut, n, center, env,
-                    Projectile.localAI[0], Projectile.identity);
-            }
-            finally {
-                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
-                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-            }
+            // Пиксели мира 2x2 прямо в открытый батч (AisbergArcFx)
+            AisbergArcFx.Draw(aisAngles, aisROut, n, center, env, Projectile.localAI[0], Projectile.identity);
         }
 
         // Дуга праздничных мечей (подкласс FestiveSwords): чистый шаблон без
