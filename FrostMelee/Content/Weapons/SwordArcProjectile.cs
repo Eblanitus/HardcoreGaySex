@@ -96,6 +96,10 @@ namespace FrostMelee.Content.Weapons
             if (Projectile.owner == Main.myPlayer)
                 RecordFrostTrail(player);
 
+            // Айсберг: клинок взмаха отбивает свои льдины во врагов
+            if (SwordTypes.IsAisbergId(SwordItem) && Projectile.owner == Main.myPlayer)
+                AisbergChunk.KnockTouched(Projectile, (int)Projectile.localAI[0], BladeHit);
+
             // Frostbrand: взмах несёт за собой веер струи холодного пламени
             if (SwordItem == ItemID.Frostbrand && Projectile.owner == Main.myPlayer
                 && Projectile.localAI[0] % 2 == 0)
