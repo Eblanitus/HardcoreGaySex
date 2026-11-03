@@ -270,7 +270,7 @@ namespace FrostMelee.Content.Projectiles
                 if (AisbergSpike(out Vector2 spikeBase, out float spikeLen)) {
                     float cp = 0f;
                     return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
-                        spikeBase, spikeBase + dir * spikeLen, Weapons.AisbergReach.SpikeWidth, ref cp);
+                        spikeBase, spikeBase + dir * spikeLen, AisbergArcFx.SpikeMaxWidth, ref cp);
                 }
                 return false;
             }
@@ -294,9 +294,9 @@ namespace FrostMelee.Content.Projectiles
             float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
             float t = MathHelper.Clamp(Projectile.localAI[0] / DeployTicks, 0f, 1f);
             float deploy = 1f - (1f - t) * (1f - t);
-            spikeBase = Projectile.Center + SpearDir * (length * 0.5f);
+            spikeBase = Projectile.Center + SpearDir * (length * 0.5f - Weapons.AisbergReach.SpikeOverlap);
             spikeLen = Weapons.AisbergReach.SpikeLength(Main.player[Projectile.owner], Weapons.AisbergReach.Brace, length) * deploy;
-            return spikeLen > 1f;
+            return spikeLen > Weapons.AisbergReach.SpikeOverlap + 1f;
         }
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
@@ -591,7 +591,7 @@ namespace FrostMelee.Content.Projectiles
 
             // Айсберг: ледяной шип за остриём (он же хитбокс дальше клинка)
             if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
-                AisbergArcFx.DrawSpike(spikeBase, SpearDir, spikeLen, Weapons.AisbergReach.SpikeWidth, 0.75f, Projectile.identity);
+                AisbergArcFx.DrawSpike(spikeBase, SpearDir, spikeLen, 1f, flipped);
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);
