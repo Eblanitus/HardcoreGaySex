@@ -205,8 +205,28 @@ namespace FrostMelee.Content.Projectiles
             Vector2 rearPos = Projectile.Center - dir * BladeHalfLength;
             Vector2 bladeStart = Vector2.Lerp(rearPos, tipPos, 0.18f);
             float collisionPoint = 0f;
-            return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
-                bladeStart, tipPos, BladeHitWidth, ref collisionPoint);
+            if (Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
+                bladeStart, tipPos, BladeHitWidth, ref collisionPoint))
+                return true;
+            // Айсберг: дальше острия бьёт ледяной шип (тот, что рисует PreDraw)
+            if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
+                return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
+                    spikeBase, spikeBase + dir * spikeLen, Weapons.AisbergReach.SpikeWidth, ref collisionPoint);
+            return false;
+        }
+
+        // Ледяной шип Айсберга за остриём (AisbergReach.Stab): живёт ровно
+        // столько, сколько бьёт выпад (HitWindow), начинается от острия
+        private bool AisbergSpike(out Vector2 spikeBase, out float spikeLen)
+        {
+            spikeBase = default;
+            spikeLen = 0f;
+            if (!Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) || Life > HitWindow)
+                return false;
+            Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
+            spikeBase = Projectile.Center + dir * BladeHalfLength;
+            spikeLen = Weapons.AisbergReach.SpikeLength(Main.player[Projectile.owner], Weapons.AisbergReach.Stab, BladeLength);
+            return spikeLen > 1f;
         }
 
         // Толщина хитбокса вдоль лезвия (px)
@@ -306,6 +326,10 @@ namespace FrostMelee.Content.Projectiles
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
             Player owner = Main.player[Projectile.owner];
+
+            // Айсберг: ледяной шип за остриём (он же хитбокс дальше клинка)
+            if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
+                AisbergArcFx.DrawSpike(spikeBase, dir, spikeLen, Weapons.AisbergReach.SpikeWidth, 0.9f, Projectile.identity);
 
             // Blade
             if (itemType == ItemID.IceBlade) {

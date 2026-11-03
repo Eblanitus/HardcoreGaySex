@@ -266,6 +266,12 @@ namespace FrostMelee.Content.Projectiles
                 if (SickleSprite.BladeOverlaps(zone, targetHitbox, Projectile.Center, Projectile.ai[1],
                     Projectile.ai[1], Projectile.spriteDirection == -1, 1f))
                     return true;
+                // Айсберг: дальше острия бьёт ледяной шип (тот, что рисует PreDraw)
+                if (AisbergSpike(out Vector2 spikeBase, out float spikeLen)) {
+                    float cp = 0f;
+                    return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
+                        spikeBase, spikeBase + dir * spikeLen, Weapons.AisbergReach.SpikeWidth, ref cp);
+                }
                 return false;
             }
 
@@ -275,6 +281,22 @@ namespace FrostMelee.Content.Projectiles
             float collisionPoint = 0f;
             return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
                 start, tipPos, TipHitWidth, ref collisionPoint);
+        }
+
+        // Ледяной шип Айсберга за остриём выставленного клинка
+        // (AisbergReach.Brace): вырастает вместе с выдвигом клинка
+        private bool AisbergSpike(out Vector2 spikeBase, out float spikeLen)
+        {
+            spikeBase = default;
+            spikeLen = 0f;
+            if (!Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
+                return false;
+            float length = SickleSprite.Get((int)Projectile.ai[2]).Length;
+            float t = MathHelper.Clamp(Projectile.localAI[0] / DeployTicks, 0f, 1f);
+            float deploy = 1f - (1f - t) * (1f - t);
+            spikeBase = Projectile.Center + SpearDir * (length * 0.5f);
+            spikeLen = Weapons.AisbergReach.SpikeLength(Main.player[Projectile.owner], Weapons.AisbergReach.Brace, length) * deploy;
+            return spikeLen > 1f;
         }
 
         public override void ModifyHitNPC(NPC target, ref NPC.HitModifiers modifiers)
@@ -567,6 +589,9 @@ namespace FrostMelee.Content.Projectiles
             Vector2 origin = geo.ButtFor(flipped);
             SpriteEffects effects = flipped ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
+            // Айсберг: ледяной шип за остриём (он же хитбокс дальше клинка)
+            if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
+                AisbergArcFx.DrawSpike(spikeBase, SpearDir, spikeLen, Weapons.AisbergReach.SpikeWidth, 0.75f, Projectile.identity);
             Main.EntitySpriteDraw(texture, drawPos - Main.screenPosition, null,
                 lightColor * (1f - FrozenMix()), Projectile.rotation, origin, 1f, effects, 0f);
             DrawRime(geo);

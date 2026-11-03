@@ -201,6 +201,63 @@ namespace FrostMelee.Content
             }
         }
 
+        // Ледяной шип за остриём (тычок и встреча, AisbergReach): тем же
+        // пикселем мира 2x2 и той же светлой гаммой, что плита дуги. От
+        // basePos (остриё клинка) вдоль dir на length, у основания ширина
+        // width, к кончику сходится. Гранёный: по длине звенья льда со
+        // своей шириной и белыми швами между ними. Хитбокс шипа — отрезок
+        // basePos → basePos + dir * length толщиной width, ровно этот рисунок.
+        public static void DrawSpike(Vector2 basePos, Vector2 dir, float length, float width, float alpha, int seed)
+        {
+            if (Main.dedServ || length < 2f || alpha <= 0.02f)
+                return;
+            Texture2D pixel = TextureAssets.MagicPixel.Value;
+            if (pixel == null || pixel.IsDisposed)
+                return;
+            dir = dir.SafeNormalize(Vector2.UnitX);
+            Vector2 normal = new Vector2(-dir.Y, dir.X);
+            float alphaStep = (float)Math.Ceiling(alpha * FadeSteps) / FadeSteps;
+            Rectangle one = new Rectangle(0, 0, 1, 1);
+            Vector2 size = new Vector2(Px);
+            const float LinkPx = 12f;   // длина звена льда
+
+            Vector2 tip = basePos + dir * length;
+            float half = width * 0.5f + Px;
+            int x0 = (int)Math.Floor((Math.Min(basePos.X, tip.X) - half) / Px), x1 = (int)Math.Ceiling((Math.Max(basePos.X, tip.X) + half) / Px);
+            int y0 = (int)Math.Floor((Math.Min(basePos.Y, tip.Y) - half) / Px), y1 = (int)Math.Ceiling((Math.Max(basePos.Y, tip.Y) + half) / Px);
+            for (int gy = y0; gy <= y1; gy++)
+            {
+                for (int gx = x0; gx <= x1; gx++)
+                {
+                    Vector2 p = new Vector2(gx * Px + Px * 0.5f, gy * Px + Px * 0.5f) - basePos;
+                    float a = Vector2.Dot(p, dir);
+                    if (a < 0f || a > length)
+                        continue;
+                    float t = a / length;
+                    int link = (int)(a / LinkPx);
+                    float jag = 0.8f + 0.2f * Hash(seed + link, 11);
+                    float halfW = width * 0.5f * (float)Math.Pow(1f - t, 0.8f) * jag;
+                    float c = Math.Abs(Vector2.Dot(p, normal));
+                    if (c > halfW)
+                        continue;
+                    float v = halfW > 0.5f ? c / halfW : 0f;
+                    Color col = v < 0.35f ? Color.Lerp(Ice, Pale, v / 0.35f)
+                              : Color.Lerp(Pale, Sky, (v - 0.35f) / 0.65f);
+                    if (halfW - c < Px)
+                        col = Steel;                             // жёсткая кромка
+                    if (a - link * LinkPx < Px && link > 0)
+                        col = Color.Lerp(col, White, 0.7f);      // шов между звеньями
+                    if (t > 0.85f)
+                        col = White;                             // кончик
+                    // к кончику тает ступенями
+                    float fade = (float)Math.Ceiling((1f - t * 0.6f) * FadeSteps) / FadeSteps * alphaStep;
+                    // EntitySpriteDraw: шип рисуется и из слоя игрока (heldProj)
+                    Main.EntitySpriteDraw(pixel, new Vector2(gx * Px, gy * Px) - Main.screenPosition, one,
+                        col * fade, 0f, Vector2.Zero, size, SpriteEffects.None, 0f);
+                }
+            }
+        }
+
         // Пик взмаха: от толщи плиты у головы отваливаются куски льда —
         // крупная ванильная крошка, падает вниз
         public static void PeakCrumble(Vector2 center, float angle, float radius)
