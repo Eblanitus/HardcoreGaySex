@@ -512,10 +512,10 @@ namespace FrostMelee.Content.Projectiles
             float speed = MathHelper.Clamp(player.velocity.Length() / Content.Weapons.NorthPoleBalance.GustFullSpeed, 0f, 1f);
             Vector2 dir = SpearDir;
             Vector2 tip = Projectile.Center + dir * (geo.Length * 0.5f);
-            NorthPoleFx.Palette(out Color core, out Color tail, out Color edge, Projectile.whoAmI);
+            NorthPoleFx.Palette(out _, out Color tail, out Color edge, Projectile.whoAmI);
             float pulse = 0.85f + 0.15f * (float)Math.Sin(Main.GameUpdateCount * 0.25f);
             NorthPoleFx.Bloom(tip, 30f + 50f * speed, NorthPoleFx.Add(edge, (0.2f + 0.35f * speed) * pulse));
-            NorthPoleFx.Sparkle(tip, 18f + 46f * speed, dir.ToRotation(), 2, NorthPoleFx.Add(tail, 0.5f + 0.5f * speed), NorthPoleFx.Add(core, 0.7f + 0.3f * speed));
+            // the tip star is gone (owner 03.11.2026: "убери звезду во время разбега")
             if (speed > 0.15f)
             {
                 Vector2 normal = new Vector2(-dir.Y, dir.X);
