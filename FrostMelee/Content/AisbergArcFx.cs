@@ -34,10 +34,7 @@ namespace FrostMelee.Content
         private const int TexW = 96;              // клеток рисунка вдоль (повтор)
         private const int TexH = 28;              // клеток поперёк
         private const int Cells = 18;             // ячеек льда на повтор
-        private const float SlabWidth = 0.62f;    // ширина плиты у головы: доля радиуса
-        private const float SlabWidthTail = 0.3f; // на хвосте
         private const int FadeSteps = 4;          // ступеней прозрачности к хвосту
-        private const float TailTaper = 0.4f;     // на какой доле длины хвост сужается в острие
         private const float GlintSpeed = 0.06f;   // бег блика: доли длины за тик
         private const float GlintWidth = 0.14f;
 
@@ -119,9 +116,12 @@ namespace FrostMelee.Content
             return data;
         }
 
-        // angles/rOut — путь острия от головы (0) к хвосту вокруг center (кисть).
+        // Форма (angles, rOut, rIn) — общий движок дуги мечей (BuildBladeShape в
+        // SwordArcProjectile, тот же, что у Фростбранда): путь острия от головы
+        // (0) к хвосту вокруг center (кисть), внешний и внутренний край. Здесь
+        // только рисунок плиты внутри этой формы.
         // env — огибающая взмаха, time — тики взмаха, seed — сдвиг рисунка
-        public static void Draw(float[] angles, float[] rOut, int n, Vector2 center, float env, float time, int seed)
+        public static void Draw(float[] angles, float[] rOut, float[] rIn, int n, Vector2 center, float env, float time, int seed)
         {
             if (n < 2 || env <= 0.02f || n > rel.Length)
                 return;
@@ -174,12 +174,8 @@ namespace FrostMelee.Content
                     float k = MathHelper.Clamp((d - rel[i - 1]) / seg, 0f, 1f);
                     float t = ((i - 1) + k) / (n - 1);
                     float ro = MathHelper.Lerp(rOut[i - 1], rOut[i], k);
-                    // К концу хвоста плита сужается в острие: внутренний край
-                    // поднимается к внешнему. Раньше хвост обрывался на полной
-                    // ширине — история клинка кончалась, и плита срезалась
-                    // прямым радиальным краем (владелец: «обрезана насильно»)
-                    float taper = MathHelper.Clamp((1f - t) / TailTaper, 0f, 1f);
-                    float width = ro * MathHelper.Lerp(SlabWidth, SlabWidthTail, t) * taper;
+                    float ri = MathHelper.Lerp(rIn[i - 1], rIn[i], k);
+                    float width = Math.Max(1f, ro - ri);
                     if (r > ro || r < ro - width)
                         continue;
 
@@ -192,12 +188,7 @@ namespace FrostMelee.Content
                         continue;
 
                     // прозрачность ступенями: плотно у головы, тает к хвосту
-                    // floor, а не ceil: последняя ступень доходит до нуля раньше
-                    // конца пути, кончик тает, а не стоит видимой ступенью
-                    float fade = (float)Math.Floor((1f - t) * (FadeSteps + 1)) / FadeSteps * envStep;
-                    if (fade <= 0f)
-                        continue;
-                    fade = Math.Min(fade, envStep);
+                    float fade = (float)Math.Ceiling((1f - t) * FadeSteps) / FadeSteps * envStep;
                     // самый край у головы — белый
                     if (ty <= 1 && t < 0.2f)
                         c = White;

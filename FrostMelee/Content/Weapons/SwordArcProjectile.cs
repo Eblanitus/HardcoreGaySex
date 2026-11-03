@@ -448,18 +448,10 @@ namespace FrostMelee.Content.Weapons
             // (Беда прежней линии была в формульном радиусе хитбокса из центра
             // тела — она и висела отдельной дугой. Фон мазками и второй лентой
             // владелец забраковал: слипались с лентой в один сноп.)
-            if (full > 0.02f && fbHasBlade && fbHistCount >= 1) {
-                int dir = Projectile.ai[0] >= 0f ? 1 : -1;
-                float sectorRot = fbHistAngle[0] - dir * IceArcFx.HeadAngle;
-                float sectorScale = fbHistRadius[0] * FlameSectorOuter / LineTexOuter;
-                Rectangle body = texture.Frame(1, 4, 0, 0);
-                Vector2 sectorOrigin = body.Size() / 2f;
-                Vector2 sectorPos = fbHand - Main.screenPosition;
+            if (full > 0.02f) {
                 Color deep = Color.Lerp(FlameEdge, FlameTail, 0.3f);
-                Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(deep, FlameSectorAlpha * flameEnv),
-                    sectorRot, sectorOrigin, sectorScale, fx, 0f);
-                Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(Color.Lerp(deep, FlameTail, 0.45f), FlameSectorAlpha2 * flameEnv),
-                    sectorRot, sectorOrigin, sectorScale * 0.97f, fx, 0f);
+                DrawBladeSector(texture, fx, deep, Color.Lerp(deep, FlameTail, 0.45f),
+                    FlameSectorAlpha * flameEnv, FlameSectorAlpha2 * flameEnv);
             }
 
             Texture2D glow = TextureAssets.Extra[ExtrasID.ThePerfectGlow].Value;
@@ -468,48 +460,8 @@ namespace FrostMelee.Content.Weapons
             // Фаза мерцания и бега штрихов: минутный цикл (штрихи сдвигаются на
             // целое число повторов текстуры — стык цикла не виден)
             float gt = Main.GameUpdateCount % 3600;
-            // Лента — по записанному пути настоящего клинка вокруг кисти
-            // (fbHist*): голова ровно на острие, тело — где клинок правда был.
-            // Внешний край чуть дышит языками: радиус дрожит, к хвосту сильнее.
-            // Запасной путь (первый тик, записи ещё нет) — формульная история
-            Vector2 center;
-            int n = 0;
-            if (fbHasBlade && fbHistCount >= 2) {
-                center = fbHand;
-                float headA = fbHistAngle[0];
-                int cap = Math.Min(fbHistCount, FlameTrailTicks);
-                for (int i = 0; i < cap; i++) {
-                    if (i > 0 && Math.Abs(fbHistAngle[i] - headA) > TrailMaxAngle)
-                        break;
-                    float t = i / (float)Math.Max(1, cap - 1);
-                    // Форма НЕлинейная (решение владельца): не полоска ровной
-                    // толщины по кругу, а язык пламени. Утолщение к середине
-                    // взмаха и схождение к краям (bulge: 0 у острия и на хвосте,
-                    // 1 в середине), середина чуть выпячена наружу, а внешний
-                    // край идёт волнами — крупная медленная волна по длине плюс
-                    // мелкая дрожь, к хвосту сильнее. Углы по-прежнему честные
-                    // с клинка — гуляют только радиус и толщина
-                    float bulge = (float)Math.Sin(Math.PI * Math.Pow(t, 0.85f));
-                    float wave = (float)Math.Sin(gt * 1.35f + t * 9f) * 0.05f
-                               + (float)Math.Sin(gt * 2.6f + i * 1.15f) * 0.03f;
-                    float flick = 1f + full * wave * (0.3f + 0.7f * t) + 0.06f * bulge - 0.04f * t * t;
-                    fbAngles[i] = fbHistAngle[i];
-                    fbROut[i] = fbHistRadius[i] * flick;
-                    // Толщина языка (1 − внутренний радиус) — по ядрёности:
-                    // больше настройка — физически толще лента пламени
-                    float innerFrac = 1f - (1f - MathHelper.Lerp(0.68f, 0.34f, bulge)) * fireSize;
-                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * innerFrac);
-                    n++;
-                }
-            } else {
-                center = player.RotatedRelativePoint(player.MountedCenter);
-                n = BuildTrailHistory(player, fbAngles, fbROut, fbRIn);
-                float outerNow = ArcLineRadius(Projectile.localAI[0]);
-                for (int i = 0; i < n; i++) {
-                    fbROut[i] = outerNow;
-                    fbRIn[i] = Math.Max(BladeReach * 0.2f, fbROut[i] * (1f - (1f - FlameInnerFrac) * fireSize));
-                }
-            }
+            // Форма ленты — общий движок дуги (BuildBladeShape), им же строится дуга Айсберга
+            int n = BuildBladeShape(player, fbAngles, fbROut, fbRIn, out Vector2 center, full, fireSize, gt);
             if (n < 2)
                 return;
 
@@ -572,6 +524,78 @@ namespace FrostMelee.Content.Weapons
                 IceArcFx.DrawSparkle(glow, tip, PeakStarSize * peak * fireSize, head + MathHelper.PiOver4, 2,
                     IceArcFx.Additive(Color.Lerp(FlameTail, FlameCore, 0.5f), peak * 0.9f), IceArcFx.Additive(FlameCore, peak));
             }
+        }
+
+        // Фоновый веер-сектор по клинку (общий для Фростбранда и Айсберга): тело
+        // ванильной дуги (кадр 0) двумя тихими копиями. Центр — кисть, голова
+        // сектора — записанный угол клинка, внешний радиус — длина клинка.
+        // Сектор — готовый ванильный серп: с первого тика удара он целый, не
+        // зависит от длины записанного пути
+        private void DrawBladeSector(Texture2D texture, SpriteEffects fx, Color deep, Color light, float alpha, float alpha2) {
+            if (!fbHasBlade || fbHistCount < 1 || alpha <= 0.005f)
+                return;
+            int dir = Projectile.ai[0] >= 0f ? 1 : -1;
+            float sectorRot = fbHistAngle[0] - dir * IceArcFx.HeadAngle;
+            float sectorScale = fbHistRadius[0] * FlameSectorOuter / LineTexOuter;
+            Rectangle body = texture.Frame(1, 4, 0, 0);
+            Vector2 sectorOrigin = body.Size() / 2f;
+            Vector2 sectorPos = fbHand - Main.screenPosition;
+            Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(deep, alpha),
+                sectorRot, sectorOrigin, sectorScale, fx, 0f);
+            Main.EntitySpriteDraw(texture, sectorPos, body, IceArcFx.Additive(light, alpha2),
+                sectorRot, sectorOrigin, sectorScale * 0.97f, fx, 0f);
+        }
+
+        // === Общий движок формы дуги по взмаху (Фростбранд, Айсберг) ===
+        // Путь — запись настоящего клинка вокруг кисти (fbHist*), FlameTrailTicks
+        // тиков. Ширина — язык: 0 у острия и на хвосте, толще к середине (bulge),
+        // поэтому и в начале удара, пока путь короткий, дуга — узкий серп, а не
+        // веер. wobble — дрожь внешнего края (пламя; лёд 0), thick — множитель
+        // толщины. Нет записи (первый тик) — формульная история вокруг тела.
+        private int BuildBladeShape(Player player, float[] angles, float[] rOut, float[] rIn, out Vector2 center,
+            float wobble, float thick, float gt) {
+            // Лента — по записанному пути настоящего клинка вокруг кисти
+            // (fbHist*): голова ровно на острие, тело — где клинок правда был.
+            // Внешний край чуть дышит языками: радиус дрожит, к хвосту сильнее.
+            // Запасной путь (первый тик, записи ещё нет) — формульная история
+            int n = 0;
+            if (fbHasBlade && fbHistCount >= 2) {
+                center = fbHand;
+                float headA = fbHistAngle[0];
+                int cap = Math.Min(fbHistCount, FlameTrailTicks);
+                for (int i = 0; i < cap; i++) {
+                    if (i > 0 && Math.Abs(fbHistAngle[i] - headA) > TrailMaxAngle)
+                        break;
+                    float t = i / (float)Math.Max(1, cap - 1);
+                    // Форма НЕлинейная (решение владельца): не полоска ровной
+                    // толщины по кругу, а язык пламени. Утолщение к середине
+                    // взмаха и схождение к краям (bulge: 0 у острия и на хвосте,
+                    // 1 в середине), середина чуть выпячена наружу, а внешний
+                    // край идёт волнами — крупная медленная волна по длине плюс
+                    // мелкая дрожь, к хвосту сильнее. Углы по-прежнему честные
+                    // с клинка — гуляют только радиус и толщина
+                    float bulge = (float)Math.Sin(Math.PI * Math.Pow(t, 0.85f));
+                    float wave = (float)Math.Sin(gt * 1.35f + t * 9f) * 0.05f
+                               + (float)Math.Sin(gt * 2.6f + i * 1.15f) * 0.03f;
+                    float flick = 1f + wobble * wave * (0.3f + 0.7f * t) + 0.06f * bulge - 0.04f * t * t;
+                    angles[i] = fbHistAngle[i];
+                    rOut[i] = fbHistRadius[i] * flick;
+                    // Толщина языка (1 − внутренний радиус) — по ядрёности:
+                    // больше настройка — физически толще лента пламени
+                    float innerFrac = 1f - (1f - MathHelper.Lerp(0.68f, 0.34f, bulge)) * thick;
+                    rIn[i] = Math.Max(BladeReach * 0.2f, rOut[i] * innerFrac);
+                    n++;
+                }
+            } else {
+                center = player.RotatedRelativePoint(player.MountedCenter);
+                n = BuildTrailHistory(player, angles, rOut, rIn);
+                float outerNow = ArcLineRadius(Projectile.localAI[0]);
+                for (int i = 0; i < n; i++) {
+                    rOut[i] = outerNow;
+                    rIn[i] = Math.Max(BladeReach * 0.2f, rOut[i] * (1f - (1f - FlameInnerFrac) * thick));
+                }
+            }
+            return n;
         }
 
         // Точка на ленте Фростбранда: t — доля вдоль (0 голова, 1 хвост), radius — доля внешнего радиуса
@@ -819,8 +843,8 @@ namespace FrostMelee.Content.Weapons
         // на все точки ленты. Лента ложится на настоящий путь острия вокруг
         // кисти и заканчивается там, где клинок реально был, — та же форма
         // дуги, что у Фростбранда, а не формульный веер вокруг центра тела
-        private int BuildRecordedHistory(float[] angles, float[] rOut, float[] rIn, int maxTicks = (int)TrailTicks) {
-            int cap = Math.Min(fbHistCount, maxTicks);
+        private int BuildRecordedHistory(float[] angles, float[] rOut, float[] rIn) {
+            int cap = Math.Min(fbHistCount, (int)TrailTicks);
             if (cap < 2)
                 return 0;
             int n = 0;
@@ -928,9 +952,9 @@ namespace FrostMelee.Content.Weapons
         // по записанному пути настоящего клинка (fbHist*, как у Фростбранда)
         // рисуется «ледяная плита» — AisbergArcFx. В AI — запись клинка,
         // свет по верхушке и крошка с подводной массы на пике взмаха.
-        private static readonly float[] aisAngles = new float[KeenPoints];
-        private static readonly float[] aisROut = new float[KeenPoints];
-        private static readonly float[] aisRIn = new float[KeenPoints];
+        private static readonly float[] aisAngles = new float[FlamePoints];
+        private static readonly float[] aisROut = new float[FlamePoints];
+        private static readonly float[] aisRIn = new float[FlamePoints];
 
         private void UpdateAisbergFx(Player player, float maxAnim) {
             RecordFlameBlade(player);
@@ -942,22 +966,21 @@ namespace FrostMelee.Content.Weapons
                 AisbergArcFx.PeakCrumble(fbHand, fbHistAngle[0], fbHistRadius[0]);
         }
 
-        private void DrawAisbergArc(Player player, float maxAnim) {
+        private void DrawAisbergArc(Player player, Texture2D texture, SpriteEffects fx, float maxAnim) {
             if (Main.dedServ)
                 return;
             float env = SwingEnv(Projectile.localAI[0], maxAnim);
-            bool rec = fbHasBlade && fbHistCount >= 2;
-            // Вся записанная история взмаха (до FlamePoints тиков), а не 14 тиков,
-            // как у ленты Ice Blade: иначе начало взмаха отрезалось, и плита
-            // начиналась с прямого среза посреди пути клинка (замечание владельца)
-            int n = rec ? BuildRecordedHistory(aisAngles, aisROut, aisRIn, FlamePoints)
-                        : BuildTrailHistory(player, aisAngles, aisROut, aisRIn);
+            // Форма — тем же движком, что у Фростбранда (BuildBladeShape): путь
+            // клинка вокруг кисти, серп, сходящийся к острию и к хвосту. Ледяной
+            // край не дрожит (wobble 0). Своё у Айсберга — только рисунок плиты
+            // Под плитой — тот же фоновый ванильный сектор, что у Фростбранда,
+            // в светлой гамме глыбы
+            DrawBladeSector(texture, fx, AisbergArcFx.Steel, AisbergArcFx.Pale,
+                FlameSectorAlpha * env, FlameSectorAlpha2 * env);
+            int n = BuildBladeShape(player, aisAngles, aisROut, aisRIn, out Vector2 center, 0f, 1f, 0f);
             if (n < 2)
                 return;
-            // Центр — живая кисть, как у ленты Ice Blade (см. DrawHone)
-            Vector2 center = rec ? player.itemLocation : player.RotatedRelativePoint(player.MountedCenter);
-            // Пиксели мира 2x2 прямо в открытый батч (AisbergArcFx)
-            AisbergArcFx.Draw(aisAngles, aisROut, n, center, env, Projectile.localAI[0], Projectile.identity);
+            AisbergArcFx.Draw(aisAngles, aisROut, aisRIn, n, center, env, Projectile.localAI[0], Projectile.identity);
         }
 
         // Дуга праздничных мечей (подкласс FestiveSwords): чистый шаблон без
@@ -1210,7 +1233,7 @@ namespace FrostMelee.Content.Weapons
             Player owner = Main.player[Projectile.owner];
             // Айсберг: своя дуга «ледяная плита» (AisbergArcFx)
             if (IsAisberg(owner)) {
-                DrawAisbergArc(owner, maxAnim);
+                DrawAisbergArc(owner, texture, spriteEffects, maxAnim);
                 return false;
             }
             if (IsIceBlade(owner)) {
