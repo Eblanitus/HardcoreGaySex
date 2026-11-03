@@ -11,8 +11,8 @@ namespace FrostMelee.Content
     // Владелец (03.11.2026): гладкие полосы и кольца выглядят как векторная
     // графика, а не ваниль. Поэтому плита не рисуется полигонами: зона дуги
     // проходится по сетке мира с шагом 2 px (как пиксели спрайтов мода),
-    // и каждая клетка — один квадрат 2x2 своего цвета. Края ступенчатые,
-    // прозрачность ступенями (FadeSteps), без сглаживания.
+    // и каждая клетка — один квадрат 2x2 своего цвета.
+    // края ступенчатые по сетке, прозрачность по длине плавная.
     //
     // Рисунок плиты — ячейки льда с белыми трещинами (Вороной, по длине
     // бесшовно), белая кромка снаружи, к центру светлый лёд и рваный
@@ -34,7 +34,6 @@ namespace FrostMelee.Content
         private const int TexW = 96;              // клеток рисунка вдоль (повтор)
         private const int TexH = 28;              // клеток поперёк
         private const int Cells = 18;             // ячеек льда на повтор
-        private const int FadeSteps = 4;          // ступеней прозрачности к хвосту
         private const float GlintSpeed = 0.06f;   // бег блика: доли длины за тик
         private const float GlintWidth = 0.14f;
 
@@ -63,7 +62,7 @@ namespace FrostMelee.Content
             for (int i = 0; i < Cells; i++)
             {
                 seeds[i] = new Vector2((i + Hash(i, 1) * 0.8f) * TexW / Cells, Hash(i, 2) * TexH);
-                depth[i] = 0.62f + 0.38f * Hash(i, 3);
+                depth[i] = 0.84f + 0.16f * Hash(i, 3);
                 shade[i] = Hash(i, 4);
             }
             Color[] data = new Color[TexW * TexH];
@@ -148,7 +147,6 @@ namespace FrostMelee.Content
 
             float u0 = Hash(seed, 9) * TexW;
             float glint = (time * GlintSpeed) % 1.4f - 0.2f;
-            float envStep = (float)Math.Ceiling(env * FadeSteps) / FadeSteps;
             Rectangle one = new Rectangle(0, 0, 1, 1);
             Vector2 size = new Vector2(Px);
 
@@ -187,8 +185,11 @@ namespace FrostMelee.Content
                     if (c.A == 0)
                         continue;
 
-                    // прозрачность ступенями: плотно у головы, тает к хвосту
-                    float fade = (float)Math.Ceiling((1f - t) * FadeSteps) / FadeSteps * envStep;
+                    // прозрачность плавно: плотно у головы, тает к хвосту. Ступени
+                    // по длине давали радиальные границы — дуга читалась секторами
+                    float fade = env * (float)Math.Pow(1f - t, 1.4f);
+                    if (fade < 0.03f)
+                        continue;
                     // самый край у головы — белый
                     if (ty <= 1 && t < 0.2f)
                         c = White;
@@ -201,13 +202,36 @@ namespace FrostMelee.Content
             }
         }
 
-        // Ледяной шип за остриём (тычок и встреча, AisbergReach): тем же
-        // пикселем мира 2x2 и той же светлой гаммой, что плита дуги. От
-        // basePos (остриё клинка) вдоль dir на length, у основания ширина
-        // width, к кончику сходится. Гранёный: по длине звенья льда со
-        // своей шириной и белыми швами между ними. Хитбокс шипа — отрезок
-        // basePos → basePos + dir * length толщиной width, ровно этот рисунок.
-        public static void DrawSpike(Vector2 basePos, Vector2 dir, float length, float width, float alpha, int seed)
+        // Ледяной шип за остриём (тычок и встреча, AisbergReach) — продолжение
+        // клинка: тот же пиксель 2x2, те же цвета и то же сечение, что у
+        // кончика Iceberg.png (снято с его пикселей): с одной стороны тёмная
+        // бирюзовая кромка, бирюза, голубое ядро, белый блик, с другой синяя
+        // кромка; самый кончик синий, как у спрайта. Начинается внутри кончика
+        // клинка той же ширины, чуть раздаётся гранью и сходится в остриё.
+        // Освещение мира учитывается, как у спрайта меча.
+        // Хитбокс шипа — отрезок basePos → basePos + dir * length толщиной
+        // SpikeMaxWidth: ровно этот рисунок.
+        private static readonly Color BladeDark = new Color(2, 95, 115);
+        private static readonly Color BladeTeal = new Color(3, 173, 192);
+        private static readonly Color BladeBlue = new Color(23, 94, 175);
+        private static readonly Color BladeWhite = new Color(244, 241, 255);
+
+        public const float SpikeBaseHalf = 4.5f;   // полуширина у основания: кончик клинка Iceberg.png (~9 px)
+        public const float SpikeBulge = 1.2f;      // раздача грани к SpikeBulgeAt длины
+        public const float SpikeBulgeAt = 0.2f;
+        public static float SpikeMaxWidth => SpikeBaseHalf * SpikeBulge * 2f;
+
+        public static float SpikeHalfWidth(float t)
+        {
+            if (t <= SpikeBulgeAt)
+                return SpikeBaseHalf * MathHelper.Lerp(1f, SpikeBulge, (float)Math.Sqrt(t / SpikeBulgeAt));
+            float k = (t - SpikeBulgeAt) / (1f - SpikeBulgeAt);
+            return SpikeBaseHalf * SpikeBulge * (float)Math.Pow(1f - k, 0.75f);
+        }
+
+        // flipped — спрайт меча зеркален (игрок смотрит влево): белый блик
+        // клинка тогда по другую сторону оси
+        public static void DrawSpike(Vector2 basePos, Vector2 dir, float length, float alpha, bool flipped)
         {
             if (Main.dedServ || length < 2f || alpha <= 0.02f)
                 return;
@@ -216,13 +240,12 @@ namespace FrostMelee.Content
                 return;
             dir = dir.SafeNormalize(Vector2.UnitX);
             Vector2 normal = new Vector2(-dir.Y, dir.X);
-            float alphaStep = (float)Math.Ceiling(alpha * FadeSteps) / FadeSteps;
+            float whiteSide = flipped ? -1f : 1f;
             Rectangle one = new Rectangle(0, 0, 1, 1);
             Vector2 size = new Vector2(Px);
-            const float LinkPx = 12f;   // длина звена льда
 
             Vector2 tip = basePos + dir * length;
-            float half = width * 0.5f + Px;
+            float half = SpikeMaxWidth * 0.5f + Px;
             int x0 = (int)Math.Floor((Math.Min(basePos.X, tip.X) - half) / Px), x1 = (int)Math.Ceiling((Math.Max(basePos.X, tip.X) + half) / Px);
             int y0 = (int)Math.Floor((Math.Min(basePos.Y, tip.Y) - half) / Px), y1 = (int)Math.Ceiling((Math.Max(basePos.Y, tip.Y) + half) / Px);
             for (int gy = y0; gy <= y1; gy++)
@@ -234,23 +257,26 @@ namespace FrostMelee.Content
                     if (a < 0f || a > length)
                         continue;
                     float t = a / length;
-                    int link = (int)(a / LinkPx);
-                    float jag = 0.8f + 0.2f * Hash(seed + link, 11);
-                    float halfW = width * 0.5f * (float)Math.Pow(1f - t, 0.8f) * jag;
-                    float c = Math.Abs(Vector2.Dot(p, normal));
-                    if (c > halfW)
+                    float halfW = Math.Max(SpikeHalfWidth(t), Px * 0.5f);
+                    float c = Vector2.Dot(p, normal) * whiteSide;   // > 0 — сторона белого блика
+                    if (Math.Abs(c) > halfW)
                         continue;
-                    float v = halfW > 0.5f ? c / halfW : 0f;
-                    Color col = v < 0.35f ? Color.Lerp(Ice, Pale, v / 0.35f)
-                              : Color.Lerp(Pale, Sky, (v - 0.35f) / 0.65f);
-                    if (halfW - c < Px)
-                        col = Steel;                             // жёсткая кромка
-                    if (a - link * LinkPx < Px && link > 0)
-                        col = Color.Lerp(col, White, 0.7f);      // шов между звеньями
-                    if (t > 0.85f)
-                        col = White;                             // кончик
-                    // к кончику тает ступенями
-                    float fade = (float)Math.Ceiling((1f - t * 0.6f) * FadeSteps) / FadeSteps * alphaStep;
+                    float u = c / halfW;                              // -1 тёмная кромка … +1 синяя кромка
+                    Color col;
+                    if (halfW - Math.Abs(c) < Px && halfW > Px * 1.5f)
+                        col = c > 0f ? BladeBlue : BladeDark;         // кромки
+                    else if (u < -0.3f)
+                        col = BladeTeal;
+                    else if (u < 0.35f)
+                        col = Cyan;                                   // ядро
+                    else
+                        col = BladeWhite;                             // блик
+                    if (t > 0.88f)
+                        col = Math.Abs(u) < 0.5f ? BladeTeal : BladeBlue;   // кончик, как у спрайта
+                    Vector2 world = basePos + p;
+                    col = col.MultiplyRGB(Lighting.GetColor((int)(world.X / 16f), (int)(world.Y / 16f)));
+                    // у клинка плотный (стык не виден), к кончику чуть прозрачнее — лёд
+                    float fade = alpha * (1f - 0.3f * t * t);
                     // EntitySpriteDraw: шип рисуется и из слоя игрока (heldProj)
                     Main.EntitySpriteDraw(pixel, new Vector2(gx * Px, gy * Px) - Main.screenPosition, one,
                         col * fade, 0f, Vector2.Zero, size, SpriteEffects.None, 0f);

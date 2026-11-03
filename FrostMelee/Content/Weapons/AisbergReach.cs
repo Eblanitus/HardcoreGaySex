@@ -18,14 +18,14 @@ namespace FrostMelee.Content.Weapons
         public const float Stab = 175f;
         public const float Brace = 175f;
 
-        // Ширина ледяного шипа у острия, px (по ней же толщина хитбокса шипа)
-        public const float SpikeWidth = 14f;
+        // Шип начинается внутри кончика клинка на столько px: без щели между ними
+        public const float SpikeOverlap = 8f;
 
         public static float Scale(Player player) =>
             player.HeldItem.IsAir ? 1f : player.GetAdjustedItemScale(player.HeldItem);
 
-        // Длина шипа за остриём: от кисти до радиуса минус сам клинок
+        // Длина шипа от его основания (SpikeOverlap внутри клинка) до радиуса
         public static float SpikeLength(Player player, float reach, float bladeLength) =>
-            System.Math.Max(0f, reach * Scale(player) - bladeLength);
+            System.Math.Max(0f, reach * Scale(player) - bladeLength) + SpikeOverlap;
     }
 }
