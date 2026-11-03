@@ -5,9 +5,10 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Items
 {
     // Айсберг: тяжёлый пост-Плантерный меч движка мечей.
-    // Приёмы общие (SwordGlobalItem/SwordPlayer), свои механики — глыбы:
+    // Приёмы общие (SwordGlobalItem/SwordPlayer), своя механика — льдины:
     // откалываются только от прямого попадания взмахом и при втыкании броска,
-    // при расколе взрываются и дают Frostbite (AisbergChunk).
+    // ложатся на поле и сами не взрываются. Взмах отбивает их во врагов,
+    // тычок и встреча раскалывают на месте (AisbergChunk).
     public class Aisberg : ModItem
     {
         // Спрайт меча — Iceberg.png (02.11.2026). Старый Aisberg.png не используется.
