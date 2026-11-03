@@ -15,8 +15,9 @@ namespace FrostMelee.Content.Projectiles
     // ai[1] — вариант рисунка 0..2. ai[2] — урон всплеска при расколе.
     //
     // «Льдины»: глыба сама не взрывается. Падая, бьёт врагов собой и
-    // ложится на землю льдиной; полежав, тихо тает. Взорвать её
-    // (AisbergBlast: урон по площади + Frostbite) может только владелец:
+    // отскакивает от них (BounceOffNpcs), потом ложится на землю льдиной;
+    // полежав, тихо тает. Взорвать её (AisbergBlast: урон по площади
+    // + Frostbite) может только владелец:
     // - взмах отбивает льдину от себя, как бильярдный шар (KnockTouched),
     //   отбитая раскалывается о первого врага или о стену;
     // - тычок раскалывает на месте, встреча — с заморозкой поверхности
@@ -33,11 +34,16 @@ namespace FrostMelee.Content.Projectiles
         private const float KnockSpeed = 15f;
         private const float KnockGravity = 0.12f;
         private const int KnockedLifeTicks = 75;
+        private const int MaxBounces = 3;        // отскоков падающей глыбы от врагов
+        private const float BounceKeep = 0.6f;   // доля скорости, что остаётся после отскока
+        private const float BounceMinUp = 3.5f;  // минимальный подскок с головы врага
 
         private bool initialized;
         private bool cracked;
         private bool freezeSurfaceOnCrack;
         private int landedTicks;
+        private int bounces;
+        private int bounceCooldown;
         private float spin;
 
         // ai[0]: 0/1 — падает (обычная/крупная), 2/3 — лежит льдиной,
@@ -59,8 +65,8 @@ namespace FrostMelee.Content.Projectiles
             Projectile.height = 24;
             Projectile.friendly = true;
             Projectile.DamageType = DamageClass.Melee;
-            // Падающая глыба проходит сквозь врагов (кулдаун ниже), отбитая
-            // раскалывается о первого сама (Crack в OnHitNPC)
+            // Падающая глыба отскакивает от врагов сама (BounceOffNpcs), отбитая
+            // раскалывается о первого (Crack в OnHitNPC)
             Projectile.penetrate = -1;
             Projectile.tileCollide = true;
             Projectile.ignoreWater = true;
@@ -107,6 +113,10 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.velocity.Y = Math.Min(Projectile.velocity.Y + Gravity, MaxFall);
                 Projectile.velocity.X *= 0.995f;
                 Projectile.rotation += spin;
+                if (bounceCooldown > 0)
+                    bounceCooldown--;
+                if (Age > GraceTicks)
+                    BounceOffNpcs();
             }
 
             Lighting.AddLight(Projectile.Center, 0.08f, 0.2f, 0.3f);
@@ -115,6 +125,64 @@ namespace FrostMelee.Content.Projectiles
                 Dust d = Dust.NewDustPerfect(Projectile.Center + Main.rand.NextVector2Circular(8f, 8f),
                     DustID.Frost, -Projectile.velocity * 0.08f, 130, default, 0.8f);
                 d.noGravity = true;
+            }
+        }
+
+        // Падающая глыба твёрдая: о врага ударяется и отскакивает, а не
+        // проходит насквозь. Сверху — подпрыгивает вверх и в сторону,
+        // сбоку — отлетает назад. Урон при этом наносит обычный удар
+        // снаряда (кулдаун по цели общий у всех глыб). После MaxBounces
+        // отскоков глыба соскальзывает с врага вбок и падает дальше.
+        private void BounceOffNpcs()
+        {
+            Rectangle box = Projectile.Hitbox;
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC npc = Main.npc[i];
+                if (!npc.active || npc.friendly || npc.dontTakeDamage || npc.lifeMax <= 5)
+                    continue;
+                Rectangle nb = npc.Hitbox;
+                if (!box.Intersects(nb))
+                    continue;
+
+                Vector2 away = Projectile.Center - npc.Center;
+                float side = away.X >= 0f ? 1f : -1f;
+                bool fromAbove = Projectile.Center.Y < nb.Top + nb.Height * 0.35f;
+                // Уже отлетает от этого врага — не отскакиваем повторно. Глыбу
+                // из врага не выталкиваем: удар снаряда считается после AI,
+                // глыба должна ещё касаться цели в этот тик
+                bool closing = fromAbove ? Projectile.velocity.Y > 0f : Projectile.velocity.X * side < 0.5f;
+                if (!closing || bounceCooldown > 0)
+                    continue;
+                if (bounces >= MaxBounces)
+                {
+                    // Хватит прыгать по одному врагу: соскальзывает вбок
+                    Projectile.velocity.X = side * Math.Max(Math.Abs(Projectile.velocity.X), 3.5f);
+                    return;
+                }
+                bounces++;
+                bounceCooldown = 6;
+                if (fromAbove)
+                {
+                    Projectile.velocity.Y = -Math.Max(BounceMinUp, Projectile.velocity.Y * BounceKeep);
+                    Projectile.velocity.X = side * Math.Max(Math.Abs(Projectile.velocity.X) * 0.8f, 1.6f);
+                }
+                else
+                {
+                    Projectile.velocity.X = side * Math.Max(Math.Abs(Projectile.velocity.X) * BounceKeep, 2.5f);
+                    Projectile.velocity.Y = Math.Min(Projectile.velocity.Y, -1.5f);
+                }
+                spin = -spin;
+                Projectile.netUpdate = true;
+                if (!Main.dedServ)
+                {
+                    SoundEngine.PlaySound(SoundID.Item50 with { Volume = 0.45f, Pitch = IsLarge ? -0.4f : 0f },
+                        Projectile.Center);
+                    for (int k = 0; k < 3; k++)
+                        Dust.NewDustPerfect(Projectile.Center, DustID.Ice,
+                            Main.rand.NextVector2Circular(2f, 2f) + new Vector2(0f, -1f), 0, default, 1.1f);
+                }
+                return;
             }
         }
 
@@ -221,9 +289,10 @@ namespace FrostMelee.Content.Projectiles
 
         public override void OnKill(int timeLeft)
         {
-            if (!Main.dedServ)
+            // Раскол рисует взрыв (AisbergBlast.ShatterFx), здесь — только таяние
+            if (!Main.dedServ && !cracked)
             {
-                int dustCount = IsLarge ? 20 : 10;
+                int dustCount = IsLarge ? 8 : 5;
                 for (int i = 0; i < dustCount; i++)
                 {
                     Dust d = Dust.NewDustPerfect(Projectile.Center, Main.rand.NextBool(3) ? DustID.Ice : DustID.Frost,
@@ -236,17 +305,13 @@ namespace FrostMelee.Content.Projectiles
             if (!cracked)
                 return;
 
-            SoundEngine.PlaySound(SoundID.Item27 with { Volume = IsLarge ? 0.8f : 0.5f, Pitch = IsLarge ? -0.2f : 0.15f },
-                Projectile.Center);
-            Lighting.AddLight(Projectile.Center, 0.25f, 0.55f, 0.8f);
-
             if (Projectile.owner != Main.myPlayer)
                 return;
 
             int blastDamage = Projectile.ai[2] > 0f ? (int)Projectile.ai[2] : Math.Max(1, Projectile.damage / 2);
             Projectile.NewProjectile(Projectile.GetSource_FromThis(), Projectile.Center, Vector2.Zero,
                 ModContent.ProjectileType<AisbergBlast>(), blastDamage, Projectile.knockBack,
-                Projectile.owner, BlastRadius);
+                Projectile.owner, BlastRadius, Projectile.frame, Projectile.scale);
 
             if (freezeSurfaceOnCrack)
                 FreezeSurface(Projectile.Center, IsLarge ? 3 : 2);
