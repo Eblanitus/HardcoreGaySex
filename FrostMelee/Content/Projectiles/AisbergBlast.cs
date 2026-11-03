@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -7,8 +6,9 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Projectiles
 {
     // Всплеск ледяной энергии расколовшейся глыбы Айсберга.
-    // Урон по радиусу (ai[0]) и Frostbite — только первые DamageTicks тиков,
-    // дальше снаряд живёт ради вида взрыва (PreDraw → AisbergArcFx.DrawBlast).
+    // Невидимый мгновенный снаряд: урон по радиусу (ai[0]) и Frostbite.
+    // Вид взрыва — только ванильная пыль и куски спрайта глыбы (ShatterFx):
+    // гладкие кольца и лучи владелец назвал «векторной графикой».
     // ai[1] — кадр глыбы, ai[2] — её масштаб: по ним рисуется раскол (ShatterFx).
     // Поджог сырой (FrostFireSystem.Ignite), без запаса языков Фростбранда:
     // у Айсберга запаса нет, от Фростбранда взят только сам взрыв.
@@ -25,19 +25,12 @@ namespace FrostMelee.Content.Projectiles
             Projectile.penetrate = -1;
             Projectile.tileCollide = false;
             Projectile.ignoreWater = true;
-            Projectile.timeLeft = LifeTicks;
+            Projectile.timeLeft = 3;
             // Несколько глыб рядом не складывают взрывы по одной цели пачкой
             Projectile.usesIDStaticNPCImmunity = true;
             Projectile.idStaticNPCHitCooldown = 20;
             Projectile.aiStyle = -1;
         }
-
-        private const int LifeTicks = 22;
-        private const int DamageTicks = 3;
-
-        private int Age => LifeTicks - Projectile.timeLeft;
-
-        public override bool? CanDamage() => Age < DamageTicks ? null : false;
 
         public override void AI()
         {
@@ -85,6 +78,25 @@ namespace FrostMelee.Content.Projectiles
                     dir * radius * Main.rand.NextFloat(0.07f, 0.1f), 0, default, Main.rand.NextFloat(2.2f, large ? 3.2f : 2.7f));
                 d.noGravity = true;
             }
+            // Край зоны урона — кольцо ванильного инея: пыль рождается на
+            // середине радиуса и разлетается до края, видно, докуда бьёт
+            int ring = large ? 18 : 12;
+            for (int i = 0; i < ring; i++)
+            {
+                Vector2 dir = (MathHelper.TwoPi * i / ring).ToRotationVector2();
+                Dust d = Dust.NewDustPerfect(center + dir * radius * 0.5f, DustID.Frost,
+                    dir * radius * 0.05f, 0, default, large ? 1.9f : 1.6f);
+                d.noGravity = true;
+            }
+            // крупная ледяная крошка падает вниз
+            int ice = large ? 10 : 6;
+            for (int i = 0; i < ice; i++)
+            {
+                Dust d = Dust.NewDustPerfect(center, DustID.Ice,
+                    Main.rand.NextVector2Circular(5f, 5f) + new Vector2(0f, -2f), 0, default,
+                    Main.rand.NextFloat(1.3f, 1.8f));
+                d.noGravity = false;
+            }
             Lighting.AddLight(center, 0.6f, 1.1f, 1.4f);
 
             // 4 четверти кадра — горящие куски, разлетаются взрывом
@@ -114,21 +126,6 @@ namespace FrostMelee.Content.Projectiles
             Weapons.FrostFireSystem.Ignite(target);
         }
 
-        public override bool PreDraw(ref Color lightColor)
-        {
-            float radius = System.Math.Max(8f, Projectile.ai[0]);
-            float t = Age / (float)LifeTicks;
-            Main.spriteBatch.End();
-            try
-            {
-                AisbergArcFx.DrawBlast(Main.graphics.GraphicsDevice, Projectile.Center, radius, t, Projectile.identity);
-            }
-            finally
-            {
-                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
-                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
-            }
-            return false;
-        }
+        public override bool PreDraw(ref Color lightColor) => false;
     }
 }
