@@ -12,7 +12,9 @@ namespace FrostMelee.Content.Projectiles
     // владелец перерисует. Лист 32x96: три кадра 32x32 по вертикали.
     //
     // ai[0] — вид: 0 обычная глыба взмаха, 1 крупная глыба броска.
-    // ai[1] — вариант рисунка 0..2. ai[2] — урон всплеска при расколе.
+    // ai[1] — вариант рисунка 0..2 + 3 × (масштаб × 10), если масштаб задан
+    // явно (глыба тычка и встречи, SpawnSingleChunk); 0 — по виду.
+    // ai[2] — урон всплеска при расколе.
     //
     // «Льдины»: глыба сама не взрывается. Падая, бьёт врагов собой и
     // отскакивает от них (BounceOffNpcs), потом ложится на землю льдиной;
@@ -20,8 +22,10 @@ namespace FrostMelee.Content.Projectiles
     // + Frostbite) может только владелец:
     // - взмах отбивает льдину от себя, как бильярдный шар (KnockTouched),
     //   отбитая раскалывается о первого врага или о стену;
-    // - тычок раскалывает на месте, встреча — с заморозкой поверхности
-    //   (CrackTouched).
+    // - тычок и встреча раскалывают на месте (CrackTouched).
+    // Глыбы рождаются от любой атаки: взмах — 3 обычных, тычок — 1 крупная,
+    // встреча — 1, размер и сила от скорости, бросок — 3 крупных.
+    // Лёд на земле оставляют осколки раскола (Dusts/AisbergShard).
     public class AisbergChunk : ModProjectile
     {
         private const int GraceTicks = 8;       // не бьёт сразу из места рождения на враге
@@ -40,7 +44,6 @@ namespace FrostMelee.Content.Projectiles
 
         private bool initialized;
         private bool cracked;
-        private bool freezeSurfaceOnCrack;
         private int landedTicks;
         private int bounces;
         private int bounceCooldown;
@@ -48,10 +51,14 @@ namespace FrostMelee.Content.Projectiles
 
         // ai[0]: 0/1 — падает (обычная/крупная), 2/3 — лежит льдиной,
         // 4/5 — отбита взмахом и летит
-        private bool IsLarge => (int)Projectile.ai[0] % 2 == 1;
+        private bool IsLargeKind => (int)Projectile.ai[0] % 2 == 1;
+        private int SizeCode => Math.Abs((int)Projectile.ai[1]) / 3;
+        private float Size => SizeCode > 0 ? SizeCode / 10f : (IsLargeKind ? LargeScale : SmallScale);
+        private bool IsLarge => Size >= 1.3f;
         private bool Landed => Projectile.ai[0] >= 1.5f && Projectile.ai[0] < 3.5f;
         private bool Knocked => Projectile.ai[0] >= 3.5f;
-        private float BlastRadius => IsLarge ? 130f : 80f;
+        // 80 px у обычной (0.95), ~145 у крупной (1.7), растёт с размером
+        private float BlastRadius => 84f * Size;
         private int Age => (int)Projectile.localAI[0];
 
         public override void SetStaticDefaults()
@@ -84,9 +91,9 @@ namespace FrostMelee.Content.Projectiles
             {
                 initialized = true;
                 Projectile.frame = Math.Abs((int)Projectile.ai[1]) % 3;
-                Projectile.scale = IsLarge ? LargeScale : SmallScale;
+                Projectile.scale = Size;
                 Vector2 center = Projectile.Center;
-                Projectile.width = Projectile.height = IsLarge ? 48 : 24;
+                Projectile.width = Projectile.height = (int)(26f * Size);
                 Projectile.Center = center;
                 spin = (Projectile.whoAmI % 2 == 0 ? 1f : -1f) * (IsLarge ? 0.07f : 0.14f);
             }
@@ -106,7 +113,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.rotation += spin * 2.5f;
                 // Отбитая, но никуда не попавшая — всё равно лопается в конце полёта
                 if (Projectile.owner == Main.myPlayer && Projectile.timeLeft <= 1)
-                    Crack(false);
+                    Crack();
             }
             else
             {
@@ -194,7 +201,7 @@ namespace FrostMelee.Content.Projectiles
             // Отбитая разбивается о стену или пол
             if (Knocked)
             {
-                Crack(false);
+                Crack();
                 return true;
             }
 
@@ -223,7 +230,7 @@ namespace FrostMelee.Content.Projectiles
         public override void OnHitNPC(NPC target, NPC.HitInfo hit, int damageDone)
         {
             if (Knocked)
-                Crack(false);
+                Crack();
         }
 
         // Льдин на поле не больше MaxLying: лишняя старейшая тает
@@ -256,7 +263,7 @@ namespace FrostMelee.Content.Projectiles
             // Чуть вверх: лежащая на полу льдина не должна сразу чиркнуть о него
             dir = Vector2.Normalize(dir + new Vector2(0f, -0.15f));
 
-            Projectile.ai[0] = IsLarge ? 5f : 4f;
+            Projectile.ai[0] = IsLargeKind ? 5f : 4f;
             Projectile.velocity = dir * KnockSpeed;
             Projectile.tileCollide = true;
             Projectile.timeLeft = KnockedLifeTicks;
@@ -278,12 +285,11 @@ namespace FrostMelee.Content.Projectiles
             }
         }
 
-        public void Crack(bool freezeSurface)
+        public void Crack()
         {
             if (cracked || !Projectile.active)
                 return;
             cracked = true;
-            freezeSurfaceOnCrack |= freezeSurface;
             Projectile.Kill();
         }
 
@@ -313,13 +319,11 @@ namespace FrostMelee.Content.Projectiles
                 ModContent.ProjectileType<AisbergBlast>(), blastDamage, Projectile.knockBack,
                 Projectile.owner, BlastRadius, Projectile.frame, Projectile.scale);
 
-            if (freezeSurfaceOnCrack)
-                FreezeSurface(Projectile.Center, IsLarge ? 3 : 2);
         }
 
         // Заморозить поверхность под местом раскола своей глазурью
         // (IceSheetSystem: та же дорожка, что у скольжения и волны).
-        private static void FreezeSurface(Vector2 center, int radiusTiles)
+        public static void FreezeSurface(Vector2 center, int radiusTiles)
         {
             if (Main.dedServ)
                 return;
@@ -340,7 +344,7 @@ namespace FrostMelee.Content.Projectiles
 
         // Расколоть свои глыбы, которых коснулся клинок приёма владельца.
         // overlaps — проверка хитбокса самого приёма (тычка или встречи).
-        public static void CrackTouched(Projectile blade, Func<Rectangle, bool> overlaps, bool freezeSurface)
+        public static void CrackTouched(Projectile blade, Func<Rectangle, bool> overlaps)
         {
             if (blade == null || blade.owner != Main.myPlayer)
                 return;
@@ -350,8 +354,10 @@ namespace FrostMelee.Content.Projectiles
                 Projectile p = Main.projectile[i];
                 if (!p.active || p.type != type || p.owner != blade.owner)
                     continue;
-                if (p.ModProjectile is AisbergChunk chunk && !chunk.cracked && overlaps(p.Hitbox))
-                    chunk.Crack(freezeSurface);
+                // Только что рождённую этим же ударом глыбу не колем сразу
+                if (p.ModProjectile is AisbergChunk chunk && !chunk.cracked && chunk.Age > GraceTicks
+                    && overlaps(p.Hitbox))
+                    chunk.Crack();
             }
         }
 
@@ -396,6 +402,23 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.NewProjectile(source, pos, vel, type, impact, knockback * 0.4f,
                     owner.whoAmI, 0f, Main.rand.Next(3), blast);
             }
+        }
+
+        // Тычок и встреча попали по врагу: одна глыба над целью. size — масштаб
+        // (0.95 обычная, 1.7 крупная), impactMult/blastMult — доли урона меча.
+        public static void SpawnSingleChunk(Player owner, IEntitySource source, Vector2 at, int swordDamage,
+            float knockback, float size, float impactMult, float blastMult)
+        {
+            if (owner.whoAmI != Main.myPlayer)
+                return;
+            int impact = Math.Max(1, (int)(swordDamage * impactMult));
+            int blast = Math.Max(1, (int)(swordDamage * blastMult));
+            int sizeCode = (int)Math.Round(MathHelper.Clamp(size, 0.5f, 3f) * 10f);
+            Vector2 pos = at + new Vector2(0f, -22f - 8f * size);
+            Vector2 vel = new Vector2(owner.direction * (1f + Main.rand.NextFloat(0.8f)), -5f - Main.rand.NextFloat(1.5f))
+                + owner.velocity * 0.3f;
+            Projectile.NewProjectile(source, pos, vel, ModContent.ProjectileType<AisbergChunk>(), impact,
+                knockback * 0.5f, owner.whoAmI, size >= 1.3f ? 1f : 0f, Main.rand.Next(3) + 3 * sizeCode, blast);
         }
 
         // Бросок воткнулся: крупные глыбы из места втыкания.

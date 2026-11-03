@@ -12,7 +12,12 @@ namespace FrostMelee.Content.Dusts
     // у глыбы, поэтому раскол читается как настоящий: глыба развалилась на
     // части, а не превратилась в облако частиц. Только визуал, урона нет.
     //
-    // dust.customData — float[] { вращение за тик, отскоков осталось }.
+    // Горящий кусок (burning) тянет за собой ледяной огонь (LooseBurnDust)
+    // и при первом касании земли замораживает её (лёд на земле — от
+    // осколков раскола, IceSheetSystem через AisbergChunk.FreezeSurface).
+    //
+    // dust.customData — float[] { вращение за тик, отскоков осталось,
+    // горит (1/0), уже заморозил землю (1/0) }.
     public class AisbergShard : ModDust
     {
         public override string Texture => "FrostMelee/Content/Projectiles/AisbergChunk";
@@ -29,7 +34,7 @@ namespace FrostMelee.Content.Dusts
         }
 
         // Спавн куска: frame — прямоугольник в листе AisbergChunk
-        public static void Spawn(Vector2 at, Vector2 velocity, Rectangle frame, float scale)
+        public static void Spawn(Vector2 at, Vector2 velocity, Rectangle frame, float scale, bool burning)
         {
             if (Main.dedServ)
                 return;
@@ -41,7 +46,7 @@ namespace FrostMelee.Content.Dusts
             d.scale = scale;
             d.rotation = Main.rand.NextFloat(MathHelper.TwoPi);
             d.fadeIn = 0f;
-            d.customData = new float[] { Main.rand.NextFloat(-0.25f, 0.25f), 1f };
+            d.customData = new float[] { Main.rand.NextFloat(-0.25f, 0.25f), 1f, burning ? 1f : 0f, 0f };
         }
 
         public override bool Update(Dust dust)
@@ -57,6 +62,12 @@ namespace FrostMelee.Content.Dusts
                 (int)size.X, (int)size.Y, true, true);
             if (next.Y != dust.velocity.Y && dust.velocity.Y > 0f)
             {
+                // Первое касание земли горящим куском — лёд на поверхности
+                if (data != null && data[2] > 0f && data[3] == 0f)
+                {
+                    data[3] = 1f;
+                    Projectiles.AisbergChunk.FreezeSurface(dust.position, dust.scale > 1.2f ? 2 : 1);
+                }
                 if (data != null && data[1] > 0f)
                 {
                     data[1]--;
@@ -77,6 +88,11 @@ namespace FrostMelee.Content.Dusts
             dust.position += dust.velocity;
             if (data != null)
                 dust.rotation += data[0];
+
+            // Горящий кусок: хвост ледяного огня, пока летит
+            if (data != null && data[2] > 0f && (int)dust.fadeIn % 3 == 0 && dust.fadeIn < LifeTicks - FadeTicks)
+                Projectiles.FrostJetFx.LooseBurnDust(dust.position, -dust.velocity * 0.15f + new Vector2(0f, -0.6f),
+                    dust.dustIndex, 1.3f + 0.4f * dust.scale);
 
             int left = LifeTicks - (int)dust.fadeIn;
             if (left < FadeTicks)
