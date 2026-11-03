@@ -335,6 +335,7 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         # no star on the tip while running (owner 03.11.2026)
         self.assertIn('NorthPoleBalance.GustFullSpeed', brace)
         self.assertNotIn('NorthPoleFx.Sparkle(tip', brace)
+        self.assertNotIn('NorthPoleFx.Bloom(tip', brace)   # no diamond glow either
 
     def test_owner_feedback_round_02_11_e_vanilla_particles(self):
         # owner 02.11.2026: the smooth pixel particle streams read as "Noita"; everything uses
