@@ -8,29 +8,32 @@ namespace FrostMelee.Content
 {
     // Дуга Айсберга — «ледяная плита». Не тонкая лента, а широкий пласт льда
     // по пути клинка: процедурная текстура граней (ячейки льда с трещинами,
-    // пиксель 2x2, без мягких градиентов), яркий внешний край, глубокая
-    // тёмная толща к центру и рваный сколотый внутренний край. По граням
+    // пиксель 2x2, без мягких градиентов), белый внешний край, к центру —
+    // светло-голубой лёд и рваный сколотый внутренний край. По граням
     // бежит блик — свет скользит по льду от острия к хвосту.
     //
     // Слои (по записанному пути клинка вокруг кисти):
-    // 1) тёмная подложка — та же плита чуть шире, тёмно-синяя, обычное
-    //    смешение: дуга читается на любом фоне (как у понравившихся дуг);
-    // 2) плита — текстура граней, обычное смешение, плотная у головы;
-    // 3) бегущий блик — та же текстура аддитивно, волной вдоль плиты;
-    // 4) кромка — жёсткая яркая линия по пути острия, белая только у головы.
+    // Палитра — светлая, с самих глыбы и меча (бледно-голубой, голубой,
+    // бирюза, белый). Тёмную часть палитры меча владелец забраковал
+    // (03.11.2026): тёмные дуга и взрыв не сочетались с яркими глыбой и мечом.
+    // 1) плита — текстура граней, обычное смешение, плотная у головы;
+    // 2) бегущий блик — та же текстура аддитивно, волной вдоль плиты;
+    // 3) кромка — жёсткая яркая линия по пути острия, белая только у головы.
     // Текстура запекается при первом вызове. Рисует только при ЗАКРЫТОМ
     // spriteBatch (состояния ставит сам).
     //
-    // Здесь же рисуется взрыв глыбы (DrawBlast): тёмное кольцо с ярким
+    // Здесь же рисуется взрыв глыбы (DrawBlast): светлое кольцо с белым
     // краем расходится до радиуса урона, из центра бьют ледяные шипы.
     public static class AisbergArcFx
     {
-        public static readonly Color Deep = new Color(6, 22, 40);
-        public static readonly Color Abyss = new Color(10, 44, 70);
-        public static readonly Color Teal = new Color(14, 110, 135);
-        public static readonly Color Cyan = new Color(40, 215, 240);
-        public static readonly Color Ice = new Color(170, 240, 255);
-        public static readonly Color White = new Color(240, 252, 255);
+        // Цвета сняты со спрайтов глыбы (AisbergChunk.png) и меча (Iceberg.png)
+        public static readonly Color Pale = new Color(173, 222, 242);
+        public static readonly Color Sky = new Color(127, 181, 241);
+        public static readonly Color Steel = new Color(91, 165, 207);
+        public static readonly Color Shade = new Color(86, 125, 185);
+        public static readonly Color Cyan = new Color(54, 232, 252);
+        public static readonly Color Ice = new Color(220, 236, 247);
+        public static readonly Color White = new Color(244, 250, 255);
 
         // --- плита ---
         private const int TexW = 96;              // текселей вдоль (тексель = 2 px мира)
@@ -38,12 +41,9 @@ namespace FrostMelee.Content
         private const int Cells = 18;             // ячеек льда на повтор текстуры
         private const float SlabWidth = 0.62f;    // ширина плиты у головы: доля радиуса
         private const float SlabWidthTail = 0.3f; // на хвосте
-        private const float UnderOut = 3f;        // подложка шире плиты наружу, px
-        private const float UnderIn = 8f;         // и внутрь
         private const float SlabAlpha = 0.95f;
-        private const float UnderAlpha = 0.8f;
         private const float EdgeWidth = 3f;       // кромка, px
-        private const float GlintAlpha = 0.7f;
+        private const float GlintAlpha = 0.45f;
         private const float GlintSpeed = 0.06f;   // бег блика: доли длины за тик
         private const float GlintWidth = 0.18f;   // ширина волны блика: доля длины
 
@@ -155,13 +155,13 @@ namespace FrostMelee.Content
                     else
                     {
                         float k = MathHelper.Clamp(v / depth[cell], 0f, 1f);
-                        Color body = k < 0.45f ? Color.Lerp(Cyan, Teal, k / 0.45f)
-                                   : Color.Lerp(Teal, Abyss, (k - 0.45f) / 0.55f);
-                        body = Color.Lerp(body, Deep, 0.25f * shade[cell]);
+                        Color body = k < 0.4f ? Color.Lerp(Pale, Sky, k / 0.4f)
+                                   : Color.Lerp(Sky, Steel, (k - 0.4f) / 0.6f);
+                        body = Color.Lerp(body, Shade, 0.3f * shade[cell] * k);
                         bool seam = (float)Math.Sqrt(second) - (float)Math.Sqrt(best) < 1.1f;
                         bool rim = depth[cell] - v < 1.5f / TexH;    // сколотый край ячейки
                         if (seam)
-                            body = Color.Lerp(body, Ice, 0.55f - 0.35f * k);
+                            body = Color.Lerp(body, White, 0.75f - 0.3f * k);
                         else if (rim)
                             body = Color.Lerp(body, Cyan, 0.5f);
                         c = body;
@@ -218,13 +218,10 @@ namespace FrostMelee.Content
             Setup(device, texEffect);
             texEffect.Texture = slab;
 
-            // 1) тёмная подложка
-            FillSlab(n, angles, rOut, center, UnderOut, UnderIn, env, (t, f) => Mul(new Color(Deep.R, Deep.G, Deep.B, 255), UnderAlpha * f));
-            DrawTex(device, n, BlendState.AlphaBlend);
-            // 2) плита
+            // 1) плита
             FillSlab(n, angles, rOut, center, 0f, 0f, env, (t, f) => Mul(Color.White, SlabAlpha * f));
             DrawTex(device, n, BlendState.AlphaBlend);
-            // 3) бегущий блик: волна света от острия к хвосту
+            // 2) бегущий блик: волна света от острия к хвосту
             float wave = (time * GlintSpeed) % 1.4f - 0.2f;
             FillSlab(n, angles, rOut, center, 0f, 0f, env, (t, f) =>
             {
@@ -234,7 +231,7 @@ namespace FrostMelee.Content
             });
             DrawTex(device, n, additive);
 
-            // 4) кромка по пути острия
+            // 3) кромка по пути острия
             Setup(device, colorEffect);
             for (int i = 0; i < n; i++)
             {
@@ -299,9 +296,9 @@ namespace FrostMelee.Content
             float rWave = radius * (0.25f + 0.75f * open);
             float thick = 6f + radius * 0.22f * (1f - t);
 
-            // тёмная волна, поверх — яркий внешний край
-            Ring(device, center, rWave, rWave - thick - 4f, Mul(new Color(Deep.R, Deep.G, Deep.B, 255), 0.75f * fade), BlendState.AlphaBlend);
-            Ring(device, center, rWave, rWave - thick * 0.45f, Add(Cyan, 0.9f * fade), additive);
+            // светлая ледяная волна, поверх — бирюза и белый внешний край
+            Ring(device, center, rWave, rWave - thick - 4f, Mul(new Color(Pale.R, Pale.G, Pale.B, 255), 0.7f * fade), BlendState.AlphaBlend);
+            Ring(device, center, rWave, rWave - thick * 0.45f, Add(Cyan, 0.7f * fade), additive);
             Ring(device, center, rWave + 1f, rWave - 2f, Add(White, fade), additive);
 
             // шипы льда: выстреливают за первую треть и втягиваются
@@ -318,8 +315,8 @@ namespace FrostMelee.Content
                     Vector2 dir = ang.ToRotationVector2();
                     Vector2 side = new Vector2(-dir.Y, dir.X) * half;
                     Vector2 c0 = center - Main.screenPosition;
-                    // тёмное тело шипа и светлая сердцевина
-                    Tri(ref k, c0 + side * 1.4f, c0 - side * 1.4f, c0 + dir * (len + 4f), Mul(new Color(Deep.R, Deep.G, Deep.B, 255), 0.85f * fade));
+                    // светло-голубое тело шипа, сверху бирюза и белая сердцевина
+                    Tri(ref k, c0 + side * 1.4f, c0 - side * 1.4f, c0 + dir * (len + 4f), Mul(new Color(Sky.R, Sky.G, Sky.B, 255), 0.9f * fade));
                 }
                 device.BlendState = BlendState.AlphaBlend;
                 colorEffect.CurrentTechnique.Passes[0].Apply();
@@ -333,7 +330,7 @@ namespace FrostMelee.Content
                     Vector2 dir = ang.ToRotationVector2();
                     Vector2 side = new Vector2(-dir.Y, dir.X) * half;
                     Vector2 c0 = center - Main.screenPosition;
-                    Tri(ref k, c0 + side, c0 - side, c0 + dir * len, Add(Cyan, fade));
+                    Tri(ref k, c0 + side, c0 - side, c0 + dir * len, Add(Cyan, 0.6f * fade));
                     Tri(ref k, c0 + side * 0.35f, c0 - side * 0.35f, c0 + dir * len * 0.8f, Add(White, fade));
                 }
                 device.BlendState = additive;
