@@ -238,6 +238,16 @@ namespace FrostMelee.Content.Projectiles
 
         // Snowflake by kind of snow: throw (cyan), buff (rose, round) or swing (mint -> violet,
         // size steps with the radius — bigger charge, bigger and more branched flake).
+        // Slow spin of a snowflake around its own axis (owner 03.11.2026): every flake has its own
+        // direction and speed (from the synced identity), and the bigger it is the faster it turns.
+        // size01: 0 = smallest flake, 1 = biggest. Radians per tick.
+        public static float Spin(Projectile p, float size01)
+        {
+            uint h = (uint)p.identity * 2654435761u;
+            float sign = (h & 0x10000) == 0 ? 1f : -1f;
+            float jitter = 0.75f + 0.5f * ((h >> 20) % 1000) / 1000f;
+            return sign * jitter * MathHelper.Lerp(0.006f, 0.04f, MathHelper.Clamp(size01, 0f, 1f));
+        }
         public static void Snowflake(Vector2 center, float radius, float rotation, float detail, float alpha, int style = StyleSwing)
         {
             if (alpha <= 0.01f) return;
@@ -245,7 +255,7 @@ namespace FrostMelee.Content.Projectiles
                 : style == StyleBuff ? "BuffFlake"
                 : style == StyleDawn ? "DawnFlake"
                 : "SwingFlake" + Math.Clamp((int)Math.Round(radius / 2f), 3, 11);
-            Sprite(name, center, Color.White * alpha);
+            Sprite(name, center, Color.White * alpha, rotation);
         }
 
         // Vanilla-style afterimages: the same sprite at old positions, fading
@@ -283,7 +293,7 @@ namespace FrostMelee.Content.Projectiles
         {
             Main.projFrames[Type] = 3;
             ProjectileID.Sets.TrailCacheLength[Type] = 12;   // visual only: long cyan tail tells throw snow apart
-            ProjectileID.Sets.TrailingMode[Type] = 0;
+            ProjectileID.Sets.TrailingMode[Type] = 2;
         }
         public override void SetDefaults()
         {
@@ -293,15 +303,18 @@ namespace FrostMelee.Content.Projectiles
             Projectile.DamageType = DamageClass.Melee;
         }
         private int driftTicks;
+        private float spin;
         // a longer trail that gives Frostbite (owner 02.11.2026): snow hangs where the flake passed
         public override void PostAI()
         {
             if (++driftTicks % 3 == 0) NorthPoleDrift.Add(Projectile.Center, Projectile.owner);
+            spin += NorthPoleArt.Spin(Projectile, 0.2f);
+            Projectile.rotation = spin;
         }
         public override bool PreDraw(ref Color lightColor)
         {
             float fade = Math.Min(1, Projectile.timeLeft / 20f) * Projectile.Opacity;
-            NorthPoleArt.PixelTrail(Projectile, "ThrowFlake", fade);
+            NorthPoleArt.PixelTrail(Projectile, "ThrowFlake", fade, 0f, true);
             if (!NorthPoleArt.DrawCustom("TrailFlake", Projectile.Center, Projectile.rotation, 14, Color.White * fade))
                 NorthPoleArt.Snowflake(Projectile.Center, 6.5f, Projectile.rotation, 0.3f + Projectile.ai[1] * 0.2f, fade, NorthPoleArt.StyleThrow);
             return false;
@@ -469,7 +482,7 @@ namespace FrostMelee.Content.Projectiles
                 if (Projectile.owner == Main.myPlayer && player.HeldItem.type != ItemID.NorthPole) { Release(true); return; }
                 Projectile.Center = Vector2.Lerp(Projectile.Center, HoverPoint(player, slot), 0.25f);
                 Projectile.velocity = Vector2.Zero;
-                Projectile.rotation += 0.02f + Level * 0.03f;
+                Projectile.rotation += NorthPoleArt.Spin(Projectile, Level);
                 NPC target = LiveTarget();
                 if (target != null) lastTarget = target.Center;
                 // Root cause of "flakes stop growing mid-fight": a flake belongs to one enemy and
@@ -491,7 +504,7 @@ namespace FrostMelee.Content.Projectiles
                     // waits for its turn in its place; the spear may already be put away
                     Projectile.Center = Vector2.Lerp(Projectile.Center, HoverPoint(player, slot), 0.25f);
                     Projectile.velocity = Vector2.Zero;
-                    Projectile.rotation += 0.05f;
+                    Projectile.rotation += NorthPoleArt.Spin(Projectile, Level);
                     if (--launchDelay <= 0 && Projectile.owner == Main.myPlayer) Launch();
                     return;
                 }
@@ -505,7 +518,7 @@ namespace FrostMelee.Content.Projectiles
                 if (to.Length() < 16 && target == null) { impacted = true; Projectile.Kill(); return; }
                 Projectile.velocity = Vector2.Lerp(Projectile.velocity,
                     to.SafeNormalize(Projectile.velocity) * NorthPoleBalance.ShotSpeed, 0.12f);
-                Projectile.rotation += 0.25f;
+                Projectile.rotation += NorthPoleArt.Spin(Projectile, Level);
                 if (++flightTicks > 180) { Projectile.Kill(); return; } // lost in flight: melts, no burst
                 if (!Main.dedServ && Main.rand.NextBool(2))
                 {
@@ -544,7 +557,7 @@ namespace FrostMelee.Content.Projectiles
             float radius = Projectile.width * 0.5f + 2;
             float alpha = 1f;
             if (!Charging)
-                NorthPoleArt.PixelTrail(Projectile, "SwingFlake" + Math.Clamp((int)Math.Round(radius / 2f), 3, 11), 1f);
+                NorthPoleArt.PixelTrail(Projectile, "SwingFlake" + Math.Clamp((int)Math.Round(radius / 2f), 3, 11), 1f, 0f, true);
             if (NorthPoleArt.DrawCustom("Snowflake", Projectile.Center, Projectile.rotation, radius * 2, Color.White * alpha))
                 return false;
             // flake, then one orbiting mote per charge step
@@ -573,7 +586,7 @@ namespace FrostMelee.Content.Projectiles
         {
             Main.projFrames[Type] = 3;
             ProjectileID.Sets.TrailCacheLength[Type] = 5;
-            ProjectileID.Sets.TrailingMode[Type] = 0;
+            ProjectileID.Sets.TrailingMode[Type] = 2;
         }
         public override void SetDefaults()
         {
@@ -593,7 +606,7 @@ namespace FrostMelee.Content.Projectiles
             if (!Exploding)
             {
                 Projectile.velocity *= 0.94f;
-                Projectile.rotation += 0.15f;
+                Projectile.rotation += NorthPoleArt.Spin(Projectile, 0f);
                 if (++Projectile.localAI[1] >= Math.Clamp(Projectile.ai[0], 8, 36)) Explode();
                 if (!Main.dedServ && Main.rand.NextBool(3))
                 {
@@ -620,8 +633,8 @@ namespace FrostMelee.Content.Projectiles
             if (Exploding) return false; // the blast is drawn by pixel particles
             if (NorthPoleArt.DrawCustom("MiniFlake", Projectile.Center, Projectile.rotation, 16, Color.White))
                 return false;
-            NorthPoleArt.PixelTrail(Projectile, "MiniFlake", 0.6f);
-            NorthPoleArt.Sprite("MiniFlake", Projectile.Center, Color.White);
+            NorthPoleArt.PixelTrail(Projectile, "MiniFlake", 0.6f, 0f, true);
+            NorthPoleArt.Sprite("MiniFlake", Projectile.Center, Color.White, Projectile.rotation);
             return false;
         }
     }
@@ -678,7 +691,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.velocity.X = MathF.Sin((Projectile.ai[0] + Projectile.whoAmI * 13) * 0.05f) * 0.8f;
                 if (Projectile.Center.Y - player.Center.Y > 360) { Projectile.Kill(); return; }
             }
-            Projectile.rotation += 0.03f;
+            Projectile.rotation += NorthPoleArt.Spin(Projectile, 0.45f);
             if (Dawn) Lighting.AddLight(Projectile.Center, 0.55f, 0.38f, 0.12f);
             else Lighting.AddLight(Projectile.Center, 0.5f, 0.25f, 0.4f);
             if (NorthPoleEffects.Owned(Projectile) && Projectile.ai[0] >= 10 && Projectile.Hitbox.Intersects(player.Hitbox))
@@ -826,9 +839,7 @@ namespace FrostMelee.Content.Projectiles
                 {
                     SoundEngine.PlaySound(SoundID.Item28 with { Volume = 0.55f, Pitch = -0.35f }, Projectile.Center);
                     NorthPoleEffects.SnowDust(Projectile.Center, 6, 3f);
-                    if (Projectile.owner == Main.myPlayer)
-                        Main.instance.CameraModifiers.Add(new Terraria.Graphics.CameraModifiers.PunchCameraModifier(
-                            Projectile.Center, dir, 2f + 3f * Power, 8f, 10, 1000f, "NorthPoleGust"));
+                    // no camera punch here (owner 03.11.2026: no screen shake on the brace hit)
                 }
                 // Owner 02.11.2026: the smooth pixel stream read as "Noita". Plain vanilla snow dust
                 // instead, like the Blizzard Staff: few chunky flakes in short puffs, vanilla motion.
