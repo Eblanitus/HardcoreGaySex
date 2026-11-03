@@ -149,7 +149,7 @@ namespace FrostMelee.Content.Projectiles
             // Айсберг: тычок раскалывает свои глыбы, которых коснулось лезвие
             if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
                 AisbergChunk.CrackTouched(Projectile,
-                    box => Colliding(Projectile.Hitbox, box) == true, false);
+                    box => Colliding(Projectile.Hitbox, box) == true);
 
             // Все колющие мечи чистят остриё об воздух: наледь и искры (визуал, все клиенты)
             if (!Main.dedServ)
@@ -243,6 +243,13 @@ namespace FrostMelee.Content.Projectiles
         {
             if ((int)Projectile.ai[2] == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Content.Weapons.SwordPlayer>().AddPolish((int)Projectile.ai[2]);
+            }
+            // Айсберг: тычок откалывает одну большую сильную глыбу над целью
+            if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) && Projectile.owner == Main.myPlayer) {
+                Player owner = Main.player[Projectile.owner];
+                if (owner.GetModPlayer<Weapons.AisbergPlayer>().TryStartBlockCooldown())
+                    AisbergChunk.SpawnSingleChunk(owner, Projectile.GetSource_FromThis(), target.Center,
+                        Projectile.damage, Projectile.knockBack, 1.7f, 0.55f, 0.85f);
             }
             // Айсберг: забранный Frostbite ускоряет создание новых глыб
             if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) &&

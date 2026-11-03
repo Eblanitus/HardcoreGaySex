@@ -213,11 +213,11 @@ namespace FrostMelee.Content.Projectiles
             Projectile.spriteDirection = dir.X >= 0 ? 1 : -1;
             Projectile.rotation = Projectile.ai[1] - geo.AngleFor(Projectile.spriteDirection == -1);
 
-            // Айсберг: выставленный клинок разбивает свои глыбы. Раскол
-            // встречей дополнительно замораживает поверхность вокруг.
+            // Айсберг: выставленный клинок разбивает свои глыбы (лёд на земле
+            // теперь от осколков раскола, а не от встречи)
             if (Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]))
                 AisbergChunk.CrackTouched(Projectile,
-                    box => Colliding(Projectile.Hitbox, box) == true, true);
+                    box => Colliding(Projectile.Hitbox, box) == true);
 
             UpdateBraceFx(player, dir, geo);
 
@@ -489,6 +489,17 @@ namespace FrostMelee.Content.Projectiles
             int braceItem = (int)Projectile.ai[2];
             if (braceItem == ItemID.NorthPole)
                 NorthPoleEffects.BraceGust(Projectile, target);
+            // Айсберг: встреча откалывает одну глыбу над целью; размер и сила
+            // растут со скоростью сближения (тот же разгон, что у урона встречи)
+            if (Weapons.SwordTypes.IsAisbergId(braceItem) && Projectile.owner == Main.myPlayer) {
+                Player owner = Main.player[Projectile.owner];
+                if (owner.GetModPlayer<Weapons.AisbergPlayer>().TryStartBlockCooldown()) {
+                    float k = MathHelper.Clamp(braceSpeed01, 0f, 1f);
+                    AisbergChunk.SpawnSingleChunk(owner, Projectile.GetSource_FromThis(), target.Center,
+                        Projectile.damage, Projectile.knockBack,
+                        MathHelper.Lerp(1.0f, 2.3f, k), MathHelper.Lerp(0.3f, 0.75f, k), MathHelper.Lerp(0.45f, 1.1f, k));
+                }
+            }
             if (Weapons.SwordTypes.IsSwordId(braceItem) && braceItem == ItemID.IceBlade) {
                 Main.player[Projectile.owner].GetModPlayer<Weapons.SwordPlayer>().AddPolish(braceItem);
             }
