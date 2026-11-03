@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.ID;
 using Terraria.ModLoader;
@@ -6,7 +7,8 @@ using Terraria.ModLoader;
 namespace FrostMelee.Content.Projectiles
 {
     // Всплеск ледяной энергии расколовшейся глыбы Айсберга.
-    // Невидимый мгновенный снаряд: урон по радиусу (ai[0]) и Frostbite.
+    // Урон по радиусу (ai[0]) и Frostbite — только первые DamageTicks тиков,
+    // дальше снаряд живёт ради вида взрыва (PreDraw → AisbergArcFx.DrawBlast).
     // ai[1] — кадр глыбы, ai[2] — её масштаб: по ним рисуется раскол (ShatterFx).
     // Поджог сырой (FrostFireSystem.Ignite), без запаса языков Фростбранда:
     // у Айсберга запаса нет, от Фростбранда взят только сам взрыв.
@@ -23,12 +25,19 @@ namespace FrostMelee.Content.Projectiles
             Projectile.penetrate = -1;
             Projectile.tileCollide = false;
             Projectile.ignoreWater = true;
-            Projectile.timeLeft = 3;
+            Projectile.timeLeft = LifeTicks;
             // Несколько глыб рядом не складывают взрывы по одной цели пачкой
             Projectile.usesIDStaticNPCImmunity = true;
             Projectile.idStaticNPCHitCooldown = 20;
             Projectile.aiStyle = -1;
         }
+
+        private const int LifeTicks = 22;
+        private const int DamageTicks = 3;
+
+        private int Age => LifeTicks - Projectile.timeLeft;
+
+        public override bool? CanDamage() => Age < DamageTicks ? null : false;
 
         public override void AI()
         {
@@ -61,8 +70,22 @@ namespace FrostMelee.Content.Projectiles
             int top = f * 32;
 
             Weapons.FrostFireSystem.Burst(center, radius, large);
+            Terraria.Audio.SoundEngine.PlaySound(SoundID.Item14 with { Volume = large ? 0.9f : 0.65f,
+                Pitch = large ? -0.1f : 0.2f }, center);
             Terraria.Audio.SoundEngine.PlaySound(SoundID.Item27 with { Volume = large ? 1f : 0.7f,
                 Pitch = large ? -0.7f : -0.45f }, center);
+            // Ледяной огонь веером до края зоны урона — крупная ванильная пыль
+            // Frostbite, не зависит от настройки ядрёности огня: взрыв должен
+            // читаться всегда
+            int flames = large ? 22 : 14;
+            for (int i = 0; i < flames; i++)
+            {
+                Vector2 dir = (MathHelper.TwoPi * i / flames + Main.rand.NextFloat(-0.2f, 0.2f)).ToRotationVector2();
+                Dust d = Dust.NewDustPerfect(center + dir * 6f, DustID.IceTorch,
+                    dir * radius * Main.rand.NextFloat(0.07f, 0.1f), 0, default, Main.rand.NextFloat(2.2f, large ? 3.2f : 2.7f));
+                d.noGravity = true;
+            }
+            Lighting.AddLight(center, 0.6f, 1.1f, 1.4f);
 
             // 4 четверти кадра — горящие куски, разлетаются взрывом
             float force = 1f + 0.35f * (scale - 1f);
@@ -91,6 +114,21 @@ namespace FrostMelee.Content.Projectiles
             Weapons.FrostFireSystem.Ignite(target);
         }
 
-        public override bool PreDraw(ref Color lightColor) => false;
+        public override bool PreDraw(ref Color lightColor)
+        {
+            float radius = System.Math.Max(8f, Projectile.ai[0]);
+            float t = Age / (float)LifeTicks;
+            Main.spriteBatch.End();
+            try
+            {
+                AisbergArcFx.DrawBlast(Main.graphics.GraphicsDevice, Projectile.Center, radius, t, Projectile.identity);
+            }
+            finally
+            {
+                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+            }
+            return false;
+        }
     }
 }

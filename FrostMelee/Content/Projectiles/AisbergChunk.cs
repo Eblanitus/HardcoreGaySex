@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.Audio;
 using Terraria.DataStructures;
@@ -96,6 +97,7 @@ namespace FrostMelee.Content.Projectiles
                 Projectile.width = Projectile.height = (int)(26f * Size);
                 Projectile.Center = center;
                 spin = (Projectile.whoAmI % 2 == 0 ? 1f : -1f) * (IsLarge ? 0.07f : 0.14f);
+                FormFx();
             }
 
             Projectile.localAI[0]++;
@@ -133,6 +135,57 @@ namespace FrostMelee.Content.Projectiles
                     DustID.Frost, -Projectile.velocity * 0.08f, 130, default, 0.8f);
                 d.noGravity = true;
             }
+        }
+
+        // === Появление ===
+        // Глыба не возникает готовой: за FormTicks она намерзает из воздуха —
+        // к центру стягивается ледяная крошка, глыба растёт с перехлёстом
+        // (чуть больше нормы и обратно) и светится белым, пока лёд «схватывается».
+        private const int FormTicks = 12;
+
+        private void FormFx()
+        {
+            if (Main.dedServ)
+                return;
+            SoundEngine.PlaySound(SoundID.Item30 with { Volume = IsLarge ? 0.7f : 0.45f, Pitch = IsLarge ? -0.4f : 0.1f },
+                Projectile.Center);
+            int count = IsLarge ? 10 : 6;
+            float r = 22f * Size;
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 dir = (MathHelper.TwoPi * i / count + Main.rand.NextFloat(-0.2f, 0.2f)).ToRotationVector2();
+                Dust d = Dust.NewDustPerfect(Projectile.Center + dir * r, DustID.Frost,
+                    -dir * r / 9f + Projectile.velocity, 80, default, 1.3f + 0.3f * Size);
+                d.noGravity = true;
+            }
+        }
+
+        // 0 → чуть больше нормы → норма (easeOutBack)
+        private float FormScale()
+        {
+            float x = MathHelper.Clamp(Age / (float)FormTicks, 0f, 1f);
+            const float c1 = 1.9f, c3 = c1 + 1f;
+            float k = 1f + c3 * (float)Math.Pow(x - 1f, 3) + c1 * (float)Math.Pow(x - 1f, 2);
+            return MathHelper.Max(0.1f, k);
+        }
+
+        public override bool PreDraw(ref Color lightColor)
+        {
+            Texture2D tex = Terraria.GameContent.TextureAssets.Projectile[Type].Value;
+            Rectangle frame = tex.Frame(1, 3, 0, Projectile.frame);
+            Vector2 origin = frame.Size() / 2f;
+            Vector2 pos = Projectile.Center - Main.screenPosition;
+            float scale = Projectile.scale * FormScale();
+            Main.EntitySpriteDraw(tex, pos, frame, lightColor, Projectile.rotation, origin, scale, SpriteEffects.None, 0f);
+            // белая вспышка намерзания
+            float flash = 1f - MathHelper.Clamp(Age / (float)FormTicks, 0f, 1f);
+            if (flash > 0f)
+            {
+                Color white = new Color(220, 250, 255, 0) * flash;
+                Main.EntitySpriteDraw(tex, pos, frame, white, Projectile.rotation, origin, scale, SpriteEffects.None, 0f);
+                Main.EntitySpriteDraw(tex, pos, frame, white * 0.6f, Projectile.rotation, origin, scale, SpriteEffects.None, 0f);
+            }
+            return false;
         }
 
         // Падающая глыба твёрдая: о врага ударяется и отскакивает, а не

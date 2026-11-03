@@ -926,7 +926,7 @@ namespace FrostMelee.Content.Weapons
         // === Айсберг ===
         // Своя дуга вместо дуги Ice Blade (наледи и полировки у Айсберга нет):
         // по записанному пути настоящего клинка (fbHist*, как у Фростбранда)
-        // рисуется «айсберг в разрезе» — AisbergArcFx. В AI — запись клинка,
+        // рисуется «ледяная плита» — AisbergArcFx. В AI — запись клинка,
         // свет по верхушке и крошка с подводной массы на пике взмаха.
         private static readonly float[] aisAngles = new float[KeenPoints];
         private static readonly float[] aisROut = new float[KeenPoints];
@@ -955,7 +955,8 @@ namespace FrostMelee.Content.Weapons
             Vector2 center = rec ? player.itemLocation : player.RotatedRelativePoint(player.MountedCenter);
             Main.spriteBatch.End();
             try {
-                AisbergArcFx.Draw(Main.graphics.GraphicsDevice, aisAngles, aisROut, n, center, env, Projectile.identity);
+                AisbergArcFx.Draw(Main.graphics.GraphicsDevice, aisAngles, aisROut, n, center, env,
+                    Projectile.localAI[0], Projectile.identity);
             }
             finally {
                 Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
@@ -1211,7 +1212,7 @@ namespace FrostMelee.Content.Weapons
             float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
             Player owner = Main.player[Projectile.owner];
-            // Айсберг: своя дуга «айсберг в разрезе» (AisbergArcFx)
+            // Айсберг: своя дуга «ледяная плита» (AisbergArcFx)
             if (IsAisberg(owner)) {
                 DrawAisbergArc(owner, maxAnim);
                 return false;
