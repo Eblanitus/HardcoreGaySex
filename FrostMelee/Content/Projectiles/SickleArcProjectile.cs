@@ -203,8 +203,36 @@ namespace FrostMelee.Content.Projectiles
         }
 
         // Зона лезвия по тому, что нарисовано: при шкале заморозки >= 0.5 замороженное копьё
-        private SickleSprite.BladeZone Zone() =>
-            SickleSprite.GetZone(ItemType, FrozenSpear.UseZone(Main.player[Projectile.owner], ItemType));
+        private SickleSprite.BladeZone Zone() => ItemType == ItemID.NorthPole
+            ? SickleSprite.GetFullZone(ItemType)
+            : SickleSprite.GetZone(ItemType, FrozenSpear.UseZone(Main.player[Projectile.owner], ItemType));
+
+        // Смещение середины копья от центра игрока вдоль оси (px, уже с масштабом оружия):
+        // Северный полюс держат за конец древка, у остальных 0 (крутятся вокруг середины)
+        private float SpinOffset => SicklePlayer.SpinRadiusFor(ItemType) * ItemScale;
+
+        // Дальняя линия дуги на полном масштабе при ai[2] = 1 (для подбора масштаба под радиус)
+        public const float LineReachAtFullScale = LineTexOuter * BodyDrawScale * LineDrawScale * (ArcScaleStart + ArcScaleGrowth);
+
+        // Заметание зоны лезвия от угла a0 к a1. При смещённой середине центр зоны едет по кругу
+        // вместе с копьём, поэтому шагаем мелкими долями, каждая со своим центром
+        private bool SweepOverlaps(SickleSprite.BladeZone zone, Rectangle target, Player player, float a0, float a1)
+        {
+            float offset = SpinOffset;
+            if (offset <= 0f)
+                return SickleSprite.BladeOverlaps(zone, target, player.MountedCenter, a0, a1, SwingFace > 0f, ItemScale);
+            float tip = TipRadius();
+            int steps = Math.Clamp((int)Math.Ceiling(Math.Abs(a1 - a0) * tip / 6f), 1, 24);
+            for (int i = 0; i < steps; i++)
+            {
+                float s0 = MathHelper.Lerp(a0, a1, i / (float)steps);
+                float s1 = MathHelper.Lerp(a0, a1, (i + 1) / (float)steps);
+                Vector2 center = player.MountedCenter + ((s0 + s1) * 0.5f).ToRotationVector2() * offset;
+                if (SickleSprite.BladeOverlaps(zone, target, center, s0, s1, SwingFace > 0f, ItemScale))
+                    return true;
+            }
+            return false;
+        }
 
         // Попадание и «краевой» коэффициент урона edge (0 — полный, 1 — минимальный).
         // 1) Лезвие: точная зона по пикселям серпа, заметённая за тик — полный урон.
@@ -227,8 +255,7 @@ namespace FrostMelee.Content.Projectiles
             }
 
             GetBladeAngles(player, out float angleNow, out float anglePrev);
-            if (SickleSprite.BladeOverlaps(zone, target, player.MountedCenter, anglePrev, angleNow,
-                SwingFace > 0f, ItemScale))
+            if (SweepOverlaps(zone, target, player, anglePrev, angleNow))
             {
                 edge = 0f;
                 return true;
@@ -238,7 +265,7 @@ namespace FrostMelee.Content.Projectiles
                 return false;
             GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
             float lineOuter = LineTexOuter * arcScale * BodyDrawScale * LineDrawScale;
-            float tipReach = zone.RMax * ItemScale;
+            float tipReach = TipRadius();
             if (lineOuter <= tipReach)
                 return false;
             if (!NearestInWedge(target, center, startAngle, sweep, out float dist, out float farthest) ||
@@ -309,8 +336,9 @@ namespace FrostMelee.Content.Projectiles
             {
                 // Лезвие: то, что реально бьёт полным уроном
                 GetBladeAngles(player, out float angleNow, out _);
-                SickleSprite.EmitDebugDust(zone, player.MountedCenter, angleNow, SwingFace > 0f, ItemScale);
-                inner = zone.RMax * ItemScale;
+                SickleSprite.EmitDebugDust(zone, player.MountedCenter + angleNow.ToRotationVector2() * SpinOffset,
+                    angleNow, SwingFace > 0f, ItemScale);
+                inner = TipRadius();
                 GetArcState(player, Projectile.localAI[0], out _, out float arcScale);
                 outer = LineTexOuter * arcScale * BodyDrawScale * LineDrawScale;
             }
@@ -560,7 +588,7 @@ namespace FrostMelee.Content.Projectiles
         private float TipRadius()
         {
             SickleSprite.BladeZone zone = Zone();
-            return (zone != null ? zone.RMax : BladeReach) * ItemScale;
+            return zone != null ? zone.RMax * ItemScale + SpinOffset : BladeReach * ItemScale;
         }
 
         // Ось серпа (острие) на долю взмаха progress; конец древка — противоположное направление
