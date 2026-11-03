@@ -181,12 +181,12 @@ Configs: {
 
 		AttackSpeedPercent: {
 			Label: Polar Dawn: melee speed bonus (%)
-			// Tooltip: ""
+			Tooltip: ""
 		}
 
 		DawnRegenPerSecond: {
 			Label: Polar Dawn: regeneration (HP/sec.)
-			// Tooltip: ""
+			Tooltip: ""
 		}
 	}
 }
