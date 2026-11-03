@@ -108,7 +108,9 @@ namespace FrostMelee.Content.Weapons
             // Визуал (все клиенты): Ice Blade точится об воздух; Фростбранд
             // записывает настоящий путь клинка для ленты и сыплет угли пламени
             if (!Main.dedServ) {
-                if (IsIceBlade(player) || IsAisberg(player))
+                if (IsAisberg(player))
+                    UpdateAisbergFx(player, maxAnim);
+                else if (IsIceBlade(player))
                     UpdateHone(player, maxAnim);
                 else if ((SwordItem != 0 ? SwordItem : player.HeldItem.type) == ItemID.Frostbrand) {
                     RecordFlameBlade(player);
@@ -921,6 +923,46 @@ namespace FrostMelee.Content.Weapons
             }
         }
 
+        // === Айсберг ===
+        // Своя дуга вместо дуги Ice Blade (наледи и полировки у Айсберга нет):
+        // по записанному пути настоящего клинка (fbHist*, как у Фростбранда)
+        // рисуется «айсберг в разрезе» — AisbergArcFx. В AI — запись клинка,
+        // свет по верхушке и крошка с подводной массы на пике взмаха.
+        private static readonly float[] aisAngles = new float[KeenPoints];
+        private static readonly float[] aisROut = new float[KeenPoints];
+        private static readonly float[] aisRIn = new float[KeenPoints];
+
+        private void UpdateAisbergFx(Player player, float maxAnim) {
+            RecordFlameBlade(player);
+            if (!fbHasBlade)
+                return;
+            float env = SwingEnv(Projectile.localAI[0], maxAnim);
+            AisbergArcFx.Light(fbHand, fbHistAngle[0], fbHistRadius[0], env);
+            if ((int)Projectile.localAI[0] == (int)(maxAnim * PeakAt))
+                AisbergArcFx.PeakCrumble(fbHand, fbHistAngle[0], fbHistRadius[0]);
+        }
+
+        private void DrawAisbergArc(Player player, float maxAnim) {
+            if (Main.dedServ)
+                return;
+            float env = SwingEnv(Projectile.localAI[0], maxAnim);
+            bool rec = fbHasBlade && fbHistCount >= 2;
+            int n = rec ? BuildRecordedHistory(aisAngles, aisROut, aisRIn)
+                        : BuildTrailHistory(player, aisAngles, aisROut, aisRIn);
+            if (n < 2)
+                return;
+            // Центр — живая кисть, как у ленты Ice Blade (см. DrawHone)
+            Vector2 center = rec ? player.itemLocation : player.RotatedRelativePoint(player.MountedCenter);
+            Main.spriteBatch.End();
+            try {
+                AisbergArcFx.Draw(Main.graphics.GraphicsDevice, aisAngles, aisROut, n, center, env, Projectile.identity);
+            }
+            finally {
+                Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, Main.DefaultSamplerState,
+                    DepthStencilState.None, Main.Rasterizer, null, Main.GameViewMatrix.TransformationMatrix);
+            }
+        }
+
         // Дуга праздничных мечей (подкласс FestiveSwords): чистый шаблон без
         // механик — тело и линия по рецепту шершавого Ice Blade (DrawSwingArc)
         // плюс лента с ореолом (DrawTrailRibbon), цвета свои у каждого меча.
@@ -1169,7 +1211,12 @@ namespace FrostMelee.Content.Weapons
             float lerpTime = Utils.Remap(percentageOfLife, 0f, 0.6f, 0f, 1f) * Utils.Remap(percentageOfLife, 0.6f, 1f, 1f, 0f);
 
             Player owner = Main.player[Projectile.owner];
-            if (IsIceBlade(owner) || IsAisberg(owner)) {
+            // Айсберг: своя дуга «айсберг в разрезе» (AisbergArcFx)
+            if (IsAisberg(owner)) {
+                DrawAisbergArc(owner, maxAnim);
+                return false;
+            }
+            if (IsIceBlade(owner)) {
                 DrawHone(owner, texture, scale, spriteEffects, percentageOfLife, lerpTime, maxAnim);
                 return false;
             }
@@ -1188,6 +1235,7 @@ namespace FrostMelee.Content.Weapons
                 return;
             IceRibbon.Unload();
             IceBladeFx.Unload();
+            AisbergArcFx.Unload();
         }
     }
 }
