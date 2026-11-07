@@ -1,0 +1,20 @@
+name: Collision masks and contract tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  data-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Pillow
+        run: pip install -r tools/requirements.txt
+      - name: Baked masks match source PNGs
+        run: python tools/generate_collision_masks.py --check
+      - name: Data and source contract tests
+        run: python -m unittest discover -s tests -v

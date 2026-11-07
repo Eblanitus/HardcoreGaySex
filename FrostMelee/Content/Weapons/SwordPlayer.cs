@@ -237,7 +237,6 @@ namespace FrostMelee.Content.Weapons
         public const float IcePolishPerHit = 0.07f; // ~14 попаданий до полной полировки
         private int iceHitCooldown; // чтобы не точить несколько раз за один взмах по толпе
         private int iceIdleTicks; // тиков без попаданий до заледенения
-        private bool lastRoughLogged = true; // для строки диагностики полировки
 
         // === Отдача полировки на все приёмы меча ===
         // P = 0 (весь в инее) .. 1 (отполирован): быстрее и больнее, но меньше отдача
@@ -281,7 +280,6 @@ namespace FrostMelee.Content.Weapons
             SetFrost(key, MathHelper.Clamp(before - IcePolishPerHit, 0f, 1f));
             iceHitCooldown = 10; // 10 тиков кулдауна между полировками (защита от мультихита дуги)
             iceIdleTicks = 0;
-            Mod.Logger.Info($"[Polish] попадание: меч {key}, frost={GetFrost(key):F2}");
             return GetFrost(key) < before;
         }
 
@@ -318,14 +316,6 @@ namespace FrostMelee.Content.Weapons
 
             // В бою точим только попаданиями (AddPolish). В покое — заледеневает.
             iceIdleTicks++;
-
-            // Диагностика полировки: переход через порог смены вида (IceBlade)
-            bool roughNow = GetFrostShown(ItemID.IceBlade) >= 0.45f;
-            if (roughNow != lastRoughLogged)
-            {
-                lastRoughLogged = roughNow;
-                Mod.Logger.Info($"[Polish] вид: {(roughNow ? "шершавый" : "острый")}, shown={GetFrostShown(ItemID.IceBlade):F2}");
-            }
 
             IceBladeVisual.UpdateView(GetFrostShown(ItemID.IceBlade));
         }

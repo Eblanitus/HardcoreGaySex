@@ -88,9 +88,12 @@ namespace FrostMelee.Content.Projectiles
 
         private void Init()
         {
-            NPC npc = Main.npc[(int)Projectile.ai[0]];
-            origin = npc.active ? npc.Center : Projectile.Center;
-            originRadius = npc.active ? Math.Max(npc.width, npc.height) * 0.6f : 20f;
+            // ai[0] приходит из сети: битый индекс не должен ронять AI на всех клиентах
+            int npcIndex = (int)Projectile.ai[0];
+            NPC npc = npcIndex >= 0 && npcIndex < Main.maxNPCs ? Main.npc[npcIndex] : null;
+            bool hasTarget = npc != null && npc.active;
+            origin = hasTarget ? npc.Center : Projectile.Center;
+            originRadius = hasTarget ? Math.Max(npc.width, npc.height) * 0.6f : 20f;
             // Сколько языков срывается с врага — по ядрёности из конфига:
             // настройка меняет количество самого огня, а не прозрачность
             int n = (int)Math.Round((int)MathHelper.Lerp(MinWisps, MaxWisps, Ratio)
@@ -128,8 +131,9 @@ namespace FrostMelee.Content.Projectiles
                 return;
             }
             // враг ещё жив — кольцо и языки идут от его текущего места
-            NPC npc = Main.npc[(int)Projectile.ai[0]];
-            if (npc.active)
+            int npcIndex = (int)Projectile.ai[0];
+            NPC npc = npcIndex >= 0 && npcIndex < Main.maxNPCs ? Main.npc[npcIndex] : null;
+            if (npc != null && npc.active)
                 origin = Vector2.Lerp(origin, npc.Center, 0.5f);
             Projectile.Center = origin;
 
@@ -143,7 +147,7 @@ namespace FrostMelee.Content.Projectiles
                 if (w.Delay > 0)
                 {
                     w.Delay--;
-                    w.Pos += npc.active ? npc.velocity : Vector2.Zero;   // ждёт на враге, не отстаёт
+                    w.Pos += npc != null && npc.active ? npc.velocity : Vector2.Zero;   // ждёт на враге, не отстаёт
                     for (int k = 0; k < TrailLen; k++)
                         w.Trail[k] = w.Pos;
                     continue;
