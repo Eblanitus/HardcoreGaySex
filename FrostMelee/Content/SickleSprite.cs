@@ -66,6 +66,7 @@ namespace FrostMelee.Content
             cache.Clear();
             zoneCache.Clear();
             frozenZoneCache.Clear();
+            fullZoneCache.Clear();
         }
 
         // Геометрия по общей запечённой маске: одинакова на клиенте и сервере.
@@ -155,6 +156,22 @@ namespace FrostMelee.Content
         }
 
         private static readonly Dictionary<int, BladeZone> frozenZoneCache = new();
+        private static readonly Dictionary<int, BladeZone> fullZoneCache = new();
+
+        // Зона по ВСЕМУ рисунку, древко тоже бьёт. Северный полюс во взмахе держат за конец
+        // древка (радиус 140 px, владелец 03.11.2026): видимое копьё заметает круг целиком,
+        // и бить должно всё, что нарисовано, а не только наконечник у края
+        public static BladeZone GetFullZone(int itemType)
+        {
+            if (fullZoneCache.TryGetValue(itemType, out BladeZone cached))
+                return cached;
+            WeaponCollisionMasks.Mask mask = WeaponCollisionMasks.Get(itemType);
+            if (mask == null)
+                return null;
+            BladeZone zone = BuildZone(mask, Get(itemType), ZoneHeadThickness, true);
+            fullZoneCache[itemType] = zone;
+            return zone;
+        }
 
         // Зона лезвия с учётом того, что нарисовано. frozen = true для ледяного серпа, если в кадре замороженное
         // копьё (FrozenSpear): его голова крупнее и на ~8 px длиннее обычной, а зона по обычному спрайту её не покрывала.
@@ -172,7 +189,7 @@ namespace FrostMelee.Content
             return zone;
         }
 
-        private static BladeZone BuildZone(WeaponCollisionMasks.Mask mask, Geometry geo, float headThickness)
+        private static BladeZone BuildZone(WeaponCollisionMasks.Mask mask, Geometry geo, float headThickness, bool fullSprite = false)
         {
             int w = mask.Width, h = mask.Height;
 
@@ -202,7 +219,7 @@ namespace FrostMelee.Content
 
             // Где кончается древко: с середины оси идём к острию, пока ширина узкая
             float headStart = float.NegativeInfinity;
-            if (!ShaftHits)
+            if (!ShaftHits && !fullSprite)
             {
                 for (float start = half; start < maxAlong && float.IsNegativeInfinity(headStart); start += 2f)
                 {

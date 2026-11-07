@@ -355,6 +355,22 @@ class NorthPoleEffectStyleContracts(unittest.TestCase):
         self.assertIn('DustID.IceTorch, velocity', jet)
         self.assertIn('if (tag.Loose)', jet)
 
+    def test_swing_reach_140_by_holding_the_shaft_end(self):
+        # owner 03.11.2026: swing radius up to 140 px; the spear is not stretched, it is held by
+        # the end of the shaft, the whole visible spear hits, the arc line stops at the same radius
+        player = read('Content/Weapons/NorthPolePlayer.cs')
+        arc = read('Content/Projectiles/SickleArcProjectile.cs')
+        sp = (ROOT / 'FrostMelee/Content/SicklePlayer.cs').read_text(encoding='utf-8')
+        layer = (ROOT / 'FrostMelee/Content/SickleSpinSwingLayer.cs').read_text(encoding='utf-8')
+        item = read('Content/Items/SickleGlobalItem.cs')
+        self.assertIn('public const float SwingReach = 140f;', player)
+        self.assertIn('Weapons.NorthPoleBalance.SwingReach - zone.RMax', sp)
+        self.assertIn('SicklePlayer.SpinRadiusFor(itemType) * scale', layer)
+        self.assertIn('SickleSprite.GetFullZone(ItemType)', arc)
+        self.assertIn('if (SweepOverlaps(zone, target, player, anglePrev, angleNow))', arc)
+        self.assertIn('zone.RMax * ItemScale + SpinOffset', arc)
+        self.assertIn('finalScale = bladeReach / SickleArcProjectile.LineReachAtFullScale;', item)
+
     def test_generated_sprites_follow_owner_reference(self):
         from PIL import Image
         folder = ROOT / 'FrostMelee' / 'Textures' / 'NorthPolePixel'

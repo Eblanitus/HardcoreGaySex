@@ -73,7 +73,7 @@ namespace FrostMelee.Content
             float scale = player.GetAdjustedItemScale(player.HeldItem);
             Vector2 dir = Vector2.UnitX.RotatedBy(spinAngle);
             float half = geo.Length * 0.5f * scale;
-            Vector2 butt = spinCenter - dir * half + dir * SicklePlayer.SpinRadius;
+            Vector2 butt = spinCenter - dir * half + dir * SicklePlayer.SpinRadiusFor(itemType) * scale;
 
             // Вогнутая (режущая) сторона у спрайта — со стороны против часовой от оси
             // приклад→острие (замер по пикселям IceSpearHeld), поэтому при

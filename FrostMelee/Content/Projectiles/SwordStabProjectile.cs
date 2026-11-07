@@ -211,7 +211,7 @@ namespace FrostMelee.Content.Projectiles
             // Айсберг: дальше острия бьёт ледяной шип (тот, что рисует PreDraw)
             if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
                 return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(),
-                    spikeBase, spikeBase + dir * spikeLen, Weapons.AisbergReach.SpikeWidth, ref collisionPoint);
+                    spikeBase, spikeBase + dir * spikeLen, AisbergArcFx.SpikeMaxWidth, ref collisionPoint);
             return false;
         }
 
@@ -224,9 +224,12 @@ namespace FrostMelee.Content.Projectiles
             if (!Weapons.SwordTypes.IsAisbergId((int)Projectile.ai[2]) || Life > HitWindow)
                 return false;
             Vector2 dir = Projectile.velocity.SafeNormalize(Vector2.UnitX);
-            spikeBase = Projectile.Center + dir * BladeHalfLength;
-            spikeLen = Weapons.AisbergReach.SpikeLength(Main.player[Projectile.owner], Weapons.AisbergReach.Stab, BladeLength);
-            return spikeLen > 1f;
+            spikeBase = Projectile.Center + dir * (BladeHalfLength - Weapons.AisbergReach.SpikeOverlap);
+            // Шип вырастает из острия вместе с броском выпада (та же кривая
+            // ExtendAt, что двигает клинок): на пике — во всю длину
+            float grow = Life < ThrustPortion ? ExtendAt(Life) : 1f;
+            spikeLen = Weapons.AisbergReach.SpikeLength(Main.player[Projectile.owner], Weapons.AisbergReach.Stab, BladeLength) * grow;
+            return spikeLen > Weapons.AisbergReach.SpikeOverlap + 1f;
         }
 
         // Толщина хитбокса вдоль лезвия (px)
@@ -329,7 +332,7 @@ namespace FrostMelee.Content.Projectiles
 
             // Айсберг: ледяной шип за остриём (он же хитбокс дальше клинка)
             if (AisbergSpike(out Vector2 spikeBase, out float spikeLen))
-                AisbergArcFx.DrawSpike(spikeBase, dir, spikeLen, Weapons.AisbergReach.SpikeWidth, 0.9f, Projectile.identity);
+                AisbergArcFx.DrawSpike(spikeBase, dir, spikeLen, 1f, flipped);
 
             // Blade
             if (itemType == ItemID.IceBlade) {

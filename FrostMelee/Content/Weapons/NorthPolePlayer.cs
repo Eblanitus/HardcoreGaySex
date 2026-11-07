@@ -42,6 +42,9 @@ namespace FrostMelee.Content.Weapons
         public const float TrailDamage = 0.7f;
         public static float AttackSpeed => Math.Clamp(Tuning.AttackSpeedPercent, 0, 50) / 100f;
         public static int DawnRegen => Math.Clamp(Tuning.DawnRegenPerSecond, 0, 10) * 2;
+        // Swing reach from the player's center, px at weapon scale 1 (owner 03.11.2026: "радиус до 140").
+        // The spear is held by the end of the shaft for the spin (SicklePlayer.SpinRadiusFor), not stretched.
+        public const float SwingReach = 140f;
         public const int MaxFlakes = 5;
         public const int LaunchGapMin = 6, LaunchGapMax = 24;   // ticks between released flakes
         public const float ThrowPower = 1.4f;  // the thrown spear hits 40% harder (owner 02.11.2026)      // owner 02.11.2026: up to five flakes grow at once, one per enemy
