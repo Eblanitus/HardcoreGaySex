@@ -17,6 +17,7 @@
 - **Прогрессия и будущие оружия:** [FrostMelee/docs/plans.md](FrostMelee/docs/plans.md).
 - **Принципы серии:** [HardcoreMelee/philosophy.md](HardcoreMelee/philosophy.md).
 - **Цепы и лассо:** [HardcoreMelee/flails.md](HardcoreMelee/flails.md).
+- **Мод на мага (концепт PureMana):** [HardcoreMelee/PureMana/README.md](HardcoreMelee/PureMana/README.md).
 - **Сборка и тесты:** [BUILDING.md](BUILDING.md).
 - **Техническая очередь:** [MAINTENANCE.md](MAINTENANCE.md).
 - **Сетевые изменения и сценарии проверки:** [NETWORK_STABILIZATION.md](NETWORK_STABILIZATION.md).
@@ -36,4 +37,4 @@
 автоматически. В этой документационной ревизии соседним модам не присваивались
 новые статусы готовности без отдельной проверки.
 
-Обновлено: 28 октября 2026 года.
+Обновлено: 10 ноября 2026 года.
